@@ -22,6 +22,7 @@
 - Existing API/UI are skeletons only: FastAPI has `/health`; Streamlit shows a Phase 1 placeholder.
 - Controlled live access findings on 2026-05-31: Domclick `robots.txt` disallows `/search`; the realty sitemap index is accessible and lists sitemap children; child `.xml.gz` sitemap fetches return `401 Unauthorized` even after the index sets QRATOR cookies; direct `/search` and sample card pages return QRATOR challenge HTML.
 - `src/realtyscope/ingestion/domclick_live.py` records this access-probe path in code: it checks robots rules, detects QRATOR challenge pages, and extracts sitemap index locations when allowed.
+- `src/realtyscope/database/real_data_ingestion.py` now supports `domclick_json` and `domclick_html` snapshots, so a real browser-saved Domclick page can enter the same persistence path as a JSON export.
 
 ## Non-Negotiable Gates
 
@@ -199,11 +200,11 @@ Command shape:
 python -m realtyscope.database.real_data_ingestion --source-type <domclick_json|domclick_html|domclick_live> --source-path <path-or-url> --database-url <url> --json
 ```
 
-Output shape:
+Output shape for either `domclick_json` or `domclick_html`:
 
 ```json
 {
-  "source_type": "domclick_json",
+  "source_type": "domclick_html",
   "source_path": "...",
   "records_seen": 0,
   "raw_inserted": 0,
