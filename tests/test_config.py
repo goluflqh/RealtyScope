@@ -17,3 +17,17 @@ def test_database_url_uses_localhost_by_default() -> None:
     assert settings.database_url == (
         "postgresql+psycopg://realtyscope:realtyscope@localhost:5432/realtyscope"
     )
+
+
+def test_database_url_can_be_overridden_by_environment_alias() -> None:
+    settings = Settings(DATABASE_URL="sqlite+pysqlite:///:memory:")
+
+    assert settings.database_url == "sqlite+pysqlite:///:memory:"
+
+
+def test_database_url_override_does_not_change_default() -> None:
+    settings = Settings()
+
+    assert settings.database_url == (
+        "postgresql+psycopg://realtyscope:realtyscope@localhost:5432/realtyscope"
+    )

@@ -2,9 +2,9 @@
 
 RealtyScope — учебный data-service проект уровня grade 5 для оценки стоимости квартир в Москве.
 
-## Статус Phase 2
+## Статус Phase 3
 
-Репозиторий содержит технический каркас проекта и начальный foundation для ingestion:
+Репозиторий содержит технический каркас проекта, начальный foundation для ingestion и базовый database/persistence слой:
 
 - общий Python-пакет `realtyscope`;
 - минимальный FastAPI-сервис с endpoint `/health`;
@@ -15,9 +15,16 @@ RealtyScope — учебный data-service проект уровня grade 5 д
 - typed ingestion contracts для raw, normalized и rejected listing records;
 - CSV import contract для teammate data;
 - replaceable Domclick snapshot parser с безопасными лимитами;
-- local JSONL path для raw, normalized и rejected ingestion artifacts.
+- local JSONL path для raw, normalized и rejected ingestion artifacts;
+- SQLAlchemy 2.0 models для sources, ingestion runs, raw listings, canonical listings, source links, rejected rows и app logs;
+- Alembic initial migration для database foundation;
+- persistence из Phase 2 `IngestionBatch` в database tables;
+- sample ingestion command `python -m realtyscope.database.sample_ingestion --json` для проверки database write path;
+- cleaning/ML-readiness flags и audit trail для rejected rows;
+- Phase 3 EDA notebook skeleton, который читает persisted database tables;
+- English technical plan и полноценный Vietnamese companion с диакритикой для Phase 3.
 
-PostgreSQL persistence, OpenStreetMap enrichment, Alembic-схема базы данных, обучение ML-модели, реальное использование Redis cache и полноценные страницы dashboard будут реализованы в следующих phase.
+OpenStreetMap enrichment, EDA conclusions, обучение ML-модели, MLflow tracking, production FastAPI data/predict endpoints, реальное использование Redis cache и полноценные страницы dashboard будут реализованы в следующих phase.
 
 ## Локальная установка
 
@@ -28,13 +35,13 @@ PostgreSQL persistence, OpenStreetMap enrichment, Alembic-схема базы д
 
 ```bash
 cd /mnt/e/Магистр/2-курс/python/RealtyScope
-UV_LINK_MODE=copy uv sync --frozen --extra dev --extra api --extra streamlit
+UV_LINK_MODE=copy uv sync --frozen --extra dev --extra data --extra api --extra streamlit
 ```
 
 Или из PowerShell через WSL:
 
 ```powershell
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && UV_LINK_MODE=copy uv sync --frozen --extra dev --extra api --extra streamlit"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && UV_LINK_MODE=copy uv sync --frozen --extra dev --extra data --extra api --extra streamlit"
 ```
 
 Команды разработки через `uv`:
@@ -50,7 +57,7 @@ uv run ruff format --check .
 Установить зависимости для разработки:
 
 ```powershell
-python -m pip install -e ".[dev,api,streamlit]"
+python -m pip install -e ".[dev,data,api,streamlit]"
 ```
 
 Запустить тесты:

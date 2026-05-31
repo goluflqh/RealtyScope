@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     postgres_db: str = Field(default="realtyscope", alias="POSTGRES_DB")
     postgres_host: str = Field(default="localhost", alias="POSTGRES_HOST")
     postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
+    database_url_override: str | None = Field(default=None, alias="DATABASE_URL")
 
     redis_host: str = Field(default="localhost", alias="REDIS_HOST")
     redis_port: int = Field(default=6379, alias="REDIS_PORT")
@@ -29,6 +30,8 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
+        if self.database_url_override:
+            return self.database_url_override
         return (
             "postgresql+psycopg://"
             f"{self.postgres_user}:{self.postgres_password}"
