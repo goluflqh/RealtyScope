@@ -178,6 +178,25 @@ def _load_domclick_snapshot_file(
     raise ValueError(f"Unsupported Domclick snapshot file suffix: {path.suffix}")
 
 
+def load_real_source_snapshot(
+    *,
+    source_type: str,
+    source_path: Path,
+    max_records: int = 100,
+) -> IngestionBatch:
+    if source_type not in SUPPORTED_SOURCE_TYPES:
+        supported = ", ".join(sorted(SUPPORTED_SOURCE_TYPES))
+        raise ValueError(f"Unsupported source_type={source_type!r}; supported: {supported}")
+
+    if source_type == "domclick_html":
+        return load_domclick_html_snapshot(source_path, max_records=max_records)
+    if source_type == "domclick_json":
+        return load_domclick_json_snapshot(source_path, max_records=max_records)
+    if source_type == "domclick_snapshot_dir":
+        return load_domclick_snapshot_directory(source_path, max_records=max_records)
+    raise AssertionError(f"Unhandled source_type={source_type!r}")  # pragma: no cover
+
+
 def persist_real_source_snapshot(
     *,
     source_type: str,
@@ -185,18 +204,11 @@ def persist_real_source_snapshot(
     database_url: str | None = None,
     max_records: int = 100,
 ) -> PersistedIngestionResult:
-    if source_type not in SUPPORTED_SOURCE_TYPES:
-        supported = ", ".join(sorted(SUPPORTED_SOURCE_TYPES))
-        raise ValueError(f"Unsupported source_type={source_type!r}; supported: {supported}")
-
-    if source_type == "domclick_html":
-        batch = load_domclick_html_snapshot(source_path, max_records=max_records)
-    elif source_type == "domclick_json":
-        batch = load_domclick_json_snapshot(source_path, max_records=max_records)
-    elif source_type == "domclick_snapshot_dir":
-        batch = load_domclick_snapshot_directory(source_path, max_records=max_records)
-    else:  # pragma: no cover - guarded by source type validation above.
-        raise AssertionError(f"Unhandled source_type={source_type!r}")
+    batch = load_real_source_snapshot(
+        source_type=source_type,
+        source_path=source_path,
+        max_records=max_records,
+    )
 
     engine = create_database_engine(database_url)
     session_factory = create_session_factory(engine)
@@ -222,6 +234,26 @@ def _result_payload(
     }
 
 
+def _inspect_payload(
+    *,
+    source_type: str,
+    source_path: Path,
+    batch: IngestionBatch,
+) -> dict[str, Any]:
+    return {
+        "source_type": source_type,
+        "source_path": str(source_path),
+        "mode": "inspect_only",
+        "records_seen": batch.records_seen,
+        "raw_listings": len(batch.raw_listings),
+        "normalized_listings": len(batch.normalized_listings),
+        "rejected_listings": len(batch.rejected_listings),
+        "ml_ready_listings": sum(
+            1 for listing in batch.normalized_listings if listing.has_coordinates
+        ),
+    }
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Persist RealtyScope real-source ingestion data into the database."
@@ -237,10 +269,37 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--database-url", default=None, help="Override database URL for this run.")
     parser.add_argument("--max-records", type=int, default=100, help="Maximum records to parse.")
+    parser.add_argument(
+        "--inspect-only",
+        action="store_true",
+        help="Parse the snapshot and print counts without writing to the database.",
+    )
     parser.add_argument("--json", action="store_true", help="Print a JSON summary.")
     args = parser.parse_args(argv)
 
     source_path = Path(args.source_path)
+    if args.inspect_only:
+        batch = load_real_source_snapshot(
+            source_type=args.source_type,
+            source_path=source_path,
+            max_records=args.max_records,
+        )
+        payload = _inspect_payload(
+            source_type=args.source_type,
+            source_path=source_path,
+            batch=batch,
+        )
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+        else:
+            print(
+                "Inspected real source snapshot "
+                f"source_type={args.source_type} records_seen={batch.records_seen} "
+                f"normalized={len(batch.normalized_listings)} "
+                f"rejected={len(batch.rejected_listings)}"
+            )
+        return 0
+
     result = persist_real_source_snapshot(
         source_type=args.source_type,
         source_path=source_path,

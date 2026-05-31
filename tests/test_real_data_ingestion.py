@@ -9,6 +9,70 @@ from realtyscope.database.models import IngestionRun, Listing, RejectedListingRe
 from realtyscope.database.real_data_ingestion import main
 
 
+def _write_domclick_daily_snapshot(snapshot_dir: Path) -> None:
+    payloads_dir = snapshot_dir / "payloads"
+    pages_dir = snapshot_dir / "pages"
+    payloads_dir.mkdir(parents=True)
+    pages_dir.mkdir(parents=True)
+    (snapshot_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "source_name": "domclick",
+                "collector_version": "test",
+                "entries": [
+                    {"path": "payloads/listings.json", "source_type": "domclick_json"},
+                    {"path": "pages/detail.html", "source_type": "domclick_html"},
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (payloads_dir / "listings.json").write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "id": "domclick-dir-1",
+                        "url": "https://domclick.ru/card/sale__flat__domclick-dir-1/",
+                        "address": "Москва, Новый Арбат, 12",
+                        "price": 19_400_000,
+                        "area": 57.2,
+                        "rooms": 2,
+                        "lat": 55.7522,
+                        "lng": 37.6031,
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (pages_dir / "detail.html").write_text(
+        """
+        <!doctype html>
+        <html>
+          <body>
+            <script type="application/json">
+            {
+              "items": [
+                {
+                  "id": "domclick-dir-bad-1",
+                  "url": "https://domclick.ru/card/sale__flat__domclick-dir-bad-1/",
+                  "address": "Москва, Остоженка, 5",
+                  "area": 44.0,
+                  "rooms": 1
+                }
+              ]
+            }
+            </script>
+          </body>
+        </html>
+        """,
+        encoding="utf-8",
+    )
+
+
 def test_domclick_html_snapshot_command_persists_embedded_json_rows(tmp_path: Path, capsys) -> None:
     source_path = tmp_path / "domclick_snapshot.html"
     source_path.write_text(
@@ -148,67 +212,7 @@ def test_domclick_snapshot_directory_command_persists_daily_snapshot(
     tmp_path: Path, capsys
 ) -> None:
     snapshot_dir = tmp_path / "data" / "raw" / "domclick" / "2026-05-31"
-    payloads_dir = snapshot_dir / "payloads"
-    pages_dir = snapshot_dir / "pages"
-    payloads_dir.mkdir(parents=True)
-    pages_dir.mkdir(parents=True)
-    (snapshot_dir / "manifest.json").write_text(
-        json.dumps(
-            {
-                "source_name": "domclick",
-                "collector_version": "test",
-                "entries": [
-                    {"path": "payloads/listings.json", "source_type": "domclick_json"},
-                    {"path": "pages/detail.html", "source_type": "domclick_html"},
-                ],
-            },
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
-    (payloads_dir / "listings.json").write_text(
-        json.dumps(
-            {
-                "items": [
-                    {
-                        "id": "domclick-dir-1",
-                        "url": "https://domclick.ru/card/sale__flat__domclick-dir-1/",
-                        "address": "Москва, Новый Арбат, 12",
-                        "price": 19_400_000,
-                        "area": 57.2,
-                        "rooms": 2,
-                        "lat": 55.7522,
-                        "lng": 37.6031,
-                    }
-                ]
-            },
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
-    (pages_dir / "detail.html").write_text(
-        """
-        <!doctype html>
-        <html>
-          <body>
-            <script type="application/json">
-            {
-              "items": [
-                {
-                  "id": "domclick-dir-bad-1",
-                  "url": "https://domclick.ru/card/sale__flat__domclick-dir-bad-1/",
-                  "address": "Москва, Остоженка, 5",
-                  "area": 44.0,
-                  "rooms": 1
-                }
-              ]
-            }
-            </script>
-          </body>
-        </html>
-        """,
-        encoding="utf-8",
-    )
+    _write_domclick_daily_snapshot(snapshot_dir)
     database_path = tmp_path / "real_data_snapshot_dir.sqlite3"
     database_url = f"sqlite+pysqlite:///{database_path.as_posix()}"
     engine = create_engine(database_url)
@@ -247,3 +251,34 @@ def test_domclick_snapshot_directory_command_persists_daily_snapshot(
     assert listings[0].address_text == "Москва, Новый Арбат, 12"
     assert len(rejected) == 1
     assert "price" in rejected[0].reason
+
+
+def test_domclick_snapshot_directory_inspect_only_reports_counts_without_database(
+    tmp_path: Path, capsys
+) -> None:
+    snapshot_dir = tmp_path / "data" / "raw" / "domclick" / "2026-05-31"
+    _write_domclick_daily_snapshot(snapshot_dir)
+
+    exit_code = main(
+        [
+            "--source-type",
+            "domclick_snapshot_dir",
+            "--source-path",
+            str(snapshot_dir),
+            "--inspect-only",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {
+        "source_type": "domclick_snapshot_dir",
+        "source_path": str(snapshot_dir),
+        "mode": "inspect_only",
+        "records_seen": 2,
+        "raw_listings": 1,
+        "normalized_listings": 1,
+        "rejected_listings": 1,
+        "ml_ready_listings": 1,
+    }

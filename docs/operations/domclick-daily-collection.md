@@ -71,8 +71,20 @@ python -m realtyscope.ingestion.domclick_snapshot_collector `
 The collector checks `robots.txt`, rejects disallowed URLs before fetching, refuses QRATOR challenge pages, writes HTML snapshots under `pages/`, writes JSON snapshots under `payloads/`, and writes `manifest.json`.
 
 3. If the collector cannot access Domclick from the current machine, run the same command on the RU-IP host and copy the resulting day directory back to the RealtyScope machine.
-4. Run Alembic against the target database.
-5. Ingest the daily directory:
+4. Inspect the snapshot before writing to PostgreSQL:
+
+```powershell
+python -m realtyscope.database.real_data_ingestion `
+  --source-type domclick_snapshot_dir `
+  --source-path data/raw/domclick/2026-05-31 `
+  --inspect-only `
+  --json
+```
+
+The inspect step parses the same files as persistence and reports `records_seen`, normalized rows, rejected rows, and ML-ready rows. It does not require a database connection and writes nothing.
+
+5. Run Alembic against the target database.
+6. Ingest the daily directory:
 
 ```powershell
 python -m realtyscope.database.real_data_ingestion `
@@ -82,7 +94,7 @@ python -m realtyscope.database.real_data_ingestion `
   --json
 ```
 
-6. Record the JSON output and database row counts in the Phase 3.5 checkpoint.
+7. Record the JSON output and database row counts in the Phase 3.5 checkpoint.
 
 ## Scheduling Options
 

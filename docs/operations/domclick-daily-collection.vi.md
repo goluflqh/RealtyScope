@@ -74,8 +74,20 @@ python -m realtyscope.ingestion.domclick_snapshot_collector `
 Collector sẽ kiểm tra `robots.txt`, từ chối URL bị cấm trước khi fetch, dừng nếu gặp QRATOR challenge, ghi HTML vào `pages/`, ghi JSON vào `payloads/`, và tạo `manifest.json`.
 
 3. Nếu máy hiện tại không truy cập được Domclick, chạy cùng command trên host có IP Nga rồi copy nguyên thư mục ngày về máy chạy RealtyScope.
-4. Chạy Alembic để database ở đúng schema mới nhất.
-5. Ingest cả thư mục snapshot:
+4. Inspect snapshot trước khi ghi vào PostgreSQL:
+
+```powershell
+python -m realtyscope.database.real_data_ingestion `
+  --source-type domclick_snapshot_dir `
+  --source-path data/raw/domclick/2026-05-31 `
+  --inspect-only `
+  --json
+```
+
+Bước inspect dùng cùng parser với persistence và báo `records_seen`, số row normalized, số row rejected, số row sẵn sàng cho ML. Lệnh này không cần database connection và không ghi dữ liệu.
+
+5. Chạy Alembic để database ở đúng schema mới nhất.
+6. Ingest cả thư mục snapshot:
 
 ```powershell
 python -m realtyscope.database.real_data_ingestion `
@@ -85,7 +97,7 @@ python -m realtyscope.database.real_data_ingestion `
   --json
 ```
 
-6. Ghi lại JSON output và row counts vào checkpoint Phase 3.5.
+7. Ghi lại JSON output và row counts vào checkpoint Phase 3.5.
 
 ## Cách Lên Lịch Chạy Tự Động
 

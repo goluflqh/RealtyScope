@@ -24,6 +24,7 @@
 - `src/realtyscope/ingestion/domclick_live.py` records this access-probe path in code: it checks robots rules, detects QRATOR challenge pages, and extracts sitemap index locations when allowed.
 - `src/realtyscope/ingestion/domclick_snapshot_collector.py` now provides a daily snapshot collector CLI for RU-accessible hosts. It accepts explicit Domclick URLs or a URL file, checks `robots.txt`, refuses QRATOR challenge pages, and writes HTML/JSON snapshots plus `manifest.json` under `data/raw/domclick/YYYY-MM-DD/`.
 - `src/realtyscope/database/real_data_ingestion.py` now supports `domclick_json`, `domclick_html`, and `domclick_snapshot_dir`, so a real browser-saved Domclick page, JSON export, or daily snapshot directory can enter the same persistence path.
+- The real-data ingestion CLI supports `--inspect-only` so an operator can parse a collected snapshot and review counts before writing to PostgreSQL.
 - Daily RU-network collection is documented in `docs/operations/domclick-daily-collection.md` and `docs/operations/domclick-daily-collection.vi.md`: collection runs on a machine that can legitimately access Domclick, while RealtyScope parses and persists saved snapshots offline.
 
 ## Non-Negotiable Gates
