@@ -7,9 +7,12 @@ def test_streamlit_app_file_exists() -> None:
     assert STREAMLIT_APP.exists()
 
 
-def test_streamlit_app_declares_realtyscope_title() -> None:
+def test_streamlit_app_declares_real_data_dashboard_slice() -> None:
     content = STREAMLIT_APP.read_text(encoding="utf-8")
 
     assert "RealtyScope" in content
     assert "st.set_page_config" in content
-    assert "Phase 1 scaffold" in content
+    assert "fetch_dashboard_data" in content
+    assert "st.metric" in content
+    assert "st.dataframe" in content
+    assert "Phase 1 scaffold" not in content

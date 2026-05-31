@@ -19,13 +19,14 @@
 - Existing usable ingestion adapters:
   - `src/realtyscope/ingestion/teammate_import.py` for CSV files matching the teammate contract.
   - `src/realtyscope/ingestion/domclick.py` for Domclick-like JSON payload snapshots.
-- Existing UI is still a skeleton: Streamlit shows a Phase 1 placeholder.
+- Streamlit now has a minimal dashboard slice that calls the DB-backed FastAPI endpoints and displays data-quality metrics plus a listing preview.
 - Controlled live access findings on 2026-05-31: Domclick `robots.txt` disallows `/search`; the realty sitemap index is accessible and lists sitemap children; child `.xml.gz` sitemap fetches return `401 Unauthorized` even after the index sets QRATOR cookies; direct `/search` and sample card pages return QRATOR challenge HTML.
 - `src/realtyscope/ingestion/domclick_live.py` records this access-probe path in code: it checks robots rules, detects QRATOR challenge pages, and extracts sitemap index locations when allowed.
 - `src/realtyscope/ingestion/domclick_snapshot_collector.py` now provides a daily snapshot collector CLI for RU-accessible hosts. It accepts explicit Domclick URLs or a URL file, checks `robots.txt`, refuses QRATOR challenge pages, and writes HTML/JSON snapshots plus `manifest.json` under `data/raw/domclick/YYYY-MM-DD/`.
 - `src/realtyscope/database/real_data_ingestion.py` now supports `domclick_json`, `domclick_html`, and `domclick_snapshot_dir`, so a real browser-saved Domclick page, JSON export, or daily snapshot directory can enter the same persistence path.
 - The real-data ingestion CLI supports `--inspect-only` so an operator can parse a collected snapshot and review counts before writing to PostgreSQL.
 - FastAPI now has DB-backed read endpoints `GET /listings` and `GET /stats/data-quality`. They read persisted database rows and are tested with seeded database rows, but Phase 3.5 still needs real Domclick rows before the API gate can be claimed complete with real runtime evidence.
+- Streamlit now has a first real-data dashboard slice backed by those endpoints. It is tested with a pure API client and static app shell checks, but the dashboard gate still needs runtime evidence against real persisted Domclick rows.
 - Daily RU-network collection is documented in `docs/operations/domclick-daily-collection.md` and `docs/operations/domclick-daily-collection.vi.md`: collection runs on a machine that can legitimately access Domclick, while RealtyScope parses and persists saved snapshots offline.
 
 ## Non-Negotiable Gates

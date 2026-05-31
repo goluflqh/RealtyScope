@@ -8,7 +8,7 @@ RealtyScope — учебный data-service проект уровня grade 5 д
 
 - общий Python-пакет `realtyscope`;
 - FastAPI-сервис с endpoint `/health`, DB-backed `/listings` и `/stats/data-quality`;
-- минимальное Streamlit-приложение;
+- Streamlit dashboard slice, который читает DB-backed FastAPI endpoints;
 - Docker Compose каркас для PostgreSQL, Redis, MLflow, API и Streamlit;
 - lockfile `uv.lock` для воспроизводимой установки зависимостей;
 - базовую настройку pytest, ruff, pre-commit и GitHub Actions CI;
@@ -29,7 +29,7 @@ RealtyScope — учебный data-service проект уровня grade 5 д
 - Phase 3 EDA notebook skeleton, который читает persisted database tables;
 - English technical plan и полноценный Vietnamese companion с диакритикой для Phase 3.
 
-Реальный Domclick snapshot/live export, OpenStreetMap enrichment, EDA conclusions, обучение ML-модели, MLflow tracking, production FastAPI data/predict endpoints, реальное использование Redis cache и полноценные страницы dashboard будут реализованы в следующих phase.
+Реальный Domclick snapshot/live export, OpenStreetMap enrichment, EDA conclusions, обучение ML-модели, MLflow tracking, production `/predict`, реальное использование Redis cache и полноценные многостраничные dashboard views будут реализованы в следующих phase.
 
 ## Локальная установка
 
