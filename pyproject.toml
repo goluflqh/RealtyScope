@@ -30,7 +30,7 @@ data = [
 ]
 ml = [
   "scikit-learn>=1.4",
-  "mlflow>=2.12",
+  "mlflow>=2.12,<3",
   "joblib>=1.4",
 ]
 dev = [
