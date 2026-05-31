@@ -97,7 +97,16 @@ python -m realtyscope.database.real_data_ingestion `
   --json
 ```
 
-7. Ghi lại JSON output và row counts vào checkpoint Phase 3.5.
+7. Tạo EDA summary từ chính database đã persist:
+
+```powershell
+python -m realtyscope.analysis.eda_summary `
+  --database-url $env:DATABASE_URL `
+  --output docs/data/phase3_5_eda_summary.vi.md `
+  --json
+```
+
+8. Ghi lại JSON output của ingestion, row counts trong database và đường dẫn EDA summary vào checkpoint Phase 3.5.
 
 ## Cách Lên Lịch Chạy Tự Động
 

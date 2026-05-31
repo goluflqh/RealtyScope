@@ -26,10 +26,10 @@ RealtyScope — учебный data-service проект уровня grade 5 д
 - controlled Domclick access probe, который проверяет robots rules, sitemap index и QRATOR challenge без обхода disallowed `/search`;
 - первые backend read endpoints, которые читают persisted database rows, а не mock data;
 - cleaning/ML-readiness flags и audit trail для rejected rows;
-- Phase 3 EDA notebook skeleton, который читает persisted database tables;
+- Phase 3.5 EDA summary command, который читает persisted database tables и пишет markdown/JSON: `python -m realtyscope.analysis.eda_summary --database-url <url> --output docs/data/phase3_5_eda_summary.vi.md --json`;
 - English technical plan и полноценный Vietnamese companion с диакритикой для Phase 3.
 
-Реальный Domclick snapshot/live export, OpenStreetMap enrichment, EDA conclusions, обучение ML-модели, MLflow tracking, production `/predict`, реальное использование Redis cache и полноценные многостраничные dashboard views будут реализованы в следующих phase.
+Реальный Domclick snapshot/live export, OpenStreetMap enrichment, EDA conclusions на реальных persisted rows, обучение ML-модели, MLflow tracking, production `/predict`, реальное использование Redis cache и полноценные многостраничные dashboard views будут реализованы в следующих phase.
 
 ## Локальная установка
 
