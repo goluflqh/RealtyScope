@@ -70,6 +70,10 @@ def parse_domclick_payload(
 
 
 def _iter_candidate_items(payload: Any) -> list[Any]:
+    domclick_search_items = _iter_domclick_search_items(payload)
+    if domclick_search_items:
+        return domclick_search_items
+
     if isinstance(payload, list):
         return payload
     if not isinstance(payload, dict):
@@ -85,6 +89,40 @@ def _iter_candidate_items(payload: Any) -> list[Any]:
     return []
 
 
+def _iter_domclick_search_items(payload: Any) -> list[Any]:
+    if not isinstance(payload, dict):
+        return []
+
+    search = payload.get("search")
+    if not isinstance(search, dict):
+        return []
+
+    pages = search.get("pages")
+    if isinstance(pages, dict):
+        page_values = pages.values()
+    elif isinstance(pages, list):
+        page_values = pages
+    else:
+        return []
+
+    items: list[Any] = []
+    for page in page_values:
+        if not isinstance(page, dict):
+            continue
+        entities = page.get("entities")
+        if not isinstance(entities, dict):
+            continue
+        ids = page.get("ids")
+        if isinstance(ids, list):
+            for listing_id in ids:
+                item = entities.get(str(listing_id)) or entities.get(listing_id)
+                if item is not None:
+                    items.append(item)
+        else:
+            items.extend(entities.values())
+    return items
+
+
 def _item_to_normalized(
     item: dict[str, Any],
     *,
@@ -92,11 +130,26 @@ def _item_to_normalized(
     observed_at: datetime,
 ) -> NormalizedListing:
     source_listing_id = _first_text(item, "id", "offerId", "listingId")
-    item_url = _first_text(item, "url", "absoluteUrl") or source_url
-    address_text = _first_text(item, "address", "addressText", "location")
+    item_url = _first_text(item, "url", "absoluteUrl", "path") or source_url
+    address_text = _first_text(
+        item,
+        "address.displayName",
+        "address",
+        "addressText",
+        "location.displayName",
+        "location",
+    )
     price_rub = _required_int(item, "price_rub", "price", "cost")
-    total_area_m2 = _required_float(item, "total_area_m2", "area", "totalArea", "square")
-    rooms = _required_int(item, "rooms", "roomsCount")
+    total_area_m2 = _required_float(
+        item,
+        "total_area_m2",
+        "area",
+        "totalArea",
+        "square",
+        "objectInfo.area",
+        "generalInfo.area",
+    )
+    rooms = _required_int(item, "rooms", "roomsCount", "objectInfo.rooms", "generalInfo.rooms")
 
     if source_listing_id is None:
         source_listing_id = stable_listing_id(
@@ -115,23 +168,35 @@ def _item_to_normalized(
         observed_at=observed_at,
         city="Moscow",
         address_text=address_text,
-        latitude=_optional_float(item, "latitude", "lat"),
-        longitude=_optional_float(item, "longitude", "lng", "lon"),
+        latitude=_optional_float(item, "latitude", "lat", "location.lat"),
+        longitude=_optional_float(item, "longitude", "lng", "lon", "location.lon"),
         price_rub=price_rub,
         total_area_m2=total_area_m2,
         rooms=rooms,
-        floor=_optional_int(item, "floor"),
-        floors_total=_optional_int(item, "floors_total", "floorsTotal", "floorCount"),
-        building_year=_optional_int(item, "building_year", "builtYear", "buildYear"),
-        property_type=_first_text(item, "property_type", "propertyType", "category") or "apartment",
+        floor=_optional_int(item, "floor", "objectInfo.floor", "generalInfo.minFloor"),
+        floors_total=_optional_int(
+            item,
+            "floors_total",
+            "floorsTotal",
+            "floorCount",
+            "house.floors",
+            "generalInfo.floors",
+        ),
+        building_year=_optional_int(
+            item, "building_year", "builtYear", "buildYear", "house.buildYear"
+        ),
+        property_type=_first_text(item, "property_type", "propertyType", "category", "offerType")
+        or "apartment",
         description=_first_text(item, "description", "desc"),
     )
 
 
 def _first_text(item: dict[str, Any], *keys: str) -> str | None:
     for key in keys:
-        value = item.get(key)
+        value = _first_value(item, key)
         if value is None:
+            continue
+        if isinstance(value, (dict, list)):
             continue
         value = str(value).strip()
         if value:
@@ -169,7 +234,16 @@ def _optional_float(item: dict[str, Any], *keys: str) -> float | None:
 
 def _first_value(item: dict[str, Any], *keys: str) -> Any | None:
     for key in keys:
-        value = item.get(key)
+        value = _resolve_key_path(item, key)
         if value not in (None, ""):
             return value
     return None
+
+
+def _resolve_key_path(item: dict[str, Any], key: str) -> Any | None:
+    value: Any = item
+    for part in key.split("."):
+        if not isinstance(value, dict):
+            return None
+        value = value.get(part)
+    return value

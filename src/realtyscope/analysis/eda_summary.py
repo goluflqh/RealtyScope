@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections.abc import Sequence
+from contextlib import suppress
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -148,6 +150,9 @@ def render_eda_markdown(summary: EdaSummary) -> str:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    with suppress(AttributeError):
+        sys.stdout.reconfigure(encoding="utf-8")
+
     parser = argparse.ArgumentParser(
         description="Build a RealtyScope EDA summary from database rows."
     )

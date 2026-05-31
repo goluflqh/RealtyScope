@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import sys
 from collections.abc import Sequence
+from contextlib import suppress
 from datetime import UTC, datetime
 from html.parser import HTMLParser
 from pathlib import Path
@@ -34,7 +37,8 @@ class _JsonScriptCollector(HTMLParser):
         attr_map = {name.lower(): value or "" for name, value in attrs}
         script_type = attr_map.get("type", "").lower()
         script_id = attr_map.get("id", "")
-        if "json" not in script_type and script_id != "__NEXT_DATA__":
+        script_src = attr_map.get("src", "")
+        if "json" not in script_type and script_id != "__NEXT_DATA__" and script_src:
             return
         self._capturing = True
         self._chunks = []
@@ -94,9 +98,8 @@ def load_domclick_html_snapshot(
     collector = _JsonScriptCollector()
     collector.feed(path.read_text(encoding="utf-8"))
     for script_payload in collector.payloads:
-        try:
-            payload = json.loads(script_payload)
-        except json.JSONDecodeError:
+        payload = _load_script_payload(script_payload)
+        if payload is None:
             continue
         if not isinstance(payload, dict | list):
             continue
@@ -109,6 +112,61 @@ def load_domclick_html_snapshot(
         if batch.records_seen:
             return batch
     raise ValueError("Domclick HTML snapshot does not contain parseable embedded listing JSON")
+
+
+def _load_script_payload(script_payload: str) -> dict[str, Any] | list[Any] | None:
+    try:
+        payload = json.loads(script_payload)
+    except json.JSONDecodeError:
+        payload = _extract_ssr_state_payload(script_payload)
+    return payload if isinstance(payload, dict | list) else None
+
+
+def _extract_ssr_state_payload(script_payload: str) -> dict[str, Any] | list[Any] | None:
+    marker = "window.__SSR_STATE__="
+    marker_index = script_payload.find(marker)
+    if marker_index < 0:
+        return None
+
+    object_start = script_payload.find("{", marker_index + len(marker))
+    if object_start < 0:
+        return None
+    object_end = _find_balanced_json_object_end(script_payload, object_start)
+    if object_end is None:
+        return None
+
+    object_text = script_payload[object_start : object_end + 1]
+    object_text = re.sub(r"(?<=[\[:,])\s*undefined\s*(?=[,}\]])", "null", object_text)
+    try:
+        payload = json.loads(object_text)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict | list) else None
+
+
+def _find_balanced_json_object_end(text: str, start: int) -> int | None:
+    depth = 0
+    in_string = False
+    escaped = False
+    for index in range(start, len(text)):
+        char = text[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
 
 
 def load_domclick_snapshot_directory(
@@ -129,11 +187,14 @@ def load_domclick_snapshot_directory(
         remaining_records = max_records - len(normalized_listings)
         if remaining_records <= 0:
             break
-        batch = _load_domclick_snapshot_file(
-            snapshot_file,
-            observed_at=observed_at,
-            max_records=remaining_records,
-        )
+        try:
+            batch = _load_domclick_snapshot_file(
+                snapshot_file,
+                observed_at=observed_at,
+                max_records=remaining_records,
+            )
+        except ValueError:
+            continue
         if batch.records_seen == 0:
             continue
         files_seen += 1
@@ -254,6 +315,12 @@ def _inspect_payload(
     }
 
 
+def _print_json(payload: dict[str, Any]) -> None:
+    with suppress(AttributeError):
+        sys.stdout.reconfigure(encoding="utf-8")
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Persist RealtyScope real-source ingestion data into the database."
@@ -290,7 +357,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             batch=batch,
         )
         if args.json:
-            print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+            _print_json(payload)
         else:
             print(
                 "Inspected real source snapshot "
@@ -309,7 +376,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     payload = _result_payload(source_type=args.source_type, source_path=source_path, result=result)
 
     if args.json:
-        print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+        _print_json(payload)
     else:
         print(
             "Persisted real source ingestion "

@@ -138,6 +138,76 @@ def test_domclick_html_snapshot_command_persists_embedded_json_rows(tmp_path: Pa
     assert listings[0].price_rub == 22_500_000
 
 
+def test_domclick_html_snapshot_command_persists_ssr_state_rows(tmp_path: Path, capsys) -> None:
+    source_path = tmp_path / "domclick_search_snapshot.html"
+    ssr_state = {
+        "search": {
+            "pages": [
+                {
+                    "ids": [2077280654],
+                    "entities": {
+                        "2077280654": {
+                            "id": 2077280654,
+                            "path": "https://domclick.ru/card/sale__flat__2077280654",
+                            "offerType": "flat",
+                            "address": {"displayName": "Москва, улица Перерва, 58"},
+                            "objectInfo": {"area": 38.8, "rooms": 1, "floor": 6},
+                            "house": {"floors": 17, "buildYear": 2000},
+                            "location": {"lat": 55.663109, "lon": 37.761034},
+                            "price": 13_400_000,
+                            "resourceLogLevelClient": "__UNDEFINED__",
+                        }
+                    },
+                }
+            ]
+        }
+    }
+    ssr_script = json.dumps(ssr_state, ensure_ascii=False).replace('"__UNDEFINED__"', "undefined")
+    source_path.write_text(
+        f"""
+        <!doctype html>
+        <html>
+          <body>
+            <script>
+              window.__SSR_STATE__={ssr_script};
+              window.__SSR_CONTEXT__={{"requestId":"test"}};
+            </script>
+          </body>
+        </html>
+        """,
+        encoding="utf-8",
+    )
+    database_path = tmp_path / "real_data_html_ssr.sqlite3"
+    database_url = f"sqlite+pysqlite:///{database_path.as_posix()}"
+    engine = create_engine(database_url)
+    Base.metadata.create_all(engine)
+
+    exit_code = main(
+        [
+            "--source-type",
+            "domclick_html",
+            "--source-path",
+            str(source_path),
+            "--database-url",
+            database_url,
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["records_seen"] == 1
+    assert payload["raw_inserted"] == 1
+    assert payload["listings_created"] == 1
+
+    with Session(engine) as session:
+        listings = session.scalars(select(Listing)).all()
+
+    assert len(listings) == 1
+    assert listings[0].address_text == "Москва, улица Перерва, 58"
+    assert float(listings[0].total_area_m2) == 38.8
+
+
 def test_domclick_json_snapshot_command_persists_rows(tmp_path: Path, capsys) -> None:
     source_path = tmp_path / "domclick_snapshot.json"
     source_path.write_text(
@@ -282,3 +352,61 @@ def test_domclick_snapshot_directory_inspect_only_reports_counts_without_databas
         "rejected_listings": 1,
         "ml_ready_listings": 1,
     }
+
+
+def test_domclick_snapshot_directory_skips_unparseable_snapshot_files(
+    tmp_path: Path, capsys
+) -> None:
+    snapshot_dir = tmp_path / "data" / "raw" / "domclick" / "2026-06-01"
+    pages_dir = snapshot_dir / "pages"
+    payloads_dir = snapshot_dir / "payloads"
+    pages_dir.mkdir(parents=True)
+    payloads_dir.mkdir(parents=True)
+    (pages_dir / "hydrated_search.html").write_text(
+        "<html><body>listing text only after hydration</body></html>",
+        encoding="utf-8",
+    )
+    (payloads_dir / "search_state.json").write_text(
+        json.dumps(
+            {
+                "search": {
+                    "pages": [
+                        {
+                            "ids": [2077280654],
+                            "entities": {
+                                "2077280654": {
+                                    "id": 2077280654,
+                                    "path": "https://domclick.ru/card/sale__flat__2077280654",
+                                    "offerType": "flat",
+                                    "address": {"displayName": "Москва, улица Перерва, 58"},
+                                    "objectInfo": {"area": 38.8, "rooms": 1, "floor": 6},
+                                    "house": {"floors": 17},
+                                    "location": {"lat": 55.663109, "lon": 37.761034},
+                                    "price": 13_400_000,
+                                }
+                            },
+                        }
+                    ]
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "--source-type",
+            "domclick_snapshot_dir",
+            "--source-path",
+            str(snapshot_dir),
+            "--inspect-only",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["records_seen"] == 1
+    assert payload["normalized_listings"] == 1
+    assert payload["rejected_listings"] == 0
