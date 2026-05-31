@@ -1,0 +1,175 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
+
+from pydantic import ValidationError
+
+from realtyscope.ingestion.contracts import (
+    IngestionBatch,
+    NormalizedListing,
+    RawListing,
+    RejectedListing,
+    stable_listing_id,
+)
+
+
+@dataclass(frozen=True)
+class DomclickCollectorConfig:
+    max_records: int = 100
+    request_delay_seconds: float = 1.0
+    user_agent: str = "RealtyScope semester project ingestion contact: local-development"
+
+
+def parse_domclick_payload(
+    payload: dict[str, Any] | list[Any],
+    *,
+    source_url: str,
+    observed_at: datetime,
+    config: DomclickCollectorConfig | None = None,
+) -> IngestionBatch:
+    config = config or DomclickCollectorConfig()
+    raw_listings: list[RawListing] = []
+    normalized_listings: list[NormalizedListing] = []
+    rejected_listings: list[RejectedListing] = []
+
+    for index, item in enumerate(_iter_candidate_items(payload), start=1):
+        if len(normalized_listings) >= config.max_records:
+            break
+        if not isinstance(item, dict):
+            continue
+        try:
+            normalized = _item_to_normalized(item, source_url=source_url, observed_at=observed_at)
+            raw = RawListing(
+                source_name="domclick",
+                source_listing_id=normalized.source_listing_id,
+                source_url=normalized.source_url or source_url,
+                observed_at=observed_at,
+                raw_payload=item,
+            )
+        except (ValueError, ValidationError) as exc:
+            rejected_listings.append(
+                RejectedListing(
+                    source_name="domclick",
+                    row_number=index,
+                    reason=str(exc),
+                    raw_payload=item,
+                )
+            )
+            continue
+
+        raw_listings.append(raw)
+        normalized_listings.append(normalized)
+
+    return IngestionBatch(
+        raw_listings=tuple(raw_listings),
+        normalized_listings=tuple(normalized_listings),
+        rejected_listings=tuple(rejected_listings),
+    )
+
+
+def _iter_candidate_items(payload: Any) -> list[Any]:
+    if isinstance(payload, list):
+        return payload
+    if not isinstance(payload, dict):
+        return []
+    for key in ("items", "listings", "offers", "cards"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            return value
+    for value in payload.values():
+        nested = _iter_candidate_items(value)
+        if nested:
+            return nested
+    return []
+
+
+def _item_to_normalized(
+    item: dict[str, Any],
+    *,
+    source_url: str,
+    observed_at: datetime,
+) -> NormalizedListing:
+    source_listing_id = _first_text(item, "id", "offerId", "listingId")
+    item_url = _first_text(item, "url", "absoluteUrl") or source_url
+    address_text = _first_text(item, "address", "addressText", "location")
+    price_rub = _required_int(item, "price_rub", "price", "cost")
+    total_area_m2 = _required_float(item, "total_area_m2", "area", "totalArea", "square")
+    rooms = _required_int(item, "rooms", "roomsCount")
+
+    if source_listing_id is None:
+        source_listing_id = stable_listing_id(
+            source_name="domclick",
+            source_url=item_url,
+            address_text=address_text,
+            price_rub=price_rub,
+            total_area_m2=total_area_m2,
+            rooms=rooms,
+        )
+
+    return NormalizedListing(
+        source_name="domclick",
+        source_listing_id=source_listing_id,
+        source_url=item_url,
+        observed_at=observed_at,
+        city="Moscow",
+        address_text=address_text,
+        latitude=_optional_float(item, "latitude", "lat"),
+        longitude=_optional_float(item, "longitude", "lng", "lon"),
+        price_rub=price_rub,
+        total_area_m2=total_area_m2,
+        rooms=rooms,
+        floor=_optional_int(item, "floor"),
+        floors_total=_optional_int(item, "floors_total", "floorsTotal", "floorCount"),
+        building_year=_optional_int(item, "building_year", "builtYear", "buildYear"),
+        property_type=_first_text(item, "property_type", "propertyType", "category") or "apartment",
+        description=_first_text(item, "description", "desc"),
+    )
+
+
+def _first_text(item: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = item.get(key)
+        if value is None:
+            continue
+        value = str(value).strip()
+        if value:
+            return value
+    return None
+
+
+def _required_int(item: dict[str, Any], *keys: str) -> int:
+    value = _optional_int(item, *keys)
+    if value is None:
+        raise ValueError(f"{keys[0]} is required")
+    return value
+
+
+def _optional_int(item: dict[str, Any], *keys: str) -> int | None:
+    value = _first_value(item, *keys)
+    if value is None:
+        return None
+    return int(float(value))
+
+
+def _required_float(item: dict[str, Any], *keys: str) -> float:
+    value = _optional_float(item, *keys)
+    if value is None:
+        raise ValueError(f"{keys[0]} is required")
+    return value
+
+
+def _optional_float(item: dict[str, Any], *keys: str) -> float | None:
+    value = _first_value(item, *keys)
+    if value is None:
+        return None
+    return float(value)
+
+
+def _first_value(item: dict[str, Any], *keys: str) -> Any | None:
+    for key in keys:
+        value = item.get(key)
+        if value not in (None, ""):
+            return value
+    return None
