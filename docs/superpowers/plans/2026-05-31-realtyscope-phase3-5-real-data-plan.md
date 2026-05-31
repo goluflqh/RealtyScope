@@ -20,6 +20,8 @@
   - `src/realtyscope/ingestion/teammate_import.py` for CSV files matching the teammate contract.
   - `src/realtyscope/ingestion/domclick.py` for Domclick-like JSON payload snapshots.
 - Existing API/UI are skeletons only: FastAPI has `/health`; Streamlit shows a Phase 1 placeholder.
+- Controlled live access findings on 2026-05-31: Domclick `robots.txt` disallows `/search`; the realty sitemap index is accessible and lists sitemap children; child `.xml.gz` sitemap fetches return `401 Unauthorized` even after the index sets QRATOR cookies; direct `/search` and sample card pages return QRATOR challenge HTML.
+- `src/realtyscope/ingestion/domclick_live.py` records this access-probe path in code: it checks robots rules, detects QRATOR challenge pages, and extracts sitemap index locations when allowed.
 
 ## Non-Negotiable Gates
 

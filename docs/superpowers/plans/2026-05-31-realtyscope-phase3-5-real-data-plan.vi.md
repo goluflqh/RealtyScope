@@ -21,6 +21,8 @@ Nói ngắn gọn: sau Phase 3.5, project phải bắt đầu có “thân thể
 - Không tìm thấy dataset listing thật dạng CSV, JSON, JSONL, HTML snapshot, Excel, parquet hoặc feather.
 - Chỉ thấy tài liệu môn học HTML, không phải dữ liệu căn hộ.
 - Code hiện có thể import CSV theo teammate contract hoặc parse Domclick-like JSON payload, nhưng chưa có file input thật.
+- Kết quả kiểm tra live có kiểm soát ngày 2026-05-31: `robots.txt` của Domclick disallow `/search`; sitemap index realty lấy được và có liệt kê sitemap con; các sitemap con `.xml.gz` trả `401 Unauthorized` dù sitemap index đã set QRATOR cookies; `/search` và card page mẫu trả HTML QRATOR challenge.
+- `src/realtyscope/ingestion/domclick_live.py` ghi lại access-probe path này trong code: kiểm tra robots rules, phát hiện QRATOR challenge, và extract sitemap index locations khi được phép.
 
 ## Thuật ngữ chính
 
