@@ -2,18 +2,22 @@
 
 RealtyScope — учебный data-service проект уровня grade 5 для оценки стоимости квартир в Москве.
 
-## Статус Phase 1
+## Статус Phase 2
 
-На этом этапе репозиторий содержит только технический каркас проекта:
+Репозиторий содержит технический каркас проекта и начальный foundation для ingestion:
 
 - общий Python-пакет `realtyscope`;
 - минимальный FastAPI-сервис с endpoint `/health`;
 - минимальное Streamlit-приложение;
 - Docker Compose каркас для PostgreSQL, Redis, MLflow, API и Streamlit;
 - lockfile `uv.lock` для воспроизводимой установки зависимостей;
-- базовую настройку pytest, ruff, pre-commit и GitHub Actions CI.
+- базовую настройку pytest, ruff, pre-commit и GitHub Actions CI;
+- typed ingestion contracts для raw, normalized и rejected listing records;
+- CSV import contract для teammate data;
+- replaceable Domclick snapshot parser с безопасными лимитами;
+- local JSONL path для raw, normalized и rejected ingestion artifacts.
 
-Полный сбор данных с Domclick, обогащение через OpenStreetMap, Alembic-схема базы данных, обучение ML-модели, реальное использование Redis cache и полноценные страницы dashboard будут реализованы в следующих phase.
+PostgreSQL persistence, OpenStreetMap enrichment, Alembic-схема базы данных, обучение ML-модели, реальное использование Redis cache и полноценные страницы dashboard будут реализованы в следующих phase.
 
 ## Локальная установка
 
