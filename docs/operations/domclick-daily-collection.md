@@ -56,9 +56,21 @@ The current offline ingestor ignores `manifest.json` as data input and scans sup
 
 ## Daily Operator Flow
 
-1. Run the collector or save browser snapshots on the RU-accessible host.
-2. Place the files in `data/raw/domclick/YYYY-MM-DD/` using the layout above.
-3. Copy the snapshot directory to the RealtyScope machine if collection ran elsewhere.
+1. Prepare a URL file with one allowed Domclick URL per line. Use listing/detail/card or other allowed public URLs. Do not include `/search` URLs.
+2. Run the collector on the RU-accessible host:
+
+```powershell
+python -m realtyscope.ingestion.domclick_snapshot_collector `
+  --url-file data/raw/domclick-urls.txt `
+  --output-root data/raw/domclick `
+  --collection-date 2026-05-31 `
+  --delay-seconds 2 `
+  --json
+```
+
+The collector checks `robots.txt`, rejects disallowed URLs before fetching, refuses QRATOR challenge pages, writes HTML snapshots under `pages/`, writes JSON snapshots under `payloads/`, and writes `manifest.json`.
+
+3. If the collector cannot access Domclick from the current machine, run the same command on the RU-IP host and copy the resulting day directory back to the RealtyScope machine.
 4. Run Alembic against the target database.
 5. Ingest the daily directory:
 

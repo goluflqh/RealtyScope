@@ -23,6 +23,7 @@ Nói ngắn gọn: sau Phase 3.5, project phải bắt đầu có “thân thể
 - Code hiện có thể import CSV theo teammate contract hoặc parse Domclick-like JSON payload, nhưng chưa có file input thật.
 - Kết quả kiểm tra live có kiểm soát ngày 2026-05-31: `robots.txt` của Domclick disallow `/search`; sitemap index realty lấy được và có liệt kê sitemap con; các sitemap con `.xml.gz` trả `401 Unauthorized` dù sitemap index đã set QRATOR cookies; `/search` và card page mẫu trả HTML QRATOR challenge.
 - `src/realtyscope/ingestion/domclick_live.py` ghi lại access-probe path này trong code: kiểm tra robots rules, phát hiện QRATOR challenge, và extract sitemap index locations khi được phép.
+- `src/realtyscope/ingestion/domclick_snapshot_collector.py` hiện có CLI collector hằng ngày cho host có IP Nga. Collector nhận URL Domclick trực tiếp hoặc file URL, kiểm tra `robots.txt`, từ chối QRATOR challenge, rồi ghi HTML/JSON snapshot và `manifest.json` vào `data/raw/domclick/YYYY-MM-DD/`.
 - `src/realtyscope/database/real_data_ingestion.py` hiện hỗ trợ `domclick_json`, `domclick_html` và `domclick_snapshot_dir`, nên một trang HTML Domclick thật, JSON export hoặc cả thư mục snapshot theo ngày đều có thể đi vào cùng persistence path.
 - Quy trình thu thập hằng ngày bằng môi trường có IP Nga đã được ghi trong `docs/operations/domclick-daily-collection.md` và `docs/operations/domclick-daily-collection.vi.md`: máy có quyền truy cập Domclick chỉ lưu snapshot, còn RealtyScope parse và persist offline.
 

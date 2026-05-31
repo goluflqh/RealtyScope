@@ -22,6 +22,7 @@
 - Existing API/UI are skeletons only: FastAPI has `/health`; Streamlit shows a Phase 1 placeholder.
 - Controlled live access findings on 2026-05-31: Domclick `robots.txt` disallows `/search`; the realty sitemap index is accessible and lists sitemap children; child `.xml.gz` sitemap fetches return `401 Unauthorized` even after the index sets QRATOR cookies; direct `/search` and sample card pages return QRATOR challenge HTML.
 - `src/realtyscope/ingestion/domclick_live.py` records this access-probe path in code: it checks robots rules, detects QRATOR challenge pages, and extracts sitemap index locations when allowed.
+- `src/realtyscope/ingestion/domclick_snapshot_collector.py` now provides a daily snapshot collector CLI for RU-accessible hosts. It accepts explicit Domclick URLs or a URL file, checks `robots.txt`, refuses QRATOR challenge pages, and writes HTML/JSON snapshots plus `manifest.json` under `data/raw/domclick/YYYY-MM-DD/`.
 - `src/realtyscope/database/real_data_ingestion.py` now supports `domclick_json`, `domclick_html`, and `domclick_snapshot_dir`, so a real browser-saved Domclick page, JSON export, or daily snapshot directory can enter the same persistence path.
 - Daily RU-network collection is documented in `docs/operations/domclick-daily-collection.md` and `docs/operations/domclick-daily-collection.vi.md`: collection runs on a machine that can legitimately access Domclick, while RealtyScope parses and persists saved snapshots offline.
 
