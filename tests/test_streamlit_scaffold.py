@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 STREAMLIT_APP = Path("services/streamlit/app.py")
 
 
