@@ -26,6 +26,7 @@ Nói ngắn gọn: sau Phase 3.5, project phải bắt đầu có “thân thể
 - `src/realtyscope/ingestion/domclick_snapshot_collector.py` hiện có CLI collector hằng ngày cho host có IP Nga. Collector nhận URL Domclick trực tiếp hoặc file URL, kiểm tra `robots.txt`, từ chối QRATOR challenge, rồi ghi HTML/JSON snapshot và `manifest.json` vào `data/raw/domclick/YYYY-MM-DD/`.
 - `src/realtyscope/database/real_data_ingestion.py` hiện hỗ trợ `domclick_json`, `domclick_html` và `domclick_snapshot_dir`, nên một trang HTML Domclick thật, JSON export hoặc cả thư mục snapshot theo ngày đều có thể đi vào cùng persistence path.
 - CLI real-data ingestion hiện hỗ trợ `--inspect-only`, giúp operator parse snapshot và xem counts trước khi ghi vào PostgreSQL.
+- FastAPI hiện đã có endpoint đọc database thật: `GET /listings` và `GET /stats/data-quality`. Hai endpoint này đọc persisted database rows và đã có test với database seed, nhưng Gate API của Phase 3.5 vẫn chưa được claim hoàn thành cho tới khi có row Domclick thật được persist và kiểm chứng runtime.
 - Quy trình thu thập hằng ngày bằng môi trường có IP Nga đã được ghi trong `docs/operations/domclick-daily-collection.md` và `docs/operations/domclick-daily-collection.vi.md`: máy có quyền truy cập Domclick chỉ lưu snapshot, còn RealtyScope parse và persist offline.
 
 ## Thuật ngữ chính

@@ -7,7 +7,7 @@ RealtyScope — учебный data-service проект уровня grade 5 д
 Репозиторий содержит технический каркас проекта, начальный foundation для ingestion и базовый database/persistence слой:
 
 - общий Python-пакет `realtyscope`;
-- минимальный FastAPI-сервис с endpoint `/health`;
+- FastAPI-сервис с endpoint `/health`, DB-backed `/listings` и `/stats/data-quality`;
 - минимальное Streamlit-приложение;
 - Docker Compose каркас для PostgreSQL, Redis, MLflow, API и Streamlit;
 - lockfile `uv.lock` для воспроизводимой установки зависимостей;
@@ -24,6 +24,7 @@ RealtyScope — учебный data-service проект уровня grade 5 д
 - Phase 3.5 Domclick snapshot inspect command без записи в database: `python -m realtyscope.database.real_data_ingestion --source-type domclick_snapshot_dir --source-path <snapshot-dir> --inspect-only --json`;
 - Phase 3.5 Domclick snapshot ingestion command для реальных JSON/HTML snapshots или дневной папки `data/raw/domclick/YYYY-MM-DD`: `python -m realtyscope.database.real_data_ingestion --source-type domclick_snapshot_dir --source-path <snapshot-dir> --json`;
 - controlled Domclick access probe, который проверяет robots rules, sitemap index и QRATOR challenge без обхода disallowed `/search`;
+- первые backend read endpoints, которые читают persisted database rows, а не mock data;
 - cleaning/ML-readiness flags и audit trail для rejected rows;
 - Phase 3 EDA notebook skeleton, который читает persisted database tables;
 - English technical plan и полноценный Vietnamese companion с диакритикой для Phase 3.
