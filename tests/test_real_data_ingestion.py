@@ -5,7 +5,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from realtyscope.database.base import Base
-from realtyscope.database.models import Listing, RejectedListingRecord, Source
+from realtyscope.database.models import IngestionRun, Listing, RejectedListingRecord, Source
 from realtyscope.database.real_data_ingestion import main
 
 
@@ -140,5 +140,110 @@ def test_domclick_json_snapshot_command_persists_rows(tmp_path: Path, capsys) ->
     assert len(listings) == 1
     assert listings[0].address_text == "Москва, Тверская улица, 1"
     assert listings[0].price_rub == 14_200_000
+    assert len(rejected) == 1
+    assert "price" in rejected[0].reason
+
+
+def test_domclick_snapshot_directory_command_persists_daily_snapshot(
+    tmp_path: Path, capsys
+) -> None:
+    snapshot_dir = tmp_path / "data" / "raw" / "domclick" / "2026-05-31"
+    payloads_dir = snapshot_dir / "payloads"
+    pages_dir = snapshot_dir / "pages"
+    payloads_dir.mkdir(parents=True)
+    pages_dir.mkdir(parents=True)
+    (snapshot_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "source_name": "domclick",
+                "collector_version": "test",
+                "entries": [
+                    {"path": "payloads/listings.json", "source_type": "domclick_json"},
+                    {"path": "pages/detail.html", "source_type": "domclick_html"},
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (payloads_dir / "listings.json").write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "id": "domclick-dir-1",
+                        "url": "https://domclick.ru/card/sale__flat__domclick-dir-1/",
+                        "address": "Москва, Новый Арбат, 12",
+                        "price": 19_400_000,
+                        "area": 57.2,
+                        "rooms": 2,
+                        "lat": 55.7522,
+                        "lng": 37.6031,
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (pages_dir / "detail.html").write_text(
+        """
+        <!doctype html>
+        <html>
+          <body>
+            <script type="application/json">
+            {
+              "items": [
+                {
+                  "id": "domclick-dir-bad-1",
+                  "url": "https://domclick.ru/card/sale__flat__domclick-dir-bad-1/",
+                  "address": "Москва, Остоженка, 5",
+                  "area": 44.0,
+                  "rooms": 1
+                }
+              ]
+            }
+            </script>
+          </body>
+        </html>
+        """,
+        encoding="utf-8",
+    )
+    database_path = tmp_path / "real_data_snapshot_dir.sqlite3"
+    database_url = f"sqlite+pysqlite:///{database_path.as_posix()}"
+    engine = create_engine(database_url)
+    Base.metadata.create_all(engine)
+
+    exit_code = main(
+        [
+            "--source-type",
+            "domclick_snapshot_dir",
+            "--source-path",
+            str(snapshot_dir),
+            "--database-url",
+            database_url,
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["source_type"] == "domclick_snapshot_dir"
+    assert payload["records_seen"] == 2
+    assert payload["raw_inserted"] == 1
+    assert payload["listings_created"] == 1
+    assert payload["rejected_inserted"] == 1
+
+    with Session(engine) as session:
+        ingestion_runs = session.scalars(select(IngestionRun)).all()
+        listings = session.scalars(select(Listing)).all()
+        rejected = session.scalars(select(RejectedListingRecord)).all()
+
+    assert len(ingestion_runs) == 1
+    assert ingestion_runs[0].records_seen == 2
+    assert ingestion_runs[0].raw_count == 1
+    assert ingestion_runs[0].rejected_count == 1
+    assert len(listings) == 1
+    assert listings[0].address_text == "Москва, Новый Арбат, 12"
     assert len(rejected) == 1
     assert "price" in rejected[0].reason

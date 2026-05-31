@@ -18,7 +18,7 @@ from realtyscope.ingestion.contracts import IngestionBatch
 from realtyscope.ingestion.domclick import DomclickCollectorConfig, parse_domclick_payload
 
 DOMCLICK_SOURCE_NAME = "domclick"
-SUPPORTED_SOURCE_TYPES = {"domclick_html", "domclick_json"}
+SUPPORTED_SOURCE_TYPES = {"domclick_html", "domclick_json", "domclick_snapshot_dir"}
 
 
 class _JsonScriptCollector(HTMLParser):
@@ -111,6 +111,73 @@ def load_domclick_html_snapshot(
     raise ValueError("Domclick HTML snapshot does not contain parseable embedded listing JSON")
 
 
+def load_domclick_snapshot_directory(
+    path: Path,
+    *,
+    observed_at: datetime | None = None,
+    max_records: int = 100,
+) -> IngestionBatch:
+    if not path.is_dir():
+        raise ValueError("Domclick snapshot directory source_path must be a directory")
+
+    raw_listings = []
+    normalized_listings = []
+    rejected_listings = []
+    files_seen = 0
+
+    for snapshot_file in _iter_domclick_snapshot_files(path):
+        remaining_records = max_records - len(normalized_listings)
+        if remaining_records <= 0:
+            break
+        batch = _load_domclick_snapshot_file(
+            snapshot_file,
+            observed_at=observed_at,
+            max_records=remaining_records,
+        )
+        if batch.records_seen == 0:
+            continue
+        files_seen += 1
+        raw_listings.extend(batch.raw_listings)
+        normalized_listings.extend(batch.normalized_listings)
+        rejected_listings.extend(batch.rejected_listings)
+
+    if files_seen == 0:
+        raise ValueError(
+            "Domclick snapshot directory does not contain parseable JSON or HTML files"
+        )
+
+    return IngestionBatch(
+        raw_listings=tuple(raw_listings),
+        normalized_listings=tuple(normalized_listings),
+        rejected_listings=tuple(rejected_listings),
+    )
+
+
+def _iter_domclick_snapshot_files(path: Path) -> list[Path]:
+    supported_suffixes = {".htm", ".html", ".json"}
+    return sorted(
+        candidate
+        for candidate in path.rglob("*")
+        if candidate.is_file()
+        and candidate.name.lower() != "manifest.json"
+        and candidate.suffix.lower() in supported_suffixes
+    )
+
+
+def _load_domclick_snapshot_file(
+    path: Path,
+    *,
+    observed_at: datetime | None,
+    max_records: int,
+) -> IngestionBatch:
+    suffix = path.suffix.lower()
+    if suffix == ".json":
+        return load_domclick_json_snapshot(path, observed_at=observed_at, max_records=max_records)
+    if suffix in {".htm", ".html"}:
+        return load_domclick_html_snapshot(path, observed_at=observed_at, max_records=max_records)
+    raise ValueError(f"Unsupported Domclick snapshot file suffix: {path.suffix}")
+
+
 def persist_real_source_snapshot(
     *,
     source_type: str,
@@ -126,6 +193,8 @@ def persist_real_source_snapshot(
         batch = load_domclick_html_snapshot(source_path, max_records=max_records)
     elif source_type == "domclick_json":
         batch = load_domclick_json_snapshot(source_path, max_records=max_records)
+    elif source_type == "domclick_snapshot_dir":
+        batch = load_domclick_snapshot_directory(source_path, max_records=max_records)
     else:  # pragma: no cover - guarded by source type validation above.
         raise AssertionError(f"Unhandled source_type={source_type!r}")
 

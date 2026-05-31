@@ -22,7 +22,8 @@
 - Existing API/UI are skeletons only: FastAPI has `/health`; Streamlit shows a Phase 1 placeholder.
 - Controlled live access findings on 2026-05-31: Domclick `robots.txt` disallows `/search`; the realty sitemap index is accessible and lists sitemap children; child `.xml.gz` sitemap fetches return `401 Unauthorized` even after the index sets QRATOR cookies; direct `/search` and sample card pages return QRATOR challenge HTML.
 - `src/realtyscope/ingestion/domclick_live.py` records this access-probe path in code: it checks robots rules, detects QRATOR challenge pages, and extracts sitemap index locations when allowed.
-- `src/realtyscope/database/real_data_ingestion.py` now supports `domclick_json` and `domclick_html` snapshots, so a real browser-saved Domclick page can enter the same persistence path as a JSON export.
+- `src/realtyscope/database/real_data_ingestion.py` now supports `domclick_json`, `domclick_html`, and `domclick_snapshot_dir`, so a real browser-saved Domclick page, JSON export, or daily snapshot directory can enter the same persistence path.
+- Daily RU-network collection is documented in `docs/operations/domclick-daily-collection.md` and `docs/operations/domclick-daily-collection.vi.md`: collection runs on a machine that can legitimately access Domclick, while RealtyScope parses and persists saved snapshots offline.
 
 ## Non-Negotiable Gates
 
@@ -197,10 +198,10 @@ FAIL because real_data_ingestion module or command behavior does not exist.
 Command shape:
 
 ```powershell
-python -m realtyscope.database.real_data_ingestion --source-type <domclick_json|domclick_html|domclick_live> --source-path <path-or-url> --database-url <url> --json
+python -m realtyscope.database.real_data_ingestion --source-type <domclick_json|domclick_html|domclick_snapshot_dir> --source-path <path-or-directory> --database-url <url> --json
 ```
 
-Output shape for either `domclick_json` or `domclick_html`:
+Output shape for `domclick_json`, `domclick_html`, or `domclick_snapshot_dir`:
 
 ```json
 {
@@ -277,7 +278,7 @@ Alembic upgrades from empty database to current head without error.
 Run:
 
 ```powershell
-python -m realtyscope.database.real_data_ingestion --source-type <domclick_json|domclick_html|domclick_live> --source-path <selected-domclick-source> --database-url postgresql+psycopg://realtyscope:realtyscope@localhost:5432/realtyscope_phase35_verify --json
+python -m realtyscope.database.real_data_ingestion --source-type <domclick_json|domclick_html|domclick_snapshot_dir> --source-path <selected-domclick-source> --database-url postgresql+psycopg://realtyscope:realtyscope@localhost:5432/realtyscope_phase35_verify --json
 ```
 
 Expected:

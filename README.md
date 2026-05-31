@@ -20,7 +20,7 @@ RealtyScope — учебный data-service проект уровня grade 5 д
 - Alembic initial migration для database foundation;
 - persistence из Phase 2 `IngestionBatch` в database tables;
 - sample ingestion command `python -m realtyscope.database.sample_ingestion --json` для проверки database write path;
-- Phase 3.5 Domclick snapshot ingestion command для реальных JSON/HTML snapshots: `python -m realtyscope.database.real_data_ingestion --source-type domclick_html --source-path <snapshot> --json`;
+- Phase 3.5 Domclick snapshot ingestion command для реальных JSON/HTML snapshots или дневной папки `data/raw/domclick/YYYY-MM-DD`: `python -m realtyscope.database.real_data_ingestion --source-type domclick_snapshot_dir --source-path <snapshot-dir> --json`;
 - controlled Domclick access probe, который проверяет robots rules, sitemap index и QRATOR challenge без обхода disallowed `/search`;
 - cleaning/ML-readiness flags и audit trail для rejected rows;
 - Phase 3 EDA notebook skeleton, который читает persisted database tables;

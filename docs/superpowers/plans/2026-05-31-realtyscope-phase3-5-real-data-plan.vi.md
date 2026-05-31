@@ -23,7 +23,8 @@ Nói ngắn gọn: sau Phase 3.5, project phải bắt đầu có “thân thể
 - Code hiện có thể import CSV theo teammate contract hoặc parse Domclick-like JSON payload, nhưng chưa có file input thật.
 - Kết quả kiểm tra live có kiểm soát ngày 2026-05-31: `robots.txt` của Domclick disallow `/search`; sitemap index realty lấy được và có liệt kê sitemap con; các sitemap con `.xml.gz` trả `401 Unauthorized` dù sitemap index đã set QRATOR cookies; `/search` và card page mẫu trả HTML QRATOR challenge.
 - `src/realtyscope/ingestion/domclick_live.py` ghi lại access-probe path này trong code: kiểm tra robots rules, phát hiện QRATOR challenge, và extract sitemap index locations khi được phép.
-- `src/realtyscope/database/real_data_ingestion.py` hiện hỗ trợ cả `domclick_json` và `domclick_html`, nên một trang Domclick thật được lưu từ browser có thể đi vào cùng persistence path với JSON export.
+- `src/realtyscope/database/real_data_ingestion.py` hiện hỗ trợ `domclick_json`, `domclick_html` và `domclick_snapshot_dir`, nên một trang HTML Domclick thật, JSON export hoặc cả thư mục snapshot theo ngày đều có thể đi vào cùng persistence path.
+- Quy trình thu thập hằng ngày bằng môi trường có IP Nga đã được ghi trong `docs/operations/domclick-daily-collection.md` và `docs/operations/domclick-daily-collection.vi.md`: máy có quyền truy cập Domclick chỉ lưu snapshot, còn RealtyScope parse và persist offline.
 
 ## Thuật ngữ chính
 
@@ -88,7 +89,7 @@ Dữ liệu thật phải đi qua Alembic schema hiện có và persistence laye
 Command dự kiến:
 
 ```powershell
-python -m realtyscope.database.real_data_ingestion --source-type <source-type> --source-path <source-path> --database-url <database-url> --json
+python -m realtyscope.database.real_data_ingestion --source-type <domclick_json|domclick_html|domclick_snapshot_dir> --source-path <source-path-or-directory> --database-url <database-url> --json
 ```
 
 Output cần có:
@@ -194,7 +195,7 @@ Nếu có PostgreSQL work, phải verify thêm:
 
 ```powershell
 python -m alembic upgrade head
-python -m realtyscope.database.real_data_ingestion --source-type <source-type> --source-path <source-path> --database-url <database-url> --json
+python -m realtyscope.database.real_data_ingestion --source-type <domclick_json|domclick_html|domclick_snapshot_dir> --source-path <source-path-or-directory> --database-url <database-url> --json
 ```
 
 Sau đó commit bằng Conventional Commit.
