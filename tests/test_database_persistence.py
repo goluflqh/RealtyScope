@@ -7,6 +7,7 @@ from realtyscope.database.base import Base
 from realtyscope.database.models import (
     IngestionRun,
     Listing,
+    ListingObservation,
     ListingSourceLink,
     RawListingRecord,
     RejectedListingRecord,
@@ -95,8 +96,10 @@ def test_persist_ingestion_batch_is_idempotent_for_same_raw_payload() -> None:
         assert first.raw_inserted == 1
         assert second.raw_inserted == 0
         assert second.raw_reused == 1
+        assert second.observations_inserted == 0
         assert len(session.scalars(select(RawListingRecord)).all()) == 1
         assert len(session.scalars(select(Listing)).all()) == 1
+        assert len(session.scalars(select(ListingObservation)).all()) == 1
 
 
 def test_persist_ingestion_batch_updates_listing_and_latest_raw_link() -> None:
@@ -135,12 +138,20 @@ def test_persist_ingestion_batch_updates_listing_and_latest_raw_link() -> None:
         session.commit()
 
         raw_records = session.scalars(select(RawListingRecord).order_by(RawListingRecord.id)).all()
+        observations = session.scalars(
+            select(ListingObservation).order_by(ListingObservation.observed_at)
+        ).all()
         listing = session.scalar(select(Listing))
         link = session.scalar(select(ListingSourceLink))
 
         assert result.raw_inserted == 1
         assert result.listings_updated == 1
+        assert result.observations_inserted == 1
         assert len(raw_records) == 2
+        assert [observation.price_rub for observation in observations] == [12_000_000, 13_000_000]
+        assert observations[-1].raw_listing_id == raw_records[-1].id
+        assert observations[-1].rooms == 2
+        assert observations[-1].floor is None
         assert listing is not None
         assert listing.price_rub == 13_000_000
         assert link is not None

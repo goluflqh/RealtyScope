@@ -107,7 +107,7 @@ Then commit one bounded batch:
   --json
 ```
 
-The persistence layer is idempotent for repeated raw payloads. A repeat run should show reused raw rows and updated listings rather than duplicating canonical listings. If Domclick returns the same ranked search pages every day, the database will mostly update the same listings; it will not grow beyond that slice unless offsets, filters, areas, or the site's ranking change.
+The persistence layer is idempotent for repeated raw payloads. A repeat run should show reused raw rows and updated listings rather than duplicating canonical listings or observations. If Domclick returns the same ranked search pages every day, the canonical `listings` table will mostly refresh the same slice. The `listing_observations` history grows only when a material raw snapshot changes enough to create a new raw row, for example a price change for the same `source_listing_id`.
 
 ## Status And Reports
 

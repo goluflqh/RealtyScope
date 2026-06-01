@@ -41,6 +41,7 @@ class Source(TimestampMixin, Base):
 
     ingestion_runs: Mapped[list[IngestionRun]] = relationship(back_populates="source")
     raw_listings: Mapped[list[RawListingRecord]] = relationship(back_populates="source")
+    observations: Mapped[list[ListingObservation]] = relationship(back_populates="source")
 
 
 class IngestionRun(TimestampMixin, Base):
@@ -93,6 +94,9 @@ class RawListingRecord(TimestampMixin, Base):
     source_link: Mapped[ListingSourceLink | None] = relationship(
         back_populates="raw_listing", uselist=False
     )
+    observation: Mapped[ListingObservation | None] = relationship(
+        back_populates="raw_listing", uselist=False
+    )
 
 
 class Listing(TimestampMixin, Base):
@@ -129,6 +133,9 @@ class Listing(TimestampMixin, Base):
     links: Mapped[list[ListingSourceLink]] = relationship(
         back_populates="listing", cascade="all, delete-orphan"
     )
+    observations: Mapped[list[ListingObservation]] = relationship(
+        back_populates="listing", cascade="all, delete-orphan"
+    )
 
 
 class ListingSourceLink(TimestampMixin, Base):
@@ -150,6 +157,43 @@ class ListingSourceLink(TimestampMixin, Base):
 
     listing: Mapped[Listing] = relationship(back_populates="links")
     raw_listing: Mapped[RawListingRecord] = relationship(back_populates="source_link")
+
+
+class ListingObservation(TimestampMixin, Base):
+    __tablename__ = "listing_observations"
+    __table_args__ = (
+        UniqueConstraint("raw_listing_id", name="uq_listing_observations_raw_listing_id"),
+        Index("ix_listing_observations_listing_observed", "listing_id", "observed_at"),
+        Index(
+            "ix_listing_observations_source_listing_observed",
+            "source_id",
+            "source_listing_id",
+            "observed_at",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), nullable=False)
+    source_id: Mapped[int] = mapped_column(ForeignKey("sources.id"), nullable=False)
+    raw_listing_id: Mapped[int] = mapped_column(ForeignKey("raw_listings.id"), nullable=False)
+    source_listing_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    price_rub: Mapped[int] = mapped_column(Integer, nullable=False)
+    price_per_m2: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    total_area_m2: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    rooms: Mapped[int] = mapped_column(Integer, nullable=False)
+    floor: Mapped[int | None] = mapped_column(Integer)
+    floors_total: Mapped[int | None] = mapped_column(Integer)
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=true()
+    )
+    status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="observed", server_default="observed"
+    )
+
+    listing: Mapped[Listing] = relationship(back_populates="observations")
+    source: Mapped[Source] = relationship(back_populates="observations")
+    raw_listing: Mapped[RawListingRecord] = relationship(back_populates="observation")
 
 
 class RejectedListingRecord(TimestampMixin, Base):

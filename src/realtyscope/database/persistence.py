@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from realtyscope.database.models import (
     IngestionRun,
     Listing,
+    ListingObservation,
     ListingSourceLink,
     RawListingRecord,
     RejectedListingRecord,
@@ -26,6 +27,7 @@ class PersistedIngestionResult(BaseModel):
     raw_reused: int
     listings_created: int
     listings_updated: int
+    observations_inserted: int
     rejected_inserted: int
 
 
@@ -65,15 +67,20 @@ def persist_ingestion_batch(
 
     listings_created = 0
     listings_updated = 0
+    observations_inserted = 0
     for normalized in batch.normalized_listings:
         raw_record = raw_by_source_listing_id.get(normalized.source_listing_id)
         if raw_record is None:
             continue
-        created = _upsert_listing_from_normalized(session, source.id, raw_record, normalized)
+        listing, created = _upsert_listing_from_normalized(
+            session, source.id, raw_record, normalized
+        )
         if created:
             listings_created += 1
         else:
             listings_updated += 1
+        if _create_listing_observation(session, listing, source.id, raw_record, normalized):
+            observations_inserted += 1
 
     rejected_inserted = 0
     for rejected in batch.rejected_listings:
@@ -88,7 +95,7 @@ def persist_ingestion_batch(
         )
         rejected_inserted += 1
 
-    run.inserted_count = raw_inserted + listings_created + rejected_inserted
+    run.inserted_count = raw_inserted + listings_created + observations_inserted + rejected_inserted
     run.updated_count = listings_updated
     session.flush()
 
@@ -99,6 +106,7 @@ def persist_ingestion_batch(
         raw_reused=raw_reused,
         listings_created=listings_created,
         listings_updated=listings_updated,
+        observations_inserted=observations_inserted,
         rejected_inserted=rejected_inserted,
     )
 
@@ -147,7 +155,7 @@ def _upsert_listing_from_normalized(
     source_id: int,
     raw_record: RawListingRecord,
     normalized: NormalizedListing,
-) -> bool:
+) -> tuple[Listing, bool]:
     existing_link = session.scalar(
         select(ListingSourceLink).where(
             ListingSourceLink.source_id == source_id,
@@ -164,7 +172,7 @@ def _upsert_listing_from_normalized(
         existing_link.raw_listing_id = raw_record.id
         listing.last_seen_at = normalized.observed_at
         session.flush()
-        return False
+        return listing, False
 
     listing = Listing(
         city=normalized.city,
@@ -195,6 +203,40 @@ def _upsert_listing_from_normalized(
         )
     )
     session.add(listing)
+    session.flush()
+    return listing, True
+
+
+def _create_listing_observation(
+    session: Session,
+    listing: Listing,
+    source_id: int,
+    raw_record: RawListingRecord,
+    normalized: NormalizedListing,
+) -> bool:
+    existing_id = session.scalar(
+        select(ListingObservation.id).where(ListingObservation.raw_listing_id == raw_record.id)
+    )
+    if existing_id is not None:
+        return False
+
+    session.add(
+        ListingObservation(
+            listing_id=listing.id,
+            source_id=source_id,
+            raw_listing_id=raw_record.id,
+            source_listing_id=normalized.source_listing_id,
+            observed_at=normalized.observed_at,
+            price_rub=normalized.price_rub,
+            price_per_m2=normalized.price_per_m2,
+            total_area_m2=normalized.total_area_m2,
+            rooms=normalized.rooms,
+            floor=normalized.floor,
+            floors_total=normalized.floors_total,
+            active=True,
+            status="observed",
+        )
+    )
     session.flush()
     return True
 

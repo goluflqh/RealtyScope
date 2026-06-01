@@ -6,7 +6,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from realtyscope.database.base import Base
-from realtyscope.database.models import Listing, ListingSourceLink, RawListingRecord, Source
+from realtyscope.database.models import (
+    Listing,
+    ListingObservation,
+    ListingSourceLink,
+    RawListingRecord,
+    Source,
+)
 from realtyscope.database.session import create_session_factory
 
 
@@ -17,6 +23,7 @@ def test_database_base_metadata_contains_core_tables() -> None:
         "raw_listings",
         "listings",
         "listing_source_links",
+        "listing_observations",
         "rejected_listings",
         "app_logs",
     }
@@ -137,3 +144,60 @@ def test_model_relationships_can_insert_minimal_listing_graph() -> None:
     with Session(engine) as session:
         loaded = session.scalars(select(Listing)).one()
         assert loaded.links[0].source_listing_id == "d-1"
+
+
+def test_listing_observation_records_snapshot_fields() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    observed_at = datetime(2026, 6, 2, 10, 30, tzinfo=UTC)
+    with Session(engine) as session:
+        source = Source(name="domclick", source_type="listing")
+        session.add(source)
+        session.flush()
+        raw = RawListingRecord(
+            source_id=source.id,
+            source_listing_id="d-1",
+            observed_at=observed_at,
+            payload_hash="hash-observation-1",
+            raw_payload={"id": "d-1", "price": 12_000_000},
+        )
+        listing = Listing(
+            city="Moscow",
+            price_rub=12_000_000,
+            total_area_m2=48.5,
+            rooms=2,
+            floor=7,
+            floors_total=22,
+            property_type="apartment",
+            has_coordinates=False,
+            is_ml_ready=False,
+            cleaning_status="needs_coordinates",
+        )
+        session.add_all([raw, listing])
+        session.flush()
+        session.add(
+            ListingObservation(
+                listing_id=listing.id,
+                source_id=source.id,
+                raw_listing_id=raw.id,
+                source_listing_id="d-1",
+                observed_at=observed_at,
+                price_rub=12_000_000,
+                price_per_m2=247_422.68,
+                total_area_m2=48.5,
+                rooms=2,
+                floor=7,
+                floors_total=22,
+                active=True,
+                status="observed",
+            )
+        )
+        session.commit()
+
+    with Session(engine) as session:
+        observation = session.scalars(select(ListingObservation)).one()
+        assert observation.source_listing_id == "d-1"
+        assert observation.price_rub == 12_000_000
+        assert observation.rooms == 2
+        assert observation.floor == 7
