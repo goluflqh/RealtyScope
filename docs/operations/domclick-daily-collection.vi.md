@@ -73,6 +73,31 @@ python -m realtyscope.ingestion.domclick_snapshot_collector `
 
 Collector sẽ kiểm tra `robots.txt`, từ chối URL bị cấm trước khi fetch, dừng nếu gặp QRATOR challenge, ghi HTML vào `pages/`, ghi JSON vào `payloads/`, và tạo `manifest.json`.
 
+## Capture Search SSR Bằng Chrome
+
+Với workflow hiện tại trên máy Windows, lệnh capture hằng ngày sẽ render trang search căn hộ bán ở Moscow bằng Chrome rồi lưu SSR state của trang thành compact JSON. Hướng này tách riêng với collector HTTP trực tiếp ở trên: nó không raw-fetch `/search`, và sẽ dừng nếu Chrome gặp QRATOR, CAPTCHA, login wall hoặc không thấy SSR state sau khi render.
+
+Scope mặc định:
+
+- Chrome profile hiển thị là `Person 1`, nhưng directory thật trên máy này là `Default`.
+- Domclick Moscow area id `aids=2299` (`Москва`).
+- URL template: `https://domclick.ru/search?deal_type=sale&category=living&offer_type=flat&offer_type=layout&aids=2299&offset={offset}`.
+- Offset `0..1980`, bước `20`, tối đa 100 trang và khoảng 2000 ứng viên thô mỗi ngày. Phần dư này là cố ý, vì scheduled gate yêu cầu ít nhất 1000 listing normalized/sạch sau khi parser xử lý.
+
+Lệnh chạy:
+
+```powershell
+$env:PYTHONIOENCODING="utf-8"
+.\.venv\Scripts\python.exe -m realtyscope.ingestion.domclick_chrome_capture `
+  --output-root data/raw/domclick `
+  --collection-date 2026-06-02 `
+  --profile-directory Default `
+  --delay-seconds 3 `
+  --json
+```
+
+Lệnh ghi `data/raw/domclick/YYYY-MM-DD-bulk/manifest.json` và compact JSON trong `payloads/`. Raw data vẫn bị git ignore và không được commit.
+
 3. Nếu máy hiện tại không truy cập được Domclick, chạy cùng command trên host có IP Nga rồi copy nguyên thư mục ngày về máy chạy RealtyScope.
 4. Inspect snapshot trước khi ghi vào PostgreSQL:
 
@@ -110,13 +135,36 @@ python -m realtyscope.analysis.eda_summary `
 
 ## Cách Lên Lịch Chạy Tự Động
 
+Hướng được ưu tiên cho vận hành định kỳ là batch runner có giới hạn, được mô tả đầy đủ trong
+`docs/operations/domclick-scheduled-batch-ingestion.md` và
+`docs/operations/domclick-scheduled-batch-ingestion.vi.md`:
+
+```powershell
+python -m realtyscope.ingestion.domclick_scheduled_batch run `
+  --source-path data/raw/domclick/2026-06-01 `
+  --database-url $env:DATABASE_URL `
+  --commit `
+  --max-records 2000 `
+  --min-records 1 `
+  --min-normalized-records 1000 `
+  --json
+```
+
+Dùng `status` để xem counts trong database và trạng thái run gần nhất:
+
+```powershell
+python -m realtyscope.ingestion.domclick_scheduled_batch status `
+  --database-url $env:DATABASE_URL `
+  --json
+```
+
 Có thể dùng một trong các cách sau:
 
 - Windows Task Scheduler trên máy có IP Nga.
 - `cron` hoặc `systemd timer` trên VPS/Linux ở Nga.
 - Docker container trên host có IP Nga, miễn là secrets và dữ liệu thô không nằm trong git.
 
-Job hằng ngày phải báo lỗi rõ nếu lấy được 0 record, bị chặn, hoặc không ghi được snapshot parseable.
+Job hằng ngày phải báo lỗi rõ nếu lấy được 0 record, bị chặn, không ghi được snapshot parseable, hoặc inspect được ít hơn 1000 listing normalized/sạch.
 
 ## Kiểm Tra Chất Lượng Sau Mỗi Lần Chạy
 

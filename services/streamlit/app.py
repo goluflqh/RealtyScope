@@ -12,7 +12,8 @@ st.set_page_config(page_title="RealtyScope", page_icon="RS", layout="wide")
 st.title("RealtyScope")
 st.caption("Phase 3.5 real-data dashboard")
 
-data = fetch_dashboard_data(API_BASE_URL)
+row_limit = st.sidebar.selectbox("Rows", [25, 100, 500, 1000], index=3)
+data = fetch_dashboard_data(API_BASE_URL, limit=row_limit)
 
 if data.errors:
     st.warning("Data API is unavailable.")
@@ -35,6 +36,8 @@ if isinstance(latest_run, dict):
 
 st.subheader("Listing preview")
 if data.listings:
+    total = data.listings_total or stats.get("listings_total") or len(data.listings)
+    st.caption(f"Showing {len(data.listings)} of {total} listings")
     st.dataframe(pd.DataFrame(data.listings), hide_index=True, width="stretch")
 else:
     st.info("No persisted listings available yet.")

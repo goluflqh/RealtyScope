@@ -74,7 +74,17 @@ def collect_domclick_snapshots(
     delay_seconds: float = 1.0,
     max_urls: int = 100,
     collector_version: str = COLLECTOR_VERSION,
+    capture_mode: str = "bounded_url_capture",
+    batch_run_id: str | None = None,
+    operator_note: str | None = None,
 ) -> DomclickSnapshotCollectionResult:
+    if max_urls <= 0:
+        raise ValueError("max_urls must be greater than zero")
+    if delay_seconds < 0:
+        raise ValueError("delay_seconds must be zero or greater")
+    if timeout_seconds <= 0:
+        raise ValueError("timeout_seconds must be greater than zero")
+
     url_list = [url.strip() for url in urls if url.strip()]
     if not url_list:
         raise ValueError("At least one Domclick URL is required")
@@ -145,10 +155,17 @@ def collect_domclick_snapshots(
         "source_name": "domclick",
         "collection_date": collection_date.isoformat(),
         "collector_version": collector_version,
+        "capture_mode": capture_mode,
+        "batch_run_id": batch_run_id,
         "base_url": DOMCLICK_BASE_URL,
         "user_agent": user_agent,
+        "max_urls": max_urls,
+        "delay_seconds": delay_seconds,
+        "timeout_seconds": timeout_seconds,
         "entries": entries,
     }
+    if operator_note:
+        manifest["operator_note"] = operator_note
     manifest_path.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
         encoding="utf-8",
@@ -214,6 +231,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--delay-seconds", type=float, default=1.0, help="Delay between URLs.")
     parser.add_argument("--timeout-seconds", type=float, default=20.0, help="HTTP timeout.")
     parser.add_argument("--user-agent", default=DEFAULT_USER_AGENT, help="HTTP User-Agent.")
+    parser.add_argument(
+        "--capture-mode",
+        default="bounded_url_capture",
+        help="Manifest label for how URLs/snapshots were prepared.",
+    )
+    parser.add_argument(
+        "--operator-note",
+        default=None,
+        help="Optional manifest note, for example the RU route or Chrome profile used.",
+    )
     parser.add_argument("--json", action="store_true", help="Print a JSON summary.")
     args = parser.parse_args(argv)
 
@@ -225,6 +252,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         timeout_seconds=args.timeout_seconds,
         delay_seconds=args.delay_seconds,
         max_urls=args.max_urls,
+        capture_mode=args.capture_mode,
+        operator_note=args.operator_note,
     )
 
     payload = {

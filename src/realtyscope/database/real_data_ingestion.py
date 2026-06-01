@@ -11,6 +11,8 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict
+
 from realtyscope.database.persistence import PersistedIngestionResult, persist_ingestion_batch
 from realtyscope.database.session import (
     create_database_engine,
@@ -22,6 +24,19 @@ from realtyscope.ingestion.domclick import DomclickCollectorConfig, parse_domcli
 
 DOMCLICK_SOURCE_NAME = "domclick"
 SUPPORTED_SOURCE_TYPES = {"domclick_html", "domclick_json", "domclick_snapshot_dir"}
+
+
+class RealSourceInspectResult(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    source_type: str
+    source_path: str
+    mode: str = "inspect_only"
+    records_seen: int
+    raw_listings: int
+    normalized_listings: int
+    rejected_listings: int
+    ml_ready_listings: int
 
 
 class _JsonScriptCollector(HTMLParser):
@@ -195,9 +210,9 @@ def load_domclick_snapshot_directory(
             )
         except ValueError:
             continue
+        files_seen += 1
         if batch.records_seen == 0:
             continue
-        files_seen += 1
         raw_listings.extend(batch.raw_listings)
         normalized_listings.extend(batch.normalized_listings)
         rejected_listings.extend(batch.rejected_listings)
@@ -258,6 +273,20 @@ def load_real_source_snapshot(
     raise AssertionError(f"Unhandled source_type={source_type!r}")  # pragma: no cover
 
 
+def inspect_real_source_snapshot(
+    *,
+    source_type: str,
+    source_path: Path,
+    max_records: int = 100,
+) -> RealSourceInspectResult:
+    batch = load_real_source_snapshot(
+        source_type=source_type,
+        source_path=source_path,
+        max_records=max_records,
+    )
+    return _inspect_result(source_type=source_type, source_path=source_path, batch=batch)
+
+
 def persist_real_source_snapshot(
     *,
     source_type: str,
@@ -301,18 +330,30 @@ def _inspect_payload(
     source_path: Path,
     batch: IngestionBatch,
 ) -> dict[str, Any]:
-    return {
-        "source_type": source_type,
-        "source_path": str(source_path),
-        "mode": "inspect_only",
-        "records_seen": batch.records_seen,
-        "raw_listings": len(batch.raw_listings),
-        "normalized_listings": len(batch.normalized_listings),
-        "rejected_listings": len(batch.rejected_listings),
-        "ml_ready_listings": sum(
+    return _inspect_result(
+        source_type=source_type,
+        source_path=source_path,
+        batch=batch,
+    ).model_dump(mode="json")
+
+
+def _inspect_result(
+    *,
+    source_type: str,
+    source_path: Path,
+    batch: IngestionBatch,
+) -> RealSourceInspectResult:
+    return RealSourceInspectResult(
+        source_type=source_type,
+        source_path=str(source_path),
+        records_seen=batch.records_seen,
+        raw_listings=len(batch.raw_listings),
+        normalized_listings=len(batch.normalized_listings),
+        rejected_listings=len(batch.rejected_listings),
+        ml_ready_listings=sum(
             1 for listing in batch.normalized_listings if listing.has_coordinates
         ),
-    }
+    )
 
 
 def _print_json(payload: dict[str, Any]) -> None:
@@ -346,24 +387,20 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     source_path = Path(args.source_path)
     if args.inspect_only:
-        batch = load_real_source_snapshot(
+        inspect_result = inspect_real_source_snapshot(
             source_type=args.source_type,
             source_path=source_path,
             max_records=args.max_records,
         )
-        payload = _inspect_payload(
-            source_type=args.source_type,
-            source_path=source_path,
-            batch=batch,
-        )
+        payload = inspect_result.model_dump(mode="json")
         if args.json:
             _print_json(payload)
         else:
             print(
                 "Inspected real source snapshot "
-                f"source_type={args.source_type} records_seen={batch.records_seen} "
-                f"normalized={len(batch.normalized_listings)} "
-                f"rejected={len(batch.rejected_listings)}"
+                f"source_type={args.source_type} records_seen={inspect_result.records_seen} "
+                f"normalized={inspect_result.normalized_listings} "
+                f"rejected={inspect_result.rejected_listings}"
             )
         return 0
 

@@ -32,6 +32,7 @@ def test_fetch_dashboard_data_reads_stats_and_listings_from_api() -> None:
     assert data.errors == []
     assert data.stats == {"listings_total": 1, "ml_ready_listings": 1}
     assert data.listings == [{"id": 1, "price_rub": 18_000_000}]
+    assert data.listings_total == 1
     assert calls == [
         ("http://api.test/stats/data-quality", {"timeout": 10.0}),
         ("http://api.test/listings", {"params": {"limit": 25, "offset": 0}, "timeout": 10.0}),
@@ -48,6 +49,7 @@ def test_fetch_dashboard_data_reports_api_errors_without_mocking_data() -> None:
 
     assert data.stats is None
     assert data.listings == []
+    assert data.listings_total == 0
     assert data.errors == ["Could not load data-quality stats: API unavailable"]
 
 
@@ -59,6 +61,7 @@ def test_fetch_dashboard_data_reports_listing_errors_without_mocking_data() -> N
 
     assert data.stats is None
     assert data.listings == []
+    assert data.listings_total is None
     assert data.errors == [
         "Could not load data-quality stats: API unavailable",
         "Could not load listings: API unavailable",
@@ -75,6 +78,7 @@ def test_fetch_dashboard_data_reports_non_object_json_without_mocking_data() -> 
 
     assert data.stats is None
     assert data.listings == []
+    assert data.listings_total is None
     assert data.errors == [
         "Could not load data-quality stats: Expected JSON object from RealtyScope API",
         "Could not load listings: Expected JSON object from RealtyScope API",

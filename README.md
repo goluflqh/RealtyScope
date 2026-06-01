@@ -21,6 +21,9 @@ RealtyScope — учебный data-service проект уровня grade 5 д
 - persistence из Phase 2 `IngestionBatch` в database tables;
 - sample ingestion command `python -m realtyscope.database.sample_ingestion --json` для проверки database write path;
 - Phase 3.5 Domclick collector command для RU-accessible host: `python -m realtyscope.ingestion.domclick_snapshot_collector --url-file <urls.txt> --output-root data/raw/domclick --json`;
+- Phase 3.6 Chrome-assisted Domclick SSR capture command для daily Moscow sale-apartment snapshots: `python -m realtyscope.ingestion.domclick_chrome_capture --output-root data/raw/domclick --profile-directory Default --json`;
+- bounded scheduled Domclick batch command for safe inspect/commit runs: `python -m realtyscope.ingestion.domclick_scheduled_batch run --source-path <snapshot-dir> --commit --json`;
+- Domclick ingestion status command: `python -m realtyscope.ingestion.domclick_scheduled_batch status --json`;
 - Phase 3.5 Domclick snapshot inspect command без записи в database: `python -m realtyscope.database.real_data_ingestion --source-type domclick_snapshot_dir --source-path <snapshot-dir> --inspect-only --json`;
 - Phase 3.5 Domclick snapshot ingestion command для реальных JSON/HTML snapshots или дневной папки `data/raw/domclick/YYYY-MM-DD`: `python -m realtyscope.database.real_data_ingestion --source-type domclick_snapshot_dir --source-path <snapshot-dir> --json`;
 - controlled Domclick access probe, который проверяет robots rules, sitemap index и QRATOR challenge без обхода disallowed `/search`;

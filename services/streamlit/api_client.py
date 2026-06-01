@@ -20,13 +20,14 @@ HttpGet = Callable[..., HttpResponse]
 class DashboardData:
     stats: dict[str, Any] | None
     listings: list[dict[str, Any]]
+    listings_total: int | None
     errors: list[str]
 
 
 def fetch_dashboard_data(
     api_base_url: str,
     *,
-    limit: int = 25,
+    limit: int = 1000,
     get: HttpGet = requests.get,
     timeout: float = 10.0,
 ) -> DashboardData:
@@ -34,6 +35,7 @@ def fetch_dashboard_data(
     errors: list[str] = []
     stats: dict[str, Any] | None = None
     listings: list[dict[str, Any]] = []
+    listings_total: int | None = None
 
     try:
         stats = _get_json_object(get, f"{base_url}/stats/data-quality", timeout=timeout)
@@ -51,10 +53,18 @@ def fetch_dashboard_data(
         if not isinstance(items, list):
             raise ValueError("Expected listings payload 'items' to be a list")
         listings = [item for item in items if isinstance(item, dict)]
+        total = listings_payload.get("total")
+        if isinstance(total, int):
+            listings_total = total
     except Exception as exc:  # noqa: BLE001 - UI should show upstream API errors.
         errors.append(f"Could not load listings: {exc}")
 
-    return DashboardData(stats=stats, listings=listings, errors=errors)
+    return DashboardData(
+        stats=stats,
+        listings=listings,
+        listings_total=listings_total,
+        errors=errors,
+    )
 
 
 def _get_json_object(

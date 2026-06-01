@@ -70,6 +70,31 @@ python -m realtyscope.ingestion.domclick_snapshot_collector `
 
 The collector checks `robots.txt`, rejects disallowed URLs before fetching, refuses QRATOR challenge pages, writes HTML snapshots under `pages/`, writes JSON snapshots under `payloads/`, and writes `manifest.json`.
 
+## Chrome-Assisted Search SSR Capture
+
+For the current workstation workflow, the reusable daily capture command renders the Moscow sale-apartment search in Chrome and stores the page SSR state as compact JSON. This is separate from the direct HTTP URL collector above: it does not raw-fetch `/search`, and it stops if Chrome sees QRATOR, CAPTCHA, a login wall, or missing SSR state.
+
+Default scope:
+
+- Chrome profile shown as `Person 1`, stored on this machine as profile directory `Default`.
+- Domclick Moscow area id `aids=2299` (`Москва`).
+- URL template: `https://domclick.ru/search?deal_type=sale&category=living&offer_type=flat&offer_type=layout&aids=2299&offset={offset}`.
+- Offsets `0..1980`, step `20`, maximum 100 pages and roughly 2000 raw candidates per day. The extra headroom is intentional because the scheduled gate requires at least 1000 normalized clean listings after parsing.
+
+Command:
+
+```powershell
+$env:PYTHONIOENCODING="utf-8"
+.\.venv\Scripts\python.exe -m realtyscope.ingestion.domclick_chrome_capture `
+  --output-root data/raw/domclick `
+  --collection-date 2026-06-02 `
+  --profile-directory Default `
+  --delay-seconds 3 `
+  --json
+```
+
+The command writes `data/raw/domclick/YYYY-MM-DD-bulk/manifest.json` and compact JSON files under `payloads/`. Raw data remains ignored by git.
+
 3. If the collector cannot access Domclick from the current machine, run the same command on the RU-IP host and copy the resulting day directory back to the RealtyScope machine.
 4. Inspect the snapshot before writing to PostgreSQL:
 
@@ -107,11 +132,34 @@ python -m realtyscope.analysis.eda_summary `
 
 ## Scheduling Options
 
+The preferred scheduled path is now the bounded batch runner documented in
+`docs/operations/domclick-scheduled-batch-ingestion.md` and
+`docs/operations/domclick-scheduled-batch-ingestion.vi.md`:
+
+```powershell
+python -m realtyscope.ingestion.domclick_scheduled_batch run `
+  --source-path data/raw/domclick/2026-06-01 `
+  --database-url $env:DATABASE_URL `
+  --commit `
+  --max-records 2000 `
+  --min-records 1 `
+  --min-normalized-records 1000 `
+  --json
+```
+
+Use `status` for database counts and latest-run health:
+
+```powershell
+python -m realtyscope.ingestion.domclick_scheduled_batch status `
+  --database-url $env:DATABASE_URL `
+  --json
+```
+
 - Windows Task Scheduler on the RU-IP machine.
 - `cron` or `systemd timer` on a Linux VPS.
 - A Docker container on the RU-IP host, provided secrets and raw data stay outside git.
 
-The scheduled job should fail loudly when it collects zero records, gets blocked, or writes no parseable snapshots.
+The scheduled job should fail loudly when it collects zero records, gets blocked, writes no parseable snapshots, or inspects fewer than 1000 normalized clean listings.
 
 ## Quality Checks
 

@@ -49,7 +49,7 @@ def health() -> dict[str, str]:
 @app.get("/listings")
 def list_listings(
     session: Annotated[Session, Depends(get_database_session)],
-    limit: Annotated[int, Query(ge=1, le=500)] = 50,
+    limit: Annotated[int, Query(ge=1, le=2000)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> dict[str, Any]:
     total = session.scalar(select(func.count()).select_from(Listing)) or 0
