@@ -31,10 +31,10 @@ with metric_columns[3]:
 latest_run = stats.get("latest_ingestion_run")
 if isinstance(latest_run, dict):
     st.subheader("Latest ingestion run")
-    st.dataframe(pd.DataFrame([latest_run]), hide_index=True, use_container_width=True)
+    st.dataframe(pd.DataFrame([latest_run]), hide_index=True, width="stretch")
 
 st.subheader("Listing preview")
 if data.listings:
-    st.dataframe(pd.DataFrame(data.listings), hide_index=True, use_container_width=True)
+    st.dataframe(pd.DataFrame(data.listings), hide_index=True, width="stretch")
 else:
     st.info("No persisted listings available yet.")
