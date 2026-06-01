@@ -1,0 +1,84 @@
+# Quy Ước Môi Trường Local Cho RealtyScope
+
+Tài liệu này chốt cách chia môi trường để RealtyScope không phụ thuộc vào package global chỉ có trên máy của một người.
+
+## Vai Trò Từng Môi Trường
+
+- Windows là lớp làm việc: Codex Desktop, Chrome profile thật, capture Domclick bằng trình duyệt, editor và lệnh phát triển hằng ngày.
+- Python trên Windows phải dùng `.venv` riêng của repo; không dựa vào `C:\Program Files\Python312\Lib\site-packages` hoặc Anaconda cho lệnh dự án.
+- WSL2 Ubuntu là lớp runtime Linux local: Docker, PostgreSQL, Redis, MLflow và các kiểm chứng giống môi trường production.
+- VPS/production sau này phải đi theo giả định Linux/Docker giống WSL2, không phụ thuộc vào package global trên Windows.
+
+## Nguồn Sự Thật Của Dependency
+
+- `pyproject.toml` khai báo dependency trực tiếp và các nhóm optional extras.
+- `uv.lock` khóa dependency graph để CI/Linux/agent có thể cài tái lập.
+- `.venv/` là local, phụ thuộc hệ điều hành, bị git ignore và phải tạo lại trên từng máy.
+- Raw snapshot, database dump, `.env` và artifact runtime không được commit.
+
+## Cài Môi Trường Làm Việc Trên Windows
+
+Chạy từ root của repo trong PowerShell:
+
+```powershell
+python -m venv .venv
+$env:PYTHONIOENCODING="utf-8"
+$env:PIP_NO_COLOR="1"
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -e ".[dev,data,api,streamlit]"
+```
+
+Dùng `.venv` cho lệnh Python:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m ruff format --check .
+```
+
+Biến `PYTHONIOENCODING=utf-8` giúp tránh lỗi encoding trên Windows khi đường dẫn repo có ký tự Cyrillic.
+
+## Runtime PostgreSQL/Docker Trong WSL2
+
+Chạy PostgreSQL bằng Docker Compose trong WSL2:
+
+```powershell
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose up -d db"
+```
+
+Kiểm tra container database:
+
+```powershell
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose ps db"
+```
+
+Các lệnh Python trong Windows `.venv` kết nối tới PostgreSQL trong WSL2 qua `localhost:5432`:
+
+```powershell
+$env:DATABASE_URL="postgresql+psycopg://realtyscope:realtyscope@localhost:5432/realtyscope"
+.\.venv\Scripts\python.exe -m alembic upgrade head
+```
+
+## Cài Đặt Khóa Dependency Cho CI/Linux
+
+CI và môi trường Linux/VPS nên cài theo `uv.lock`:
+
+```bash
+python -m pip install uv==0.11.3
+UV_LINK_MODE=copy uv sync --frozen --extra dev --extra data --extra api --extra streamlit
+uv run pytest -q
+uv run ruff check .
+uv run ruff format --check .
+```
+
+Không dùng chung `.venv` của Windows trong WSL hoặc Linux. Mỗi hệ điều hành phải tạo environment riêng.
+
+## Mẫu Kiểm Chứng Phase 3.5
+
+```powershell
+$env:DATABASE_URL="postgresql+psycopg://realtyscope:realtyscope@localhost:5432/realtyscope_phase35_verify"
+.\.venv\Scripts\python.exe -m alembic upgrade head
+.\.venv\Scripts\python.exe -m realtyscope.database.real_data_ingestion --source-type domclick_snapshot_dir --source-path data/raw/domclick/2026-06-01 --inspect-only --json
+.\.venv\Scripts\python.exe -m realtyscope.database.real_data_ingestion --source-type domclick_snapshot_dir --source-path data/raw/domclick/2026-06-01 --database-url $env:DATABASE_URL --json
+.\.venv\Scripts\python.exe -m realtyscope.analysis.eda_summary --database-url $env:DATABASE_URL --output docs/data/phase3_5_eda_summary.vi.md --json
+```

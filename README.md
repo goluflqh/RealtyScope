@@ -33,58 +33,49 @@ RealtyScope — учебный data-service проект уровня grade 5 д
 
 ## Локальная установка
 
-Рекомендуемый способ для проекта — `uv` в Ubuntu/WSL2. Он использует `pyproject.toml` и
-зафиксированный `uv.lock`.
+Проект использует явное разделение сред:
 
-Из Ubuntu/WSL2:
+- Windows — рабочая среда для Codex Desktop, Chrome profile, browser-assisted Domclick capture и Python-команд через локальный `.venv`.
+- WSL2 Ubuntu — Linux runtime для Docker Compose, PostgreSQL, Redis, MLflow и production-like проверок.
+- VPS/production — Linux/Docker окружение, совместимое с WSL2, а не с global Python packages на Windows.
+
+Подробные инструкции:
+
+- English: `docs/development/local-environment.md`
+- Tiếng Việt: `docs/development/local-environment.vi.md`
+
+Создать локальный Windows `.venv` из PowerShell:
+
+```powershell
+python -m venv .venv
+$env:PYTHONIOENCODING="utf-8"
+$env:PIP_NO_COLOR="1"
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -e ".[dev,data,api,streamlit]"
+```
+
+Запускать Python-команды только через `.venv`:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m ruff format --check .
+```
+
+Запустить PostgreSQL через WSL2 Docker Compose:
+
+```powershell
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose up -d db"
+```
+
+CI/Linux/VPS должны устанавливаться из `uv.lock`:
 
 ```bash
-cd /mnt/e/Магистр/2-курс/python/RealtyScope
+python -m pip install uv==0.11.3
 UV_LINK_MODE=copy uv sync --frozen --extra dev --extra data --extra api --extra streamlit
 ```
 
-Или из PowerShell через WSL:
-
-```powershell
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && UV_LINK_MODE=copy uv sync --frozen --extra dev --extra data --extra api --extra streamlit"
-```
-
-Команды разработки через `uv`:
-
-```bash
-uv run pytest -q
-uv run ruff check .
-uv run ruff format --check .
-```
-
-Запасной способ через обычный Windows Python/pip, если нужно быстро проверить без WSL:
-
-Установить зависимости для разработки:
-
-```powershell
-python -m pip install -e ".[dev,data,api,streamlit]"
-```
-
-Запустить тесты:
-
-```powershell
-python -m pytest -q
-```
-
-Проверить стиль кода:
-
-```powershell
-python -m ruff check .
-python -m ruff format --check .
-```
-
-Запустить сервисы через Docker Compose:
-
-```powershell
-docker compose up --build
-```
-
-Полезные локальные URL:
+Полезные локальные URL после запуска сервисов:
 
 - FastAPI health: http://localhost:8000/health
 - FastAPI Swagger: http://localhost:8000/docs
