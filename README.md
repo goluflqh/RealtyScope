@@ -2,7 +2,7 @@
 
 RealtyScope — учебный data-service проект уровня grade 5 для оценки стоимости квартир в Москве.
 
-## Статус Phase 3
+## Статус Phase 4
 
 Репозиторий содержит технический каркас проекта, начальный foundation для ingestion и базовый database/persistence слой:
 
@@ -30,9 +30,18 @@ RealtyScope — учебный data-service проект уровня grade 5 д
 - первые backend read endpoints, которые читают persisted database rows, а не mock data;
 - cleaning/ML-readiness flags и audit trail для rejected rows;
 - Phase 3.5 EDA summary command, который читает persisted database tables и пишет markdown/JSON: `python -m realtyscope.analysis.eda_summary --database-url <url> --output docs/data/phase3_5_eda_summary.vi.md --json`;
-- English technical plan и полноценный Vietnamese companion с диакритикой для Phase 3.
+- English technical plan и полноценный Vietnamese companion с диакритикой для Phase 3;
+- Phase 4 data-readiness audit and observation-based EDA on persisted real Domclick rows: `docs/data/phase4-data-readiness.vi.md`, `docs/data/phase4-eda-observations.md`;
+- OpenStreetMap enrichment foundation with local/fixture feature computation, `osm_features` persistence, and explicit OpenStreetMap attribution rules: `docs/data/osm-enrichment.md`;
+- deterministic ML feature snapshot command: `python -m realtyscope.ml.features --json`;
+- baseline training command with joblib artifact output: `python -m realtyscope.ml.train --output-dir data/processed/models/phase4 --json`;
+- Phase 4 baseline model evidence in `docs/ml/phase4-baseline-model.md` and `docs/ml/phase4-baseline-model.vi.md`;
+- FastAPI `/predict` contract with Pydantic validation and model artifact loading from `ACTIVE_MODEL_ARTIFACT_PATH`;
+- Streamlit baseline prediction form that calls `/predict` and displays predicted price, model version, metrics summary, and caveat.
 
-Реальный Domclick snapshot/live export, OpenStreetMap enrichment, EDA conclusions на реальных persisted rows, обучение ML-модели, MLflow tracking, production `/predict`, реальное использование Redis cache и полноценные многостраничные dashboard views будут реализованы в следующих phase.
+Текущие Phase 4 ограничения зафиксированы явно: live `osm_features` rows пока отсутствуют (`osm_rows_present=0`), observation history содержит один observation на listing, а baseline `baseline_ridge_v1` использует текущие listing/observation price fields, поэтому его почти идеальные метрики являются evidence для training/API contract, а не доказательством независимой production-оценки. MLflow logging поддержан, но live run ID равен `null`, если tracking URI/package не включены в локальном запуске.
+
+Следующие phase должны убрать target-leakage из feature set, накопить повторные daily observations для trend/actual-vs-predicted анализа, добавить feature importance/SHAP, production model serving, реальное использование Redis cache и полноценные многостраничные dashboard views.
 
 ## Локальная установка
 
