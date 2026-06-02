@@ -10,6 +10,7 @@ from realtyscope.database.models import (
     Listing,
     ListingObservation,
     ListingSourceLink,
+    OsmFeature,
     RawListingRecord,
     Source,
 )
@@ -24,6 +25,7 @@ def test_database_base_metadata_contains_core_tables() -> None:
         "listings",
         "listing_source_links",
         "listing_observations",
+        "osm_features",
         "rejected_listings",
         "app_logs",
     }
@@ -201,3 +203,45 @@ def test_listing_observation_records_snapshot_fields() -> None:
         assert observation.price_rub == 12_000_000
         assert observation.rooms == 2
         assert observation.floor == 7
+
+
+def test_listing_can_store_osm_feature_snapshot() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        listing = Listing(
+            city="Moscow",
+            latitude=55.75,
+            longitude=37.61,
+            price_rub=12_000_000,
+            total_area_m2=48.5,
+            rooms=2,
+            property_type="apartment",
+            has_coordinates=True,
+            is_ml_ready=True,
+            cleaning_status="clean",
+        )
+        session.add(listing)
+        session.flush()
+        listing.osm_features.append(
+            OsmFeature(
+                latitude=55.75,
+                longitude=37.61,
+                feature_version="osm_local_v1",
+                transport_count_500m=1,
+                transport_count_1000m=2,
+                nearest_transport_m=128.5,
+                schools_count_1000m=1,
+                parks_count_1000m=1,
+                shops_count_1000m=1,
+                healthcare_count_1000m=0,
+                source_summary={"fixture": True},
+            )
+        )
+        session.commit()
+
+    with Session(engine) as session:
+        loaded = session.scalars(select(Listing)).one()
+        assert loaded.osm_features[0].feature_version == "osm_local_v1"
+        assert loaded.osm_features[0].transport_count_500m == 1

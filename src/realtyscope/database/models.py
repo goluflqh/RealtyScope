@@ -136,6 +136,9 @@ class Listing(TimestampMixin, Base):
     observations: Mapped[list[ListingObservation]] = relationship(
         back_populates="listing", cascade="all, delete-orphan"
     )
+    osm_features: Mapped[list[OsmFeature]] = relationship(
+        back_populates="listing", cascade="all, delete-orphan"
+    )
 
 
 class ListingSourceLink(TimestampMixin, Base):
@@ -194,6 +197,30 @@ class ListingObservation(TimestampMixin, Base):
     listing: Mapped[Listing] = relationship(back_populates="observations")
     source: Mapped[Source] = relationship(back_populates="observations")
     raw_listing: Mapped[RawListingRecord] = relationship(back_populates="observation")
+
+
+class OsmFeature(TimestampMixin, Base):
+    __tablename__ = "osm_features"
+    __table_args__ = (
+        UniqueConstraint("listing_id", "feature_version", name="uq_osm_features_listing_version"),
+        Index("ix_osm_features_listing_version", "listing_id", "feature_version"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), nullable=False)
+    latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    feature_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    transport_count_500m: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    transport_count_1000m: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    nearest_transport_m: Mapped[float | None] = mapped_column(Float)
+    schools_count_1000m: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    parks_count_1000m: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    shops_count_1000m: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    healthcare_count_1000m: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    source_summary: Mapped[dict[str, Any]] = mapped_column(nullable=False)
+
+    listing: Mapped[Listing] = relationship(back_populates="osm_features")
 
 
 class RejectedListingRecord(TimestampMixin, Base):

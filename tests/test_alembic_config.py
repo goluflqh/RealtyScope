@@ -36,3 +36,16 @@ def test_observation_migration_creates_history_table() -> None:
     assert "fk_listing_observations_raw_listing_id_raw_listings" in content
     assert "uq_listing_observations_raw_listing_id" in content
     assert "ix_listing_observations_listing_observed" in content
+
+
+def test_osm_feature_migration_creates_enrichment_table() -> None:
+    migration = Path("alembic/versions/20260602_0003_osm_features.py")
+    content = migration.read_text(encoding="utf-8")
+
+    assert '"osm_features"' in content
+    assert "fk_osm_features_listing_id_listings" in content
+    assert "uq_osm_features_listing_version" in content
+    assert "ix_osm_features_listing_version" in content
+    assert "transport_count_500m" in content
+    assert "nearest_transport_m" in content
+    assert "source_summary" in content
