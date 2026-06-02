@@ -31,6 +31,13 @@ class PredictionData:
     errors: list[str]
 
 
+@dataclass(frozen=True)
+class MonitoringData:
+    status: dict[str, Any] | None
+    model_metadata: dict[str, Any] | None
+    errors: list[str]
+
+
 def fetch_dashboard_data(
     api_base_url: str,
     *,
@@ -92,6 +99,30 @@ def request_prediction(
     except Exception as exc:  # noqa: BLE001 - UI should show upstream API errors.
         return PredictionData(result=None, errors=[f"Could not request prediction: {exc}"])
     return PredictionData(result=result, errors=[])
+
+
+def fetch_monitoring_data(
+    api_base_url: str,
+    *,
+    get: HttpGet = requests.get,
+    timeout: float = 10.0,
+) -> MonitoringData:
+    base_url = api_base_url.rstrip("/")
+    errors: list[str] = []
+    status: dict[str, Any] | None = None
+    model_metadata: dict[str, Any] | None = None
+
+    try:
+        status = _get_json_object(get, f"{base_url}/monitoring/status", timeout=timeout)
+    except Exception as exc:  # noqa: BLE001 - UI should show upstream API errors.
+        errors.append(f"Could not load monitoring status: {exc}")
+
+    try:
+        model_metadata = _get_json_object(get, f"{base_url}/model/metadata", timeout=timeout)
+    except Exception as exc:  # noqa: BLE001 - UI should show upstream API errors.
+        errors.append(f"Could not load model metadata: {exc}")
+
+    return MonitoringData(status=status, model_metadata=model_metadata, errors=errors)
 
 
 def _get_json_object(

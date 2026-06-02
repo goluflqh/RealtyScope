@@ -1,5 +1,6 @@
 from typing import Any
 
+from services.streamlit import api_client
 from services.streamlit.api_client import fetch_dashboard_data, request_prediction
 
 
@@ -128,3 +129,51 @@ def test_request_prediction_reports_api_errors() -> None:
 
     assert prediction.result is None
     assert prediction.errors == ["Could not request prediction: API unavailable"]
+
+
+def test_fetch_monitoring_data_reads_status_and_model_metadata_from_api() -> None:
+    calls = []
+    monitoring_payload = {
+        "status": "ok",
+        "data_quality": {"listings_total": 1},
+        "recent_errors": [],
+    }
+    model_payload = {
+        "status": "ready",
+        "model_version": "baseline_ridge_v2_non_leaky",
+        "feature_version": "ml_features_v2_non_leaky",
+        "feature_names": ["rooms", "total_area_m2"],
+        "feature_importance": [{"feature": "total_area_m2", "importance": 0.8, "coefficient": 0.8}],
+    }
+
+    def fake_get(url: str, **kwargs: Any) -> FakeResponse:
+        calls.append((url, kwargs))
+        if url.endswith("/monitoring/status"):
+            return FakeResponse(monitoring_payload)
+        if url.endswith("/model/metadata"):
+            return FakeResponse(model_payload)
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    data = api_client.fetch_monitoring_data("http://api.test/", get=fake_get)
+
+    assert data.errors == []
+    assert data.status == monitoring_payload
+    assert data.model_metadata == model_payload
+    assert calls == [
+        ("http://api.test/monitoring/status", {"timeout": 10.0}),
+        ("http://api.test/model/metadata", {"timeout": 10.0}),
+    ]
+
+
+def test_fetch_monitoring_data_reports_errors_without_mocking_payloads() -> None:
+    def fake_get(_url: str, **_kwargs: Any) -> FakeResponse:
+        raise RuntimeError("API unavailable")
+
+    data = api_client.fetch_monitoring_data("http://api.test", get=fake_get)
+
+    assert data.status is None
+    assert data.model_metadata is None
+    assert data.errors == [
+        "Could not load monitoring status: API unavailable",
+        "Could not load model metadata: API unavailable",
+    ]

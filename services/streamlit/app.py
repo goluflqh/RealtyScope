@@ -3,7 +3,11 @@ import os
 import pandas as pd
 
 import streamlit as st
-from services.streamlit.api_client import fetch_dashboard_data, request_prediction
+from services.streamlit.api_client import (
+    fetch_dashboard_data,
+    fetch_monitoring_data,
+    request_prediction,
+)
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 BASELINE_FEATURE_DEFAULTS = {
@@ -15,8 +19,6 @@ BASELINE_FEATURE_DEFAULTS = {
     "floors_total": 20.0,
     "floors_total_missing": 0.0,
     "healthcare_count_1000m": 0.0,
-    "latest_observation_price_per_m2": 300_000.0,
-    "latest_observation_price_rub": 18_000_000.0,
     "latitude": 55.75,
     "longitude": 37.61,
     "nearest_transport_m": 0.0,
@@ -37,10 +39,11 @@ BASELINE_FEATURE_DEFAULTS = {
 st.set_page_config(page_title="RealtyScope", page_icon="RS", layout="wide")
 
 st.title("RealtyScope")
-st.caption("Phase 3.5 real-data dashboard")
+st.caption("Phase 5 monitoring and non-leaky baseline dashboard")
 
 row_limit = st.sidebar.selectbox("Rows", [25, 100, 500, 1000], index=3)
 data = fetch_dashboard_data(API_BASE_URL, limit=row_limit)
+monitoring = fetch_monitoring_data(API_BASE_URL)
 
 if data.errors:
     st.warning("Data API is unavailable.")
@@ -60,6 +63,23 @@ latest_run = stats.get("latest_ingestion_run")
 if isinstance(latest_run, dict):
     st.subheader("Latest ingestion run")
     st.dataframe(pd.DataFrame([latest_run]), hide_index=True, width="stretch")
+
+st.subheader("Monitoring")
+if monitoring.errors:
+    st.warning("Monitoring API is unavailable.")
+    for error in monitoring.errors:
+        st.caption(error)
+monitoring_status = monitoring.status or {}
+status_columns = st.columns(3)
+with status_columns[0]:
+    st.metric("API status", monitoring_status.get("status", "unknown"))
+with status_columns[1]:
+    st.metric("Environment", monitoring_status.get("environment", "unknown"))
+with status_columns[2]:
+    recent_errors = monitoring_status.get("recent_errors")
+    st.metric("Recent errors", len(recent_errors) if isinstance(recent_errors, list) else 0)
+if isinstance(recent_errors, list) and recent_errors:
+    st.dataframe(pd.DataFrame(recent_errors), hide_index=True, width="stretch")
 
 st.subheader("Listing preview")
 if data.listings:
@@ -81,15 +101,13 @@ with st.form("baseline-prediction-form"):
         building_year = st.number_input(
             "building_year", min_value=1800.0, max_value=2035.0, value=2018.0, step=1.0
         )
-        latest_observation_price_rub = st.number_input(
-            "latest_observation_price_rub", min_value=0.0, value=18_000_000.0, step=500_000.0
-        )
+        observation_count = st.number_input("observation_count", min_value=0.0, value=1.0, step=1.0)
     with input_columns[2]:
-        latest_observation_price_per_m2 = st.number_input(
-            "latest_observation_price_per_m2", min_value=0.0, value=300_000.0, step=10_000.0
-        )
         latitude = st.number_input("latitude", value=55.75, step=0.01, format="%.6f")
         longitude = st.number_input("longitude", value=37.61, step=0.01, format="%.6f")
+        nearest_transport_m = st.number_input(
+            "nearest_transport_m", min_value=0.0, value=0.0, step=50.0
+        )
     submitted = st.form_submit_button("Run baseline prediction")
 
 if submitted:
@@ -99,10 +117,11 @@ if submitted:
             "building_year": building_year,
             "floor": floor,
             "floors_total": floors_total,
-            "latest_observation_price_per_m2": latest_observation_price_per_m2,
-            "latest_observation_price_rub": latest_observation_price_rub,
             "latitude": latitude,
             "longitude": longitude,
+            "nearest_transport_m": nearest_transport_m,
+            "nearest_transport_m_missing": 0.0 if nearest_transport_m else 1.0,
+            "observation_count": observation_count,
             "rooms": rooms,
             "total_area_m2": total_area_m2,
         }
@@ -127,3 +146,19 @@ if submitted:
         metrics_summary = result.get("metrics_summary")
         if isinstance(metrics_summary, dict):
             st.dataframe(pd.DataFrame([metrics_summary]), hide_index=True, width="stretch")
+
+st.subheader("Model insights")
+model_metadata = monitoring.model_metadata or monitoring_status.get("model")
+if isinstance(model_metadata, dict):
+    st.caption(
+        f"model_version: {model_metadata.get('model_version')} | "
+        f"feature_version: {model_metadata.get('feature_version')}"
+    )
+    metrics_summary = model_metadata.get("metrics_summary")
+    if isinstance(metrics_summary, dict) and metrics_summary:
+        st.dataframe(pd.DataFrame([metrics_summary]), hide_index=True, width="stretch")
+    feature_importance = model_metadata.get("feature_importance")
+    if isinstance(feature_importance, list) and feature_importance:
+        st.dataframe(pd.DataFrame(feature_importance), hide_index=True, width="stretch")
+else:
+    st.info("Model metadata is not available yet.")

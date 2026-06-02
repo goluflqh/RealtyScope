@@ -27,3 +27,14 @@ def test_streamlit_app_declares_baseline_prediction_scaffold() -> None:
     assert "Run baseline prediction" in content
     assert "model_version" in content
     assert "caveat" in content
+
+
+def test_streamlit_app_declares_monitoring_and_model_insights() -> None:
+    content = STREAMLIT_APP.read_text(encoding="utf-8")
+
+    assert "fetch_monitoring_data" in content
+    assert "Monitoring" in content
+    assert "Model insights" in content
+    assert "feature_importance" in content
+    assert "latest_observation_price_rub" not in content
+    assert "latest_observation_price_per_m2" not in content

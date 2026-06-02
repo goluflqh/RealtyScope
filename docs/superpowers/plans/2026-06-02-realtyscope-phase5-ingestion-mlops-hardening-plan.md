@@ -79,10 +79,10 @@
 - Modify `services/streamlit/*`
 - Modify API/Streamlit tests
 
-- [ ] Move model/resource loading toward app state or lifespan where practical.
-- [ ] Add model health/metadata and ingestion monitoring payloads with tests.
-- [ ] Add reviewer-facing Streamlit monitoring/model insight behavior backed by API client tests.
-- [ ] Verify with focused tests and browser/runtime checks when services run locally.
+- [x] Move model/resource loading toward app state or lifespan where practical.
+- [x] Add model health/metadata and ingestion monitoring payloads with tests.
+- [x] Add reviewer-facing Streamlit monitoring/model insight behavior backed by API client tests.
+- [x] Verify with focused tests and browser/runtime checks when services run locally.
 - [ ] Commit and push the slice.
 
 ## Final Phase 5 Verification

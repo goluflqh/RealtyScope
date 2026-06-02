@@ -1,16 +1,19 @@
 from collections.abc import Iterator
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any
 
 import joblib
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from realtyscope.config import get_settings
 from realtyscope.database.models import (
+    AppLog,
     IngestionRun,
     Listing,
     RawListingRecord,
@@ -20,14 +23,8 @@ from realtyscope.database.models import (
 from realtyscope.database.session import create_database_engine, create_session_factory
 from services.api.app.schemas import PredictionRequest, PredictionResponse
 
-app = FastAPI(
-    title="RealtyScope API",
-    version="0.1.0",
-    description="API skeleton for the RealtyScope grade-5 real estate data service.",
-)
-
 BASELINE_PREDICTION_CAVEAT = (
-    "Phase 4 baseline contract result; not a final independent appraisal model."
+    "Phase 5 non-leaky baseline contract result; not a final independent appraisal model."
 )
 
 
@@ -47,6 +44,30 @@ class ArtifactPredictionModel:
         self.model = model
         self.model_version = model_version
 
+    @property
+    def feature_importance(self) -> list[dict[str, float | str]]:
+        named_steps = getattr(self.model, "named_steps", {})
+        regressor = named_steps.get("regressor") if isinstance(named_steps, dict) else None
+        coefficients = getattr(regressor, "coef_", None)
+        if coefficients is None:
+            return []
+        return sorted(
+            [
+                {
+                    "feature": feature_name,
+                    "coefficient": coefficient,
+                    "importance": abs(coefficient),
+                }
+                for feature_name, coefficient in zip(
+                    self.feature_names,
+                    [float(value) for value in coefficients],
+                    strict=True,
+                )
+            ],
+            key=lambda item: item["importance"],
+            reverse=True,
+        )
+
     @classmethod
     def from_artifact(cls, artifact_path: Path) -> "ArtifactPredictionModel":
         if not artifact_path.exists():
@@ -65,24 +86,69 @@ class ArtifactPredictionModel:
         return float(self.model.predict(row)[0])
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> Iterator[None]:
+    app.state.session_factory = create_session_factory(create_database_engine())
+    settings = get_settings()
+    try:
+        app.state.prediction_model = ArtifactPredictionModel.from_artifact(
+            Path(settings.active_model_artifact_path)
+        )
+        app.state.prediction_model_error = None
+    except (FileNotFoundError, KeyError, TypeError, ValueError) as exc:
+        app.state.prediction_model = None
+        app.state.prediction_model_error = str(exc)
+    yield
+
+
+app = FastAPI(
+    title="RealtyScope API",
+    version="0.1.0",
+    description="API skeleton for the RealtyScope grade-5 real estate data service.",
+    lifespan=lifespan,
+)
+
+
 @lru_cache
 def get_session_factory() -> sessionmaker[Session]:
     engine = create_database_engine()
     return create_session_factory(engine)
 
 
-def get_database_session() -> Iterator[Session]:
-    with get_session_factory()() as session:
+def get_database_session(request: Request) -> Iterator[Session]:
+    session_factory = getattr(request.app.state, "session_factory", None)
+    if session_factory is None:
+        session_factory = get_session_factory()
+    with session_factory() as session:
         yield session
 
 
 @lru_cache
-def get_prediction_model() -> ArtifactPredictionModel:
+def _cached_prediction_model() -> ArtifactPredictionModel:
     settings = get_settings()
     try:
         return ArtifactPredictionModel.from_artifact(Path(settings.active_model_artifact_path))
     except (FileNotFoundError, KeyError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=503, detail=f"Prediction model unavailable: {exc}") from exc
+
+
+def get_prediction_model(request: Request) -> ArtifactPredictionModel:
+    state_model = getattr(request.app.state, "prediction_model", None)
+    if state_model is not None:
+        return state_model
+
+    state_error = getattr(request.app.state, "prediction_model_error", None)
+    if state_error:
+        raise HTTPException(status_code=503, detail=f"Prediction model unavailable: {state_error}")
+
+    return _cached_prediction_model()
+
+
+def get_optional_prediction_model(request: Request) -> ArtifactPredictionModel | None:
+    try:
+        return get_prediction_model(request)
+    except HTTPException:
+        return None
 
 
 @app.get("/health")
@@ -118,6 +184,40 @@ def list_listings(
 def data_quality_stats(
     session: Annotated[Session, Depends(get_database_session)],
 ) -> dict[str, Any]:
+    return _data_quality_stats_payload(session)
+
+
+@app.get("/model/metadata")
+def model_metadata(
+    prediction_model: Annotated[
+        ArtifactPredictionModel | None,
+        Depends(get_optional_prediction_model),
+    ],
+) -> dict[str, Any]:
+    return _model_metadata_payload(prediction_model)
+
+
+@app.get("/monitoring/status")
+def monitoring_status(
+    session: Annotated[Session, Depends(get_database_session)],
+    prediction_model: Annotated[
+        ArtifactPredictionModel | None,
+        Depends(get_optional_prediction_model),
+    ],
+) -> dict[str, Any]:
+    settings = get_settings()
+    return {
+        "service": "realtyscope-api",
+        "status": "ok",
+        "project": settings.project_name,
+        "environment": settings.app_env,
+        "data_quality": _data_quality_stats_payload(session),
+        "model": _model_metadata_payload(prediction_model),
+        "recent_errors": _recent_error_payloads(session),
+    }
+
+
+def _data_quality_stats_payload(session: Session) -> dict[str, Any]:
     latest_run = session.execute(
         select(IngestionRun, Source.name)
         .join(Source, IngestionRun.source_id == Source.id)
@@ -217,8 +317,74 @@ def _latest_run_payload(row: tuple[IngestionRun, str] | None) -> dict[str, Any] 
         "id": run.id,
         "source_name": source_name,
         "status": run.status,
+        "started_at": _datetime_payload(run.started_at),
+        "finished_at": _datetime_payload(run.finished_at),
         "records_seen": run.records_seen,
         "raw_count": run.raw_count,
         "normalized_count": run.normalized_count,
         "rejected_count": run.rejected_count,
+        "inserted_count": run.inserted_count,
+        "updated_count": run.updated_count,
+        "error_summary": run.error_summary,
     }
+
+
+def _model_metadata_payload(model: ArtifactPredictionModel | None) -> dict[str, Any]:
+    settings = get_settings()
+    if model is None:
+        return {
+            "status": "unavailable",
+            "active_model_name": settings.active_model_name,
+            "artifact_path": settings.active_model_artifact_path,
+            "model_version": None,
+            "feature_version": None,
+            "feature_names": [],
+            "feature_count": 0,
+            "metrics_summary": {},
+            "feature_importance": [],
+            "error": "Prediction model unavailable",
+        }
+
+    feature_importance = getattr(model, "feature_importance", [])
+    return {
+        "status": "ready",
+        "active_model_name": settings.active_model_name,
+        "artifact_path": settings.active_model_artifact_path,
+        "model_version": model.model_version,
+        "feature_version": model.feature_version,
+        "feature_names": list(model.feature_names),
+        "feature_count": len(model.feature_names),
+        "metrics_summary": model.metrics,
+        "feature_importance": [dict(item) for item in feature_importance],
+        "error": None,
+    }
+
+
+def _recent_error_payloads(session: Session, *, limit: int = 10) -> list[dict[str, Any]]:
+    rows = session.scalars(
+        select(AppLog)
+        .where(AppLog.level.in_(["ERROR", "WARNING"]))
+        .order_by(AppLog.created_at.desc(), AppLog.id.desc())
+        .limit(limit)
+    ).all()
+    return [
+        {
+            "id": row.id,
+            "level": row.level,
+            "event_type": row.event_type,
+            "message": row.message,
+            "created_at": _datetime_payload(row.created_at),
+            "source_id": row.source_id,
+            "ingestion_run_id": row.ingestion_run_id,
+            "context": row.context,
+        }
+        for row in rows
+    ]
+
+
+def _datetime_payload(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.isoformat()

@@ -43,6 +43,19 @@ RealtyScope — учебный data-service проект уровня grade 5 д
 
 Следующие phase должны убрать target-leakage из feature set, накопить повторные daily observations для trend/actual-vs-predicted анализа, добавить feature importance/SHAP, production model serving, реальное использование Redis cache и полноценные многостраничные dashboard views.
 
+## Phase 5 updates
+
+Phase 5 adds the current hardening layer on top of the Phase 4 baseline:
+
+- scheduled ingestion now stores deliberate daily observation evidence even when raw payloads are reused;
+- bounded live OSM enrichment has written real `osm_features` rows for local evidence;
+- `ml_features_v2_non_leaky` removes latest-price leakage and trains `baseline_ridge_v2_non_leaky` with grouped validation by `listing_id`;
+- FastAPI exposes `/model/metadata` and `/monitoring/status` in addition to `/predict`, `/listings`, and `/stats/data-quality`;
+- Streamlit now has overview, prediction, monitoring, and model-insight sections backed by the API client;
+- default `ACTIVE_MODEL_ARTIFACT_PATH` points to `data/processed/models/phase5/baseline_ridge_v2_non_leaky.joblib`.
+
+Generated model artifacts and runtime logs remain under ignored `data/processed/`. See `docs/ml/phase5-non-leaky-model.md` for metrics and MLflow caveats.
+
 ## Локальная установка
 
 Проект использует явное разделение сред:

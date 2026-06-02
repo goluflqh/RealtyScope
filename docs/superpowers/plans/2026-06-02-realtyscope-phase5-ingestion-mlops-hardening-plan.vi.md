@@ -63,10 +63,10 @@
 
 ## Slice 4: API, Streamlit, monitoring hardening
 
-- [ ] Harden model/resource loading qua app state/lifespan khi practical.
-- [ ] Thêm model health/metadata và monitoring payloads có tests.
-- [ ] Thêm Streamlit monitoring/model insight behavior qua API client tests.
-- [ ] Verify focused tests và browser/runtime checks khi service local chạy được.
+- [x] Harden model/resource loading qua app state/lifespan khi practical.
+- [x] Thêm model health/metadata và monitoring payloads có tests.
+- [x] Thêm Streamlit monitoring/model insight behavior qua API client tests.
+- [x] Verify focused tests và browser/runtime checks khi service local chạy được.
 - [ ] Commit và push slice.
 
 ## Verify cuối Phase 5

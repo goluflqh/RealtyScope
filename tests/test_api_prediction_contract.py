@@ -32,7 +32,9 @@ def test_predict_endpoint_returns_contract_with_fake_model_dependency() -> None:
         "metrics_summary": {"mae": 123.4, "naive_mae": 567.8},
         "input_features_echo": {"rooms": 2.0, "total_area_m2": 60.5},
         "feature_names": ["rooms", "total_area_m2"],
-        "caveat": "Phase 4 baseline contract result; not a final independent appraisal model.",
+        "caveat": (
+            "Phase 5 non-leaky baseline contract result; not a final independent appraisal model."
+        ),
     }
 
 

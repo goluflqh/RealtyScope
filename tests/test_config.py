@@ -9,6 +9,10 @@ def test_settings_have_safe_defaults() -> None:
     assert settings.postgres_host == "localhost"
     assert settings.redis_host == "localhost"
     assert settings.mlflow_tracking_uri == "http://localhost:5000"
+    assert (
+        settings.active_model_artifact_path
+        == "data/processed/models/phase5/baseline_ridge_v2_non_leaky.joblib"
+    )
 
 
 def test_database_url_uses_localhost_by_default() -> None:
