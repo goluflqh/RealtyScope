@@ -68,6 +68,8 @@ OSM enrichment is wired into the feature contract but live `osm_features` rows a
 
 Phase 5 update: a bounded live Overpass slice has since written 4 `osm_features` rows to the local PostgreSQL database, and `realtyscope.ml.features --limit 5 --json` reports `osm_rows_present=4`. The Phase 4 training metrics above still describe the original baseline artifact and should not be read as retrained with OSM coverage.
 
+Phase 5 also adds `ml_features_v2_non_leaky` and `baseline_ridge_v2_non_leaky`; see [Phase 5 Non-Leaky Model](phase5-non-leaky-model.md). The v2 snapshot removes latest-price feature leakage and uses grouped validation by `listing_id`, so its metrics are lower but more honest than the v1 evidence artifact.
+
 ## Next Step
 
-Phase 4.5 should expose a minimal prediction contract against this artifact shape. The UI/API should label predictions as a baseline contract result and keep the caveat visible until a leakage-controlled feature set and richer observation history are available.
+Future prediction-serving work should prefer the Phase 5 v2 artifact shape and keep the caveat visible until richer observation history supports forecast-vs-actual evaluation.

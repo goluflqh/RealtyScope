@@ -45,20 +45,20 @@
 - [x] Giữ idempotency khi reprocess cùng run/cùng timestamp.
 - [x] Update Alembic expectation và docs vận hành.
 - [x] Verify bằng `pytest tests/test_database_persistence.py tests/test_domclick_scheduled_batch.py tests/test_alembic_config.py -q`.
-- [ ] Commit và push slice.
+- [x] Commit và push slice.
 
 ## Slice 2: OSM rows thật
 
 - [x] Viết fixture/local persistence tests trước.
 - [x] Populate DB rows từ coordinates persisted bằng execution bounded/cached, không nằm trong unit tests.
 - [x] Ghi counts và OpenStreetMap attribution.
-- [ ] Commit và push slice.
+- [x] Commit và push slice.
 
 ## Slice 3: ML không leakage và MLflow evidence
 
-- [ ] RED tests cho `ml_features_v2_non_leaky`, loại target-like/latest price fields khỏi features.
-- [ ] Train/evaluate với naive baseline và validation không leak duplicate observations qua train/test.
-- [ ] Log params, metrics, artifact metadata vào MLflow khi được cấu hình.
+- [x] RED tests cho `ml_features_v2_non_leaky`, loại target-like/latest price fields khỏi features.
+- [x] Train/evaluate với naive baseline và validation không leak duplicate observations qua train/test.
+- [x] Log params, metrics, artifact metadata vào MLflow khi được cấu hình.
 - [ ] Commit và push slice.
 
 ## Slice 4: API, Streamlit, monitoring hardening

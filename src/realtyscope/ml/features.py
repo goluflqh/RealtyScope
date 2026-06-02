@@ -16,6 +16,8 @@ from realtyscope.database.models import Listing, ListingObservation, OsmFeature
 from realtyscope.database.session import create_database_engine
 
 FEATURE_VERSION = "ml_features_v1"
+NON_LEAKY_FEATURE_VERSION = "ml_features_v2_non_leaky"
+FEATURE_VERSIONS = (FEATURE_VERSION, NON_LEAKY_FEATURE_VERSION)
 OSM_FEATURE_VERSION = "osm_local_v1"
 
 
@@ -28,7 +30,13 @@ class FeatureRow(BaseModel):
     features: dict[str, float]
 
 
-def build_feature_rows(session: Session, *, limit: int | None = None) -> list[FeatureRow]:
+def build_feature_rows(
+    session: Session,
+    *,
+    limit: int | None = None,
+    feature_version: str = FEATURE_VERSION,
+) -> list[FeatureRow]:
+    _validate_feature_version(feature_version)
     listings_query = (
         select(Listing)
         .where(Listing.is_ml_ready.is_(True), Listing.price_rub > 0, Listing.total_area_m2 > 0)
@@ -44,13 +52,14 @@ def build_feature_rows(session: Session, *, limit: int | None = None) -> list[Fe
     return [
         FeatureRow(
             listing_id=listing.id,
-            feature_version=FEATURE_VERSION,
+            feature_version=feature_version,
             target_price_rub=listing.price_rub,
             features=_features_for_listing(
                 listing=listing,
                 latest_observation=latest_observations.get(listing.id),
                 observation_count=observation_counts.get(listing.id, 0),
                 osm_feature=osm_features.get(listing.id),
+                feature_version=feature_version,
             ),
         )
         for listing in listings
@@ -58,17 +67,20 @@ def build_feature_rows(session: Session, *, limit: int | None = None) -> list[Fe
 
 
 def build_feature_summary(
-    database_url: str | None = None, *, limit: int | None = None
+    database_url: str | None = None,
+    *,
+    limit: int | None = None,
+    feature_version: str = FEATURE_VERSION,
 ) -> dict[str, Any]:
     engine = create_database_engine(database_url)
     with Session(engine) as session:
-        rows = build_feature_rows(session, limit=limit)
+        rows = build_feature_rows(session, limit=limit, feature_version=feature_version)
 
     targets = [row.target_price_rub for row in rows]
     feature_count = len(rows[0].features) if rows else 0
     osm_rows_present = sum(1 for row in rows if row.features["osm_missing"] == 0.0)
     return {
-        "feature_version": FEATURE_VERSION,
+        "feature_version": feature_version,
         "rows_total": len(rows),
         "feature_count": feature_count,
         "osm_rows_present": osm_rows_present,
@@ -83,13 +95,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build RealtyScope ML feature row summary.")
     parser.add_argument("--database-url", default=None, help="Override database URL.")
     parser.add_argument("--limit", type=int, default=None, help="Optional row limit.")
+    parser.add_argument(
+        "--feature-version",
+        choices=FEATURE_VERSIONS,
+        default=FEATURE_VERSION,
+        help="Feature snapshot version to build.",
+    )
     parser.add_argument("--json", action="store_true", help="Print JSON output.")
     args = parser.parse_args(argv)
 
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be at least 1")
 
-    summary = build_feature_summary(args.database_url, limit=args.limit)
+    summary = build_feature_summary(
+        args.database_url,
+        limit=args.limit,
+        feature_version=args.feature_version,
+    )
     if args.json:
         print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
     else:
@@ -106,7 +128,9 @@ def _features_for_listing(
     latest_observation: ListingObservation | None,
     observation_count: int,
     osm_feature: OsmFeature | None,
+    feature_version: str,
 ) -> dict[str, float]:
+    _validate_feature_version(feature_version)
     floor = _optional_float(listing.floor)
     floors_total = _optional_float(listing.floors_total)
     building_year = _optional_float(listing.building_year)
@@ -127,11 +151,27 @@ def _features_for_listing(
         "property_type_apartment": 1.0 if listing.property_type == "apartment" else 0.0,
         "observation_count": float(observation_count),
         "observation_missing": 0.0 if latest_observation is not None else 1.0,
-        "latest_observation_price_rub": _observation_value(latest_observation, "price_rub"),
-        "latest_observation_price_per_m2": _observation_value(latest_observation, "price_per_m2"),
     }
+    if feature_version == FEATURE_VERSION:
+        features.update(
+            {
+                "latest_observation_price_rub": _observation_value(latest_observation, "price_rub"),
+                "latest_observation_price_per_m2": _observation_value(
+                    latest_observation,
+                    "price_per_m2",
+                ),
+            }
+        )
     features.update(_osm_feature_values(osm_feature))
     return features
+
+
+def _validate_feature_version(feature_version: str) -> None:
+    if feature_version not in FEATURE_VERSIONS:
+        supported = ", ".join(FEATURE_VERSIONS)
+        raise ValueError(
+            f"unsupported feature version {feature_version!r}; expected one of {supported}"
+        )
 
 
 def _latest_observations(

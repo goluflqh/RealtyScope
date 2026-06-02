@@ -68,6 +68,8 @@ OSM enrichment da co trong feature contract, nhung bang live `osm_features` hien
 
 Cap nhat Phase 5: mot live Overpass slice co gioi han da ghi 4 rows `osm_features` vao local PostgreSQL database, va `realtyscope.ml.features --limit 5 --json` bao `osm_rows_present=4`. Metrics training Phase 4 o tren van mo ta baseline artifact ban dau, chua phai ket qua retrain voi OSM coverage.
 
+Phase 5 cung them `ml_features_v2_non_leaky` va `baseline_ridge_v2_non_leaky`; xem [Mo hinh khong leakage Phase 5](phase5-non-leaky-model.vi.md). Snapshot v2 loai leakage tu latest-price features va dung grouped validation theo `listing_id`, nen metric thap hon nhung trung thuc hon evidence artifact v1.
+
 ## Buoc tiep theo
 
-Phase 4.5 nen expose prediction contract toi thieu dua tren shape artifact nay. API/UI can gan nhan ket qua la baseline contract result va giu caveat hien ro cho den khi co feature set khong leakage va observation history phong phu hon.
+Prediction serving sau nay nen uu tien shape artifact v2 cua Phase 5 va van giu caveat cho den khi co observation history phong phu de danh gia forecast vs actual.

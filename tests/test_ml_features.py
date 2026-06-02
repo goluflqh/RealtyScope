@@ -17,6 +17,8 @@ from realtyscope.database.models import (
 )
 from realtyscope.ml.features import FEATURE_VERSION, build_feature_rows, main
 
+NON_LEAKY_FEATURE_VERSION = "ml_features_v2_non_leaky"
+
 
 def test_build_feature_rows_joins_latest_listing_observation_and_osm(tmp_path: Path) -> None:
     database_url = _seed_feature_database(tmp_path, include_osm=True)
@@ -58,6 +60,24 @@ def test_build_feature_rows_sets_missing_flags_without_osm(tmp_path: Path) -> No
     assert row.features["schools_count_1000m"] == 0.0
 
 
+def test_non_leaky_feature_version_excludes_latest_price_fields(tmp_path: Path) -> None:
+    database_url = _seed_feature_database(tmp_path, include_osm=True)
+    engine = create_engine(database_url)
+
+    with Session(engine) as session:
+        rows = build_feature_rows(session, feature_version=NON_LEAKY_FEATURE_VERSION)
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.feature_version == NON_LEAKY_FEATURE_VERSION
+    assert row.target_price_rub == 12_500_000
+    assert row.features["observation_count"] == 2.0
+    assert row.features["osm_missing"] == 0.0
+    assert "latest_observation_price_rub" not in row.features
+    assert "latest_observation_price_per_m2" not in row.features
+    assert not any("price" in feature_name for feature_name in row.features)
+
+
 def test_feature_rows_are_deterministic_by_listing_id(tmp_path: Path) -> None:
     database_url = _seed_feature_database(tmp_path, include_osm=True)
     engine = create_engine(database_url)
@@ -79,6 +99,31 @@ def test_ml_feature_cli_exports_summary_json(tmp_path: Path, capsys) -> None:
     assert payload["rows_total"] == 1
     assert payload["feature_count"] >= 10
     assert payload["target_price_rub"]["min"] == 12_500_000
+    assert payload["osm_rows_present"] == 1
+
+
+def test_ml_feature_cli_exports_non_leaky_summary_json(tmp_path: Path, capsys) -> None:
+    database_url = _seed_feature_database(tmp_path, include_osm=True)
+
+    assert (
+        main(
+            [
+                "--database-url",
+                database_url,
+                "--limit",
+                "10",
+                "--feature-version",
+                NON_LEAKY_FEATURE_VERSION,
+                "--json",
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["feature_version"] == NON_LEAKY_FEATURE_VERSION
+    assert payload["rows_total"] == 1
+    assert payload["feature_count"] >= 10
     assert payload["osm_rows_present"] == 1
 
 

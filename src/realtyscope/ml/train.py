@@ -19,9 +19,16 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from realtyscope.database.session import create_database_engine
-from realtyscope.ml.features import FEATURE_VERSION, FeatureRow, build_feature_rows
+from realtyscope.ml.features import (
+    FEATURE_VERSION,
+    FEATURE_VERSIONS,
+    NON_LEAKY_FEATURE_VERSION,
+    FeatureRow,
+    build_feature_rows,
+)
 
 MODEL_VERSION = "baseline_ridge_v1"
+NON_LEAKY_MODEL_VERSION = "baseline_ridge_v2_non_leaky"
 DEFAULT_OUTPUT_DIR = Path("data/processed/models/phase4")
 RANDOM_STATE = 42
 
@@ -34,29 +41,29 @@ class TrainingResult(BaseModel):
     model_version: str
     metrics: dict[str, float | int]
     mlflow_run_id: str | None = None
+    split: dict[str, Any]
 
 
 def train_baseline_model(
     *,
     feature_rows: Sequence[FeatureRow],
     output_dir: Path,
-    model_version: str = MODEL_VERSION,
+    model_version: str | None = None,
     mlflow_tracking_uri: str | None = None,
 ) -> TrainingResult:
     if len(feature_rows) < 4:
         raise ValueError("at least 4 feature rows are required for baseline training")
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    feature_version = _single_feature_version(feature_rows)
+    if model_version is None:
+        model_version = _default_model_version(feature_version)
     feature_names = sorted(feature_rows[0].features)
-    x = [[row.features[name] for name in feature_names] for row in feature_rows]
-    y = [row.target_price_rub for row in feature_rows]
-
-    x_train, x_test, y_train, y_test = train_test_split(
-        x,
-        y,
-        test_size=_test_size(len(feature_rows)),
-        random_state=RANDOM_STATE,
-    )
+    train_rows, test_rows, split = _split_feature_rows(feature_rows)
+    x_train = [[row.features[name] for name in feature_names] for row in train_rows]
+    x_test = [[row.features[name] for name in feature_names] for row in test_rows]
+    y_train = [row.target_price_rub for row in train_rows]
+    y_test = [row.target_price_rub for row in test_rows]
     model = Pipeline(
         [
             ("scaler", StandardScaler()),
@@ -76,28 +83,33 @@ def train_baseline_model(
         train_rows=len(y_train),
         test_rows=len(y_test),
         feature_count=len(feature_names),
+        train_listing_groups=len(split["train_listing_ids"]),
+        test_listing_groups=len(split["test_listing_ids"]),
     )
     artifact_path = output_dir / f"{model_version}.joblib"
     artifact = {
         "feature_names": feature_names,
-        "feature_version": FEATURE_VERSION,
+        "feature_version": feature_version,
         "metrics": metrics,
         "model": model,
         "model_version": model_version,
+        "split": split,
     }
     joblib.dump(artifact, artifact_path)
     mlflow_run_id = _log_mlflow_if_enabled(
         artifact_path=artifact_path,
+        feature_version=feature_version,
         metrics=metrics,
         model_version=model_version,
         tracking_uri=mlflow_tracking_uri,
     )
     return TrainingResult(
         artifact_path=artifact_path,
-        feature_version=FEATURE_VERSION,
+        feature_version=feature_version,
         model_version=model_version,
         metrics=metrics,
         mlflow_run_id=mlflow_run_id,
+        split=split,
     )
 
 
@@ -106,16 +118,23 @@ def train_from_database(
     database_url: str | None = None,
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     limit: int | None = None,
+    feature_version: str = FEATURE_VERSION,
+    model_version: str | None = None,
     mlflow_tracking_uri: str | None = None,
 ) -> TrainingResult:
     engine = create_database_engine(database_url)
     from sqlalchemy.orm import Session
 
     with Session(engine) as session:
-        feature_rows = build_feature_rows(session, limit=limit)
+        feature_rows = build_feature_rows(
+            session,
+            limit=limit,
+            feature_version=feature_version,
+        )
     return train_baseline_model(
         feature_rows=feature_rows,
         output_dir=output_dir,
+        model_version=model_version,
         mlflow_tracking_uri=mlflow_tracking_uri,
     )
 
@@ -128,6 +147,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--database-url", default=None, help="Override database URL.")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--limit", type=int, default=None, help="Optional feature row limit.")
+    parser.add_argument(
+        "--feature-version",
+        choices=FEATURE_VERSIONS,
+        default=FEATURE_VERSION,
+        help="Feature snapshot version to train on.",
+    )
+    parser.add_argument(
+        "--model-version",
+        default=None,
+        help="Optional model version override. Defaults from the feature version.",
+    )
     parser.add_argument(
         "--mlflow-tracking-uri",
         default=os.environ.get("MLFLOW_TRACKING_URI"),
@@ -143,6 +173,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         database_url=args.database_url,
         output_dir=args.output_dir,
         limit=args.limit,
+        feature_version=args.feature_version,
+        model_version=args.model_version,
         mlflow_tracking_uri=args.mlflow_tracking_uri,
     )
     payload = _result_payload(result)
@@ -165,6 +197,8 @@ def _metrics(
     train_rows: int,
     test_rows: int,
     feature_count: int,
+    train_listing_groups: int,
+    test_listing_groups: int,
 ) -> dict[str, float | int]:
     mae = mean_absolute_error(y_true, y_pred)
     naive_mae = mean_absolute_error(y_true, naive_pred)
@@ -179,7 +213,9 @@ def _metrics(
         "r2": float(r2_score(y_true, y_pred)) if len(y_true) > 1 else 0.0,
         "rmse": float(rmse),
         "rows_total": rows_total,
+        "test_listing_groups": test_listing_groups,
         "test_rows": test_rows,
+        "train_listing_groups": train_listing_groups,
         "train_rows": train_rows,
     }
 
@@ -209,9 +245,49 @@ def _test_size(row_count: int) -> float:
     return 0.2
 
 
+def _single_feature_version(feature_rows: Sequence[FeatureRow]) -> str:
+    versions = {row.feature_version for row in feature_rows}
+    if len(versions) != 1:
+        ordered = ", ".join(sorted(versions))
+        raise ValueError(f"feature rows must use exactly one feature version; got {ordered}")
+    return next(iter(versions))
+
+
+def _default_model_version(feature_version: str) -> str:
+    if feature_version == NON_LEAKY_FEATURE_VERSION:
+        return NON_LEAKY_MODEL_VERSION
+    return MODEL_VERSION
+
+
+def _split_feature_rows(
+    feature_rows: Sequence[FeatureRow],
+) -> tuple[list[FeatureRow], list[FeatureRow], dict[str, Any]]:
+    listing_ids = sorted({row.listing_id for row in feature_rows})
+    if len(listing_ids) < 4:
+        raise ValueError("at least 4 unique listing ids are required for grouped validation")
+
+    train_listing_ids, test_listing_ids = train_test_split(
+        listing_ids,
+        test_size=_test_size(len(listing_ids)),
+        random_state=RANDOM_STATE,
+    )
+    train_listing_id_set = set(train_listing_ids)
+    test_listing_id_set = set(test_listing_ids)
+    train_rows = [row for row in feature_rows if row.listing_id in train_listing_id_set]
+    test_rows = [row for row in feature_rows if row.listing_id in test_listing_id_set]
+    split = {
+        "strategy": "listing_id_grouped_random",
+        "random_state": RANDOM_STATE,
+        "train_listing_ids": sorted(train_listing_id_set),
+        "test_listing_ids": sorted(test_listing_id_set),
+    }
+    return train_rows, test_rows, split
+
+
 def _log_mlflow_if_enabled(
     *,
     artifact_path: Path,
+    feature_version: str,
     metrics: dict[str, float | int],
     model_version: str,
     tracking_uri: str | None,
@@ -227,7 +303,7 @@ def _log_mlflow_if_enabled(
     with mlflow.start_run(run_name=model_version) as run:
         mlflow.log_params(
             {
-                "feature_version": FEATURE_VERSION,
+                "feature_version": feature_version,
                 "model_version": model_version,
             }
         )
@@ -243,6 +319,7 @@ def _result_payload(result: TrainingResult) -> dict[str, Any]:
         "metrics": result.metrics,
         "mlflow_run_id": result.mlflow_run_id,
         "model_version": result.model_version,
+        "split": result.split,
     }
 
 

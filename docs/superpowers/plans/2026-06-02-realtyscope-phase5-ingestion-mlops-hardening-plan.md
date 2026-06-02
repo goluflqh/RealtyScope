@@ -45,7 +45,7 @@
 - [x] Keep same-run/same-timestamp reprocessing idempotent.
 - [x] Update Alembic metadata expectations and operations docs.
 - [x] Verify with `pytest tests/test_database_persistence.py tests/test_domclick_scheduled_batch.py tests/test_alembic_config.py -q`.
-- [ ] Commit and push the slice.
+- [x] Commit and push the slice.
 
 ## Slice 2: Real OSM Rows
 
@@ -57,7 +57,7 @@
 - [x] Add fixture/local OSM row persistence tests first.
 - [x] Populate real DB rows from persisted coordinates using bounded, cached, non-test execution.
 - [x] Record row counts and OpenStreetMap attribution.
-- [ ] Commit and push the slice.
+- [x] Commit and push the slice.
 
 ## Slice 3: Non-Leaky ML Features And MLflow Evidence
 
@@ -67,9 +67,9 @@
 - Modify `tests/test_ml_features.py` and `tests/test_ml_training.py`
 - Update `docs/ml/phase4-baseline-model.*.md` or create Phase 5 ML docs
 
-- [ ] Add RED tests for `ml_features_v2_non_leaky` excluding target-like latest price fields from features.
-- [ ] Train/evaluate against a naive baseline with validation that does not leak duplicate observations across train/test.
-- [ ] Log params, metrics, and artifact metadata to MLflow when configured.
+- [x] Add RED tests for `ml_features_v2_non_leaky` excluding target-like latest price fields from features.
+- [x] Train/evaluate against a naive baseline with validation that does not leak duplicate observations across train/test.
+- [x] Log params, metrics, and artifact metadata to MLflow when configured.
 - [ ] Commit and push the slice.
 
 ## Slice 4: API, Streamlit, And Monitoring Hardening
