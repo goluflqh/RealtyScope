@@ -70,7 +70,7 @@
 - [x] Add RED tests for `ml_features_v2_non_leaky` excluding target-like latest price fields from features.
 - [x] Train/evaluate against a naive baseline with validation that does not leak duplicate observations across train/test.
 - [x] Log params, metrics, and artifact metadata to MLflow when configured.
-- [ ] Commit and push the slice.
+- [x] Commit and push the slice.
 
 ## Slice 4: API, Streamlit, And Monitoring Hardening
 
@@ -87,9 +87,9 @@
 
 ## Final Phase 5 Verification
 
-- [ ] `pytest`
-- [ ] `ruff check .`
-- [ ] `ruff format .`
-- [ ] `git diff --check`
-- [ ] Push final branch state.
+- [x] `pytest`
+- [x] `ruff check .`
+- [x] `ruff format .`
+- [x] `git diff --check`
+- [x] Push final branch state.
 - [ ] Save mem0 checkpoint with outcome, caveats, and next step.

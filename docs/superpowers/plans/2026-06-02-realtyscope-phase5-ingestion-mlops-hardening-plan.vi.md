@@ -59,7 +59,7 @@
 - [x] RED tests cho `ml_features_v2_non_leaky`, loại target-like/latest price fields khỏi features.
 - [x] Train/evaluate với naive baseline và validation không leak duplicate observations qua train/test.
 - [x] Log params, metrics, artifact metadata vào MLflow khi được cấu hình.
-- [ ] Commit và push slice.
+- [x] Commit và push slice.
 
 ## Slice 4: API, Streamlit, monitoring hardening
 
@@ -71,9 +71,9 @@
 
 ## Verify cuối Phase 5
 
-- [ ] `pytest`
-- [ ] `ruff check .`
-- [ ] `ruff format .`
-- [ ] `git diff --check`
-- [ ] Push trạng thái branch cuối.
+- [x] `pytest`
+- [x] `ruff check .`
+- [x] `ruff format .`
+- [x] `git diff --check`
+- [x] Push trạng thái branch cuối.
 - [ ] Lưu mem0 checkpoint với outcome, caveat, next step.
