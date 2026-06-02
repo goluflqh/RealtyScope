@@ -4,6 +4,8 @@ Ngày: 2026-05-31
 Trạng thái: tài liệu tham chiếu dùng chung cho Phase 3 trở đi.
 Mục tiêu: để bạn và các session/agent sau không phải nhắc lại việc đọc tài liệu môn học từ đầu.
 
+Khi làm việc hằng ngày, dùng [Playbook vận hành theo bài giảng cho RealtyScope](realtyscope-course-operating-playbook.vi.md) như checklist đứng cho mọi phase tiếp theo. Tài liệu đó chuyển yêu cầu môn học thành quy tắc cụ thể về branch, ingestion, database, EDA, ML, API, Streamlit, Docker, CI và evidence.
+
 ---
 
 ## 1. Đã đọc và tổng hợp từ đâu

@@ -183,7 +183,7 @@ Ví dụ arguments cho job commit từ thư mục snapshot đã capture sẵn:
 
 Nếu task capture từ URL file, truyền `-SkipCapture` và chuẩn bị `data/raw/domclick-urls.txt`; hướng này vẫn không được dùng `/search` khi `robots.txt` cấm fetch HTTP trực tiếp. Hướng scheduled mặc định chỉ capture SSR state của `/search` bằng CDP automation profile riêng, và sẽ dừng nếu Domclick trả QRATOR, CAPTCHA hoặc login wall.
 
-Task đã được cài trên máy dev hiện có tên `RealtyScope Domclick Scheduled Batch` và chạy hằng ngày lúc 15:00 theo giờ Moscow.
+Task đã được cài trên máy dev hiện có tên `RealtyScope Domclick Scheduled Batch` và chạy hằng ngày lúc 00:00 theo giờ Moscow.
 
 ## WSL Cron
 
@@ -194,7 +194,7 @@ Chrome/CDP capture không tự portable vào Docker vì nó cần desktop Chrome
 Ví dụ crontab:
 
 ```cron
-15 3 * * * cd /mnt/e/Магистр/2-курс/python/RealtyScope && export DATABASE_URL='postgresql+psycopg://realtyscope:realtyscope@localhost:5432/realtyscope' && uv run python -m alembic upgrade head && uv run python -m realtyscope.ingestion.domclick_scheduled_batch run --source-path data/raw/domclick/$(date +\%F) --database-url "$DATABASE_URL" --commit --max-records 2000 --min-records 1 --min-normalized-records 1000 --json >> data/processed/domclick_reports/cron.log 2>&1
+0 0 * * * cd /mnt/e/Магистр/2-курс/python/RealtyScope && export DATABASE_URL='postgresql+psycopg://realtyscope:realtyscope@localhost:5432/realtyscope' && uv run python -m alembic upgrade head && uv run python -m realtyscope.ingestion.domclick_scheduled_batch run --source-path data/raw/domclick/$(date +\%F) --database-url "$DATABASE_URL" --commit --max-records 2000 --min-records 1 --min-normalized-records 1000 --json >> data/processed/domclick_reports/cron.log 2>&1
 ```
 
 ## Systemd Timer
@@ -222,7 +222,7 @@ Timer mẫu:
 Description=Run RealtyScope Domclick batch daily
 
 [Timer]
-OnCalendar=*-*-* 03:15:00
+OnCalendar=*-*-* 00:00:00
 Persistent=true
 
 [Install]

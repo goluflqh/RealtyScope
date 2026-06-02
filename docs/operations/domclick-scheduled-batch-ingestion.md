@@ -179,7 +179,7 @@ Example arguments for a commit job using an existing Chrome-assisted day directo
 
 If the task performs URL-file capture, pass `-SkipCapture` and provide `data/raw/domclick-urls.txt`; that path must still avoid `/search` while robots.txt disallows direct HTTP fetching. The default scheduled path captures rendered `/search` SSR state only through a dedicated CDP automation profile and stops if Domclick presents QRATOR, CAPTCHA, or a login wall.
 
-The task currently installed on the development machine is named `RealtyScope Domclick Scheduled Batch` and runs daily at 15:00 Moscow time.
+The task currently installed on the development machine is named `RealtyScope Domclick Scheduled Batch` and runs daily at 00:00 Moscow time.
 
 ## WSL Cron
 
@@ -190,7 +190,7 @@ Chrome/CDP capture is not Docker-portable by default because it depends on a des
 Example crontab entry:
 
 ```cron
-15 3 * * * cd /mnt/e/Магистр/2-курс/python/RealtyScope && export DATABASE_URL='postgresql+psycopg://realtyscope:realtyscope@localhost:5432/realtyscope' && uv run python -m alembic upgrade head && uv run python -m realtyscope.ingestion.domclick_scheduled_batch run --source-path data/raw/domclick/$(date +\%F) --database-url "$DATABASE_URL" --commit --max-records 2000 --min-records 1 --min-normalized-records 1000 --json >> data/processed/domclick_reports/cron.log 2>&1
+0 0 * * * cd /mnt/e/Магистр/2-курс/python/RealtyScope && export DATABASE_URL='postgresql+psycopg://realtyscope:realtyscope@localhost:5432/realtyscope' && uv run python -m alembic upgrade head && uv run python -m realtyscope.ingestion.domclick_scheduled_batch run --source-path data/raw/domclick/$(date +\%F) --database-url "$DATABASE_URL" --commit --max-records 2000 --min-records 1 --min-normalized-records 1000 --json >> data/processed/domclick_reports/cron.log 2>&1
 ```
 
 ## Systemd Timer
@@ -218,7 +218,7 @@ Timer sketch:
 Description=Run RealtyScope Domclick batch daily
 
 [Timer]
-OnCalendar=*-*-* 03:15:00
+OnCalendar=*-*-* 00:00:00
 Persistent=true
 
 [Install]

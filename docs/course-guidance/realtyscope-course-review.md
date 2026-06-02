@@ -6,6 +6,8 @@ Audience: agentic implementation workers and future project sessions.
 
 This document consolidates the course project requirements, lecture notebook guidance, and official documentation checks that should guide RealtyScope after Phase 2. Keep this file as the durable bridge between the course materials and implementation plans.
 
+For day-to-day execution, use [RealtyScope Course Operating Playbook](realtyscope-course-operating-playbook.md) as the standing checklist for every future phase. It translates these course requirements into branch hygiene, ingestion, database, EDA, ML, API, Streamlit, Docker, CI, and evidence rules.
+
 ---
 
 ## 1. Sources Reviewed
