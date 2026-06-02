@@ -49,12 +49,64 @@ OpenStreetMap là enrichment source. Không dùng OSM làm listing source chính
 
 ## Thứ tự thực hiện khuyến nghị
 
-1. Phase 4.0: GitNexus/workflow preflight và audit dữ liệu hiện tại.
-2. Phase 4.1: EDA nâng cấp dựa trên `listings` và `listing_observations`.
-3. Phase 4.2: OpenStreetMap infrastructure enrichment foundation.
-4. Phase 4.3: ML feature snapshot generation.
-5. Phase 4.4: Naive baseline và scikit-learn baseline, có MLflow.
-6. Phase 4.5: Prediction API/UI contract.
+1. Phase 4.0a: harden runtime capture Domclick cho scheduled Chrome/CDP automation.
+2. Phase 4.0: GitNexus/workflow preflight và audit dữ liệu hiện tại.
+3. Phase 4.1: EDA nâng cấp dựa trên `listings` và `listing_observations`.
+4. Phase 4.2: OpenStreetMap infrastructure enrichment foundation.
+5. Phase 4.3: ML feature snapshot generation.
+6. Phase 4.4: Naive baseline và scikit-learn baseline, có MLflow.
+7. Phase 4.5: Prediction API/UI contract.
+
+## Task 0a: Capture Runtime Hardening
+
+**Files:**
+
+- Sửa: `src/realtyscope/ingestion/domclick_chrome_capture.py`
+- Sửa: `scripts/run_domclick_scheduled_batch.ps1`
+- Test: `tests/test_domclick_chrome_capture.py`
+- Docs: `docs/operations/domclick-scheduled-batch-ingestion.md`
+- Docs: `docs/operations/domclick-scheduled-batch-ingestion.vi.md`
+- Docs: `docs/operations/domclick-daily-collection.md`
+- Docs: `docs/operations/domclick-daily-collection.vi.md`
+
+- [ ] **Step 1: Viết offline tests cho runtime config**
+
+Test cần cover:
+
+```text
+REALTYSCOPE_CAPTURE_RUNTIME mặc định là cdp
+REALTYSCOPE_CHROME_BINARY ưu tiên hơn REALTYSCOPE_CHROME_PATH cũ
+REALTYSCOPE_CHROME_USER_DATA_DIR trỏ tới profile riêng cho automation
+REALTYSCOPE_CHROME_PROFILE_DIRECTORY mặc định là Default trong user-data dir automation
+REALTYSCOPE_CHROME_REMOTE_DEBUGGING_PORT được parse và truyền vào CDP dumper
+```
+
+- [ ] **Step 2: Giữ CDP là runtime duy nhất đã implement**
+
+`playwright-sidecar` và các browser sidecar khác chỉ là hướng triển khai tương lai. Phase 4.0a giữ Chrome DevTools/CDP hiện tại và fail rõ nếu operator chọn runtime chưa hỗ trợ.
+
+- [ ] **Step 3: Cập nhật behavior của scheduled command**
+
+PowerShell wrapper cần truyền các runtime env override vào `realtyscope.ingestion.domclick_chrome_capture`, mặc định dùng dedicated automation profile do Python helper resolve, và có `-DryRun` để in planned capture/batch commands mà không chạy Docker, Alembic, Chrome, ingestion hoặc ghi database.
+
+- [ ] **Step 4: Cập nhật docs operator EN/VI**
+
+Docs phải phân biệt rõ tab `@chrome` tương tác trong Codex với scheduled CDP automation, giải thích dedicated profile mặc định, ghi caveat về Docker/Linux portability, và chỉ nhắc Playwright/browser sidecar như hướng tương lai.
+
+- [ ] **Step 5: Verify**
+
+Chạy:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests\test_domclick_chrome_capture.py -q
+.\scripts\run_domclick_scheduled_batch.ps1 -DryRun -SkipDockerStart -CollectionDate 2099-01-01
+```
+
+Kỳ vọng:
+
+```text
+Offline tests pass. Dry run in capture và batch commands, không gọi live Domclick và không ghi PostgreSQL.
+```
 
 ## Task 0: GitNexus Và Workflow Preflight
 

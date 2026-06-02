@@ -20,7 +20,7 @@ Phase này không biến RealtyScope thành scraper chạy liên tục. Nó là 
 4. Commit PostgreSQL chỉ khi có `--commit` và gate pass.
 5. Ghi report JSON để audit.
 
-Ban đầu Phase 3.6 dùng Chrome `--dump-dom`. Sau hardening ngày 2026-06-02, capture chính dùng Chrome DevTools/CDP với profile thật `Default`, nên scheduled job không còn phụ thuộc việc user mở sẵn tab `@chrome` trong Codex.
+Ban đầu Phase 3.6 dùng Chrome `--dump-dom`. Sau hardening và Phase 4.0a, capture chính dùng Chrome DevTools/CDP với profile riêng cho automation, nên scheduled job không còn phụ thuộc tab `@chrome` trong Codex hoặc profile Chrome thật `Default` của workstation.
 
 ## Trạng thái
 
@@ -28,7 +28,7 @@ Ban đầu Phase 3.6 dùng Chrome `--dump-dom`. Sau hardening ngày 2026-06-02, 
 - Commit chính: `dca3f60 feat: automate domclick daily capture`.
 - Commit hardening: `7a920e5 fix: harden domclick chrome capture automation`.
 - Branch: `phase3-5-real-data-slice`.
-- GitNexus index hiện tại: `realtyscope-phase3-5-index`, indexed đúng commit `7a920e5`.
+- GitNexus index hiện tại: `realtyscope-phase3-5-index`, đã refresh sau docs Phase 3 ở commit `eeeeb47`.
 
 Tài liệu này là retrospective plan, vì implementation đã hoàn thành trước khi plan được ghi vào disk. Việc bổ sung này để đồng bộ lại quy trình `docs/superpowers/plans/`.
 
@@ -91,6 +91,6 @@ observations_inserted: 2000
 
 ## Lưu ý cho phase sau
 
-- Ingestion từ snapshot đã portable hơn capture live. Capture live vẫn phụ thuộc Chrome/profile/session/IP của máy, nên chưa nên claim là Docker-portable hoàn toàn.
-- Nếu cần chạy trên máy khác hoặc trong Docker, nên chuyển capture runtime sang Playwright/CDP browser sidecar hoặc dedicated automation profile.
+- Ingestion từ snapshot đã portable hơn capture live. Capture live vẫn phụ thuộc Chrome desktop, user-data directory ghi được, CDP port và IP của máy, nên chưa nên claim là Docker-portable hoàn toàn.
+- Phase 4.0a đã chuyển scheduled CDP runtime sang dedicated automation profile mặc định. Nếu cần chạy live capture trên máy khác hoặc trong Docker/Linux, hướng tiếp theo là Playwright/CDP browser sidecar do deployment quản lý.
 - Nếu Domclick đổi `window.__SSR_STATE__`, phase sau phải có drift detection và fallback extractor, không được giảm ngưỡng dữ liệu để che lỗi.

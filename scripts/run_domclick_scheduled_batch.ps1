@@ -7,9 +7,12 @@ param(
     [int]$MinCleanRecords = 1000,
     [int]$MaxUrls = 50,
     [double]$DelaySeconds = 2,
+    [string]$CaptureRuntime = $env:REALTYSCOPE_CAPTURE_RUNTIME,
+    [string]$ChromeBinary = $env:REALTYSCOPE_CHROME_BINARY,
     [string]$ChromePath = $env:REALTYSCOPE_CHROME_PATH,
-    [string]$ChromeUserDataDir = "",
-    [string]$ChromeProfileDirectory = "Default",
+    [string]$ChromeUserDataDir = $env:REALTYSCOPE_CHROME_USER_DATA_DIR,
+    [string]$ChromeProfileDirectory = $env:REALTYSCOPE_CHROME_PROFILE_DIRECTORY,
+    [string]$ChromeRemoteDebuggingPort = $env:REALTYSCOPE_CHROME_REMOTE_DEBUGGING_PORT,
     [int]$CaptureOffsetStart = 0,
     [int]$CaptureOffsetStop = 1980,
     [int]$CaptureOffsetStep = 20,
@@ -18,7 +21,8 @@ param(
     [double]$CaptureTimeoutSeconds = 90,
     [int]$CaptureVirtualTimeBudgetMs = 10000,
     [switch]$SkipCapture,
-    [switch]$SkipDockerStart
+    [switch]$SkipDockerStart,
+    [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
@@ -41,7 +45,8 @@ function Resolve-DomclickSourceArgs {
         [string]$RepoRoot,
         [string]$CollectionDate,
         [string]$SourcePath,
-        [string]$Python
+        [string]$Python,
+        [switch]$DryRun
     )
 
     if (-not [string]::IsNullOrWhiteSpace($SourcePath)) {
@@ -63,10 +68,18 @@ function Resolve-DomclickSourceArgs {
         return @("--source-path", $BulkDir)
     }
     if (-not $SkipCapture) {
+        if ([string]::IsNullOrWhiteSpace($CaptureRuntime)) {
+            $CaptureRuntime = "cdp"
+        }
+        if ([string]::IsNullOrWhiteSpace($ChromeBinary) -and -not [string]::IsNullOrWhiteSpace($ChromePath)) {
+            $ChromeBinary = $ChromePath
+        }
+
         $CaptureArgs = @(
             "-m", "realtyscope.ingestion.domclick_chrome_capture",
             "--output-root", (Join-Path $RepoRoot "data\raw\domclick"),
             "--collection-date", $CollectionDate,
+            "--capture-runtime", $CaptureRuntime,
             "--offset-start", "$CaptureOffsetStart",
             "--offset-stop", "$CaptureOffsetStop",
             "--offset-step", "$CaptureOffsetStep",
@@ -74,16 +87,26 @@ function Resolve-DomclickSourceArgs {
             "--delay-seconds", "$CaptureDelaySeconds",
             "--timeout-seconds", "$CaptureTimeoutSeconds",
             "--virtual-time-budget-ms", "$CaptureVirtualTimeBudgetMs",
-            "--profile-directory", $ChromeProfileDirectory,
             "--min-records", "$MinCleanRecords",
-            "--operator-note", "scheduled batch fallback capture using Chrome profile $ChromeProfileDirectory",
+            "--operator-note", "scheduled batch fallback capture using configured Chrome automation profile",
             "--json"
         )
-        if (-not [string]::IsNullOrWhiteSpace($ChromePath)) {
-            $CaptureArgs += @("--chrome-path", $ChromePath)
+        if (-not [string]::IsNullOrWhiteSpace($ChromeBinary)) {
+            $CaptureArgs += @("--chrome-binary", $ChromeBinary)
         }
         if (-not [string]::IsNullOrWhiteSpace($ChromeUserDataDir)) {
             $CaptureArgs += @("--chrome-user-data-dir", $ChromeUserDataDir)
+        }
+        if (-not [string]::IsNullOrWhiteSpace($ChromeProfileDirectory)) {
+            $CaptureArgs += @("--profile-directory", $ChromeProfileDirectory)
+        }
+        if (-not [string]::IsNullOrWhiteSpace($ChromeRemoteDebuggingPort)) {
+            $CaptureArgs += @("--remote-debugging-port", $ChromeRemoteDebuggingPort)
+        }
+
+        if ($DryRun) {
+            $script:DryRunCaptureArgs = $CaptureArgs
+            return @("--source-path", $BulkDir)
         }
 
         $CaptureOutput = & $Python @CaptureArgs
@@ -132,6 +155,44 @@ try {
     $env:PYTHONIOENCODING = "utf-8"
     $env:DATABASE_URL = $DatabaseUrl
 
+    $Python = Join-Path $RepoRoot ".venv\Scripts\python.exe"
+
+    if ($DryRun) {
+        $SourceArgs = Resolve-DomclickSourceArgs `
+            -RepoRoot $RepoRoot `
+            -CollectionDate $CollectionDate `
+            -SourcePath $SourcePath `
+            -Python $Python `
+            -DryRun
+
+        $BatchArgs = @(
+            "-m", "realtyscope.ingestion.domclick_scheduled_batch", "run",
+            "--database-url", $DatabaseUrl,
+            "--commit",
+            "--max-records", "$MaxRecords",
+            "--min-records", "$MinRecords",
+            "--min-normalized-records", "$MinCleanRecords",
+            "--json"
+        )
+        $BatchArgs += $SourceArgs
+
+        if ($SourceArgs[0] -eq "--url-file") {
+            $BatchArgs += @(
+                "--output-root", (Join-Path $RepoRoot "data\raw\domclick"),
+                "--collection-date", $CollectionDate,
+                "--max-urls", "$MaxUrls",
+                "--delay-seconds", "$DelaySeconds"
+            )
+        }
+
+        Write-Host "Dry run only; no Docker, Alembic, Chrome capture, batch ingestion, or database commit executed."
+        if ($script:DryRunCaptureArgs) {
+            Write-Host ("Capture command: " + $Python + " " + ($script:DryRunCaptureArgs -join " "))
+        }
+        Write-Host ("Batch command: " + $Python + " " + ($BatchArgs -join " "))
+        return
+    }
+
     if (-not $SkipDockerStart) {
         $WslRepoRoot = ConvertTo-WslPath $RepoRoot
         wsl -d Ubuntu -- bash -lc "cd '$WslRepoRoot' && docker compose up -d db"
@@ -140,7 +201,6 @@ try {
         }
     }
 
-    $Python = Join-Path $RepoRoot ".venv\Scripts\python.exe"
     & $Python -m alembic upgrade head
     if ($LASTEXITCODE -ne 0) {
         throw "Alembic upgrade failed with exit code $LASTEXITCODE"

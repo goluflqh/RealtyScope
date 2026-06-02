@@ -159,9 +159,9 @@ As of 2026-06-02:
 
 ```text
 branch: phase3-5-real-data-slice
-latest commit: 7a920e5 fix: harden domclick chrome capture automation
+latest commit: eeeeb47 docs: standardize phase plans and workflow
 GitNexus index: C:\Users\lequa\gitnexus-worktrees\realtyscope-phase3-5-index
-indexed commit: 7a920e5
+indexed commit: eeeeb47
 DB live counts: 2000 listings, 2000 raw_listings, 2000 listing_source_links, 2000 listing_observations, 0 rejected_listings
 next phase: Phase 4 EDA + OSM enrichment + baseline ML
 ```

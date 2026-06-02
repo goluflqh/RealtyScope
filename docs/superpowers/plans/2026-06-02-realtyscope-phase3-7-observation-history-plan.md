@@ -15,7 +15,7 @@
 - Execution status: `Completed`.
 - Completion commit: `d2bb740 feat: add listing observation history`.
 - Branch: `phase3-5-real-data-slice`.
-- Current GitNexus index: `realtyscope-phase3-5-index`, indexed at commit `7a920e5` after later hardening.
+- Current GitNexus index: `realtyscope-phase3-5-index`, refreshed after Phase 3 docs at commit `eeeeb47`.
 
 This document is retrospective because the implementation was completed before this plan was written to disk. It exists to keep `docs/superpowers/plans/` synchronized with the actual phase history.
 

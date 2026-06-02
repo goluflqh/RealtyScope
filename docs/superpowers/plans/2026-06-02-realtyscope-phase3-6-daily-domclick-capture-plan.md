@@ -4,7 +4,7 @@
 
 **Goal:** Automate the daily Domclick real-data capture so Phase 3 has a repeatable, inspect-gated path from rendered Domclick search state into PostgreSQL.
 
-**Architecture:** Phase 3.6 extends Phase 3.5 real-data ingestion with a bounded daily capture runner. The capture layer produces ignored raw snapshots under `data/raw/domclick/YYYY-MM-DD-bulk/`; scheduled ingestion inspects and validates the snapshot before committing to PostgreSQL. Runtime capture uses the real Chrome profile directory `Default`; after the 2026-06-02 hardening commit, scheduler capture uses Chrome DevTools/CDP and no longer depends on an already-open Codex `@chrome` tab.
+**Architecture:** Phase 3.6 extends Phase 3.5 real-data ingestion with a bounded daily capture runner. The capture layer produces ignored raw snapshots under `data/raw/domclick/YYYY-MM-DD-bulk/`; scheduled ingestion inspects and validates the snapshot before committing to PostgreSQL. Runtime capture now uses Chrome DevTools/CDP with a dedicated automation Chrome profile and no longer depends on an already-open Codex `@chrome` tab or the workstation's interactive `Default` profile.
 
 **Tech Stack:** Python 3.12, Chrome DevTools/CDP, PowerShell, Windows Task Scheduler, SQLAlchemy 2.0, Alembic, PostgreSQL, pytest, ruff, GitNexus, mem0.
 
@@ -16,7 +16,7 @@
 - Primary completion commit: `dca3f60 feat: automate domclick daily capture`.
 - Hardening commit: `7a920e5 fix: harden domclick chrome capture automation`.
 - Branch: `phase3-5-real-data-slice`.
-- Current GitNexus index: `realtyscope-phase3-5-index`, indexed at commit `7a920e5`.
+- Current GitNexus index: `realtyscope-phase3-5-index`, refreshed after Phase 3 docs at commit `eeeeb47`.
 
 This document is retrospective because the implementation was completed before the plan was written to disk. It exists to keep `docs/superpowers/plans/` aligned with the actual phase history.
 
@@ -90,6 +90,6 @@ observations_inserted: 2000
 
 ## Follow-Up Notes
 
-- The capture producer is workstation-assisted, not fully Docker-portable yet. The persisted snapshot ingestion path is portable; the live Chrome capture runtime should become a Playwright/CDP browser sidecar or dedicated automation profile if cross-machine capture becomes required.
-- If the same Chrome `Default` profile is locked by an interactive Chrome session, future hardening should detect that explicitly or use a dedicated automation profile.
+- The capture producer is workstation-assisted, not fully Docker-portable yet. The persisted snapshot ingestion path is portable; if cross-machine live capture becomes required, add a deployment-owned Playwright/CDP browser sidecar while keeping the same snapshot manifest contract.
+- Phase 4.0a moved the scheduled CDP runtime to a dedicated automation profile by default. Use the real interactive Chrome `Default` profile only as an explicit operator override.
 - If Domclick removes `window.__SSR_STATE__`, Phase 4+ should add extractor drift detection and a fallback extractor rather than silently lowering data-quality gates.

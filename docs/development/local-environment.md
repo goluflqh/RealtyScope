@@ -4,7 +4,7 @@ This document defines the development/runtime split for RealtyScope so the proje
 
 ## Environment Roles
 
-- Windows is the workstation layer: Codex Desktop, Chrome profile, browser-assisted Domclick capture, editor, and day-to-day commands.
+- Windows is the workstation layer: Codex Desktop, a dedicated Chrome automation profile for scheduled capture, browser-assisted Domclick capture, editor, and day-to-day commands.
 - Windows Python must use the project-local `.venv`; do not rely on `C:\Program Files\Python312\Lib\site-packages` or Anaconda for project commands.
 - WSL2 Ubuntu is the local Linux runtime layer: Docker, PostgreSQL, Redis, MLflow, and production-like service checks.
 - VPS/production should run from the same Linux/Docker assumptions as WSL2, not from Windows-specific global packages.

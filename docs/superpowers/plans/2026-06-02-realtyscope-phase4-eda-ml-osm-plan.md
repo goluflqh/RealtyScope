@@ -13,8 +13,8 @@
 ## Current Starting Point
 
 - Branch: `phase3-5-real-data-slice`.
-- Latest pushed commit: `7a920e5 fix: harden domclick chrome capture automation`.
-- GitNexus current index: `realtyscope-phase3-5-index` at commit `7a920e5`.
+- Latest pushed commit: `eeeeb47 docs: standardize phase plans and workflow`.
+- GitNexus current index: `realtyscope-phase3-5-index` at commit `eeeeb47`.
 - Live 2026-06-02 data: `2000` canonical listings, `2000` raw listings, `2000` source links, `2000` observations, `0` rejected rows.
 - Phase 3.7 observation history is available for trend and temporal split features.
 - Existing course/design spec already names OpenStreetMap as the enrichment source and requires attribution.
@@ -31,12 +31,63 @@
 
 ## Recommended Phase 4 Order
 
-1. Phase 4.0: GitNexus/workflow preflight and data-readiness audit.
-2. Phase 4.1: EDA refinement using `listings` + `listing_observations`.
-3. Phase 4.2: OSM infrastructure enrichment foundation.
-4. Phase 4.3: ML feature snapshot generation.
-5. Phase 4.4: Naive and scikit-learn baseline training with MLflow.
-6. Phase 4.5: API/UI contracts for predictions and trend/model pages.
+1. Phase 4.0a: Capture Runtime Hardening for Domclick scheduled Chrome/CDP automation.
+2. Phase 4.0: GitNexus/workflow preflight and data-readiness audit.
+3. Phase 4.1: EDA refinement using `listings` + `listing_observations`.
+4. Phase 4.2: OSM infrastructure enrichment foundation.
+5. Phase 4.3: ML feature snapshot generation.
+6. Phase 4.4: Naive and scikit-learn baseline training with MLflow.
+7. Phase 4.5: API/UI contracts for predictions and trend/model pages.
+
+## Task 0a: Capture Runtime Hardening
+
+**Files:**
+- Modify: `src/realtyscope/ingestion/domclick_chrome_capture.py`
+- Modify: `scripts/run_domclick_scheduled_batch.ps1`
+- Test: `tests/test_domclick_chrome_capture.py`
+- Docs: `docs/operations/domclick-scheduled-batch-ingestion.md`
+- Docs: `docs/operations/domclick-scheduled-batch-ingestion.vi.md`
+- Docs: `docs/operations/domclick-daily-collection.md`
+- Docs: `docs/operations/domclick-daily-collection.vi.md`
+
+- [ ] **Step 1: Write failing offline tests for runtime config**
+
+Tests must cover:
+
+```text
+REALTYSCOPE_CAPTURE_RUNTIME defaults to cdp
+REALTYSCOPE_CHROME_BINARY overrides legacy REALTYSCOPE_CHROME_PATH
+REALTYSCOPE_CHROME_USER_DATA_DIR points to a dedicated automation profile
+REALTYSCOPE_CHROME_PROFILE_DIRECTORY defaults to Default inside the dedicated user-data dir
+REALTYSCOPE_CHROME_REMOTE_DEBUGGING_PORT is parsed and passed into the CDP dumper
+```
+
+- [ ] **Step 2: Keep CDP as the only implemented runtime**
+
+`playwright-sidecar` and other browser sidecars are future deployment options only. Phase 4.0a must keep the existing Chrome DevTools/CDP capture approach and fail clearly if an unsupported runtime is requested.
+
+- [ ] **Step 3: Update scheduled command behavior**
+
+The PowerShell wrapper should pass runtime env overrides through to `realtyscope.ingestion.domclick_chrome_capture`, default to the Python helper's dedicated automation profile, and provide a dry run that prints planned capture/batch commands without starting Docker, Alembic, Chrome, ingestion, or database commits.
+
+- [ ] **Step 4: Update operator docs EN/VI**
+
+Docs must explicitly distinguish interactive Codex `@chrome` from scheduled CDP automation, explain the dedicated profile default, document Docker/Linux portability caveats, and name Playwright/browser sidecar as a future option only.
+
+- [ ] **Step 5: Verify**
+
+Run:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests\test_domclick_chrome_capture.py -q
+.\scripts\run_domclick_scheduled_batch.ps1 -DryRun -SkipDockerStart -CollectionDate 2099-01-01
+```
+
+Expected:
+
+```text
+Offline tests pass. Dry run prints capture and batch commands without running live Domclick or writing to PostgreSQL.
+```
 
 ## Task 0: GitNexus And Workflow Preflight
 

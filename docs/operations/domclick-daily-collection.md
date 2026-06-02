@@ -72,11 +72,11 @@ The collector checks `robots.txt`, rejects disallowed URLs before fetching, refu
 
 ## Chrome-Assisted Search SSR Capture
 
-For the current workstation workflow, the reusable daily capture command renders the Moscow sale-apartment search in Chrome and stores the page SSR state as compact JSON. This is separate from the direct HTTP URL collector above: it does not raw-fetch `/search`, and it stops if Chrome sees QRATOR, CAPTCHA, a login wall, or missing SSR state.
+For the current workstation workflow, the reusable daily capture command renders the Moscow sale-apartment search in Chrome and stores the page SSR state as compact JSON. This is separate from the direct HTTP URL collector above: it does not raw-fetch `/search`, and it stops if Chrome sees QRATOR, CAPTCHA, a login wall, or missing SSR state. The command uses a scheduled Chrome DevTools/CDP automation process, not an already-open Codex `@chrome` tab.
 
 Default scope:
 
-- Chrome profile shown as `Person 1`, stored on this machine as profile directory `Default`.
+- Capture runtime `cdp` with a dedicated automation user-data directory. On Windows the default is `%LOCALAPPDATA%\RealtyScope\ChromeAutomation\User Data`, profile directory `Default`.
 - Domclick Moscow area id `aids=2299` (`Москва`).
 - URL template: `https://domclick.ru/search?deal_type=sale&category=living&offer_type=flat&offer_type=layout&aids=2299&offset={offset}`.
 - Offsets `0..1980`, step `20`, maximum 100 pages and roughly 2000 raw candidates per day. The extra headroom is intentional because the scheduled gate requires at least 1000 normalized clean listings after parsing.
@@ -88,10 +88,12 @@ $env:PYTHONIOENCODING="utf-8"
 .\.venv\Scripts\python.exe -m realtyscope.ingestion.domclick_chrome_capture `
   --output-root data/raw/domclick `
   --collection-date 2026-06-02 `
-  --profile-directory Default `
+  --capture-runtime cdp `
   --delay-seconds 3 `
   --json
 ```
+
+Use `REALTYSCOPE_CHROME_BINARY`, `REALTYSCOPE_CHROME_USER_DATA_DIR`, `REALTYSCOPE_CHROME_PROFILE_DIRECTORY`, and `REALTYSCOPE_CHROME_REMOTE_DEBUGGING_PORT` only when the default dedicated automation profile is not appropriate. Pointing the capture at the real interactive Chrome `Default` profile can fail if that profile is already locked by a normal Chrome session.
 
 The command writes `data/raw/domclick/YYYY-MM-DD-bulk/manifest.json` and compact JSON files under `payloads/`. Raw data remains ignored by git.
 

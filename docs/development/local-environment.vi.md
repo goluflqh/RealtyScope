@@ -4,7 +4,7 @@ Tài liệu này chốt cách chia môi trường để RealtyScope không phụ
 
 ## Vai Trò Từng Môi Trường
 
-- Windows là lớp làm việc: Codex Desktop, Chrome profile thật, capture Domclick bằng trình duyệt, editor và lệnh phát triển hằng ngày.
+- Windows là lớp làm việc: Codex Desktop, Chrome profile riêng cho automation scheduled capture, capture Domclick bằng trình duyệt, editor và lệnh phát triển hằng ngày.
 - Python trên Windows phải dùng `.venv` riêng của repo; không dựa vào `C:\Program Files\Python312\Lib\site-packages` hoặc Anaconda cho lệnh dự án.
 - WSL2 Ubuntu là lớp runtime Linux local: Docker, PostgreSQL, Redis, MLflow và các kiểm chứng giống môi trường production.
 - VPS/production sau này phải đi theo giả định Linux/Docker giống WSL2, không phụ thuộc vào package global trên Windows.

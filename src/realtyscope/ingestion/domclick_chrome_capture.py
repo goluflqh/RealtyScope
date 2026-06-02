@@ -28,6 +28,7 @@ from realtyscope.ingestion.domclick_live import (
 )
 
 CHROME_CAPTURE_VERSION = "realtyscope-domclick-chrome-ssr-capture-v1"
+DEFAULT_CAPTURE_RUNTIME = "cdp"
 DEFAULT_DOMCLICK_SEARCH_URL_TEMPLATE = (
     "https://domclick.ru/search?deal_type=sale&category=living&offer_type=flat"
     "&offer_type=layout&aids=2299&offset={offset}"
@@ -53,6 +54,14 @@ DOMCLICK_BLOCKED_MARKERS = (
     "login wall",
 )
 
+SUPPORTED_CAPTURE_RUNTIMES = frozenset({DEFAULT_CAPTURE_RUNTIME})
+ENV_CAPTURE_RUNTIME = "REALTYSCOPE_CAPTURE_RUNTIME"
+ENV_CHROME_BINARY = "REALTYSCOPE_CHROME_BINARY"
+ENV_CHROME_LEGACY_PATH = "REALTYSCOPE_CHROME_PATH"
+ENV_CHROME_USER_DATA_DIR = "REALTYSCOPE_CHROME_USER_DATA_DIR"
+ENV_CHROME_PROFILE_DIRECTORY = "REALTYSCOPE_CHROME_PROFILE_DIRECTORY"
+ENV_CHROME_REMOTE_DEBUGGING_PORT = "REALTYSCOPE_CHROME_REMOTE_DEBUGGING_PORT"
+
 
 @dataclass(frozen=True)
 class DomclickChromeCaptureResult:
@@ -60,6 +69,81 @@ class DomclickChromeCaptureResult:
     manifest_path: Path
     files_written: int
     records_seen: int
+
+
+@dataclass(frozen=True)
+class ChromeCaptureRuntimeConfig:
+    capture_runtime: str
+    chrome_binary: Path | None
+    chrome_user_data_dir: Path
+    chrome_profile_directory: str
+    chrome_remote_debugging_port: int | None
+
+
+def resolve_chrome_capture_runtime_config(
+    *,
+    capture_runtime: str | None = None,
+    chrome_binary: Path | None = None,
+    chrome_user_data_dir: Path | None = None,
+    chrome_profile_directory: str | None = None,
+    chrome_remote_debugging_port: int | None = None,
+    env: Mapping[str, str] | None = None,
+    home: Path | None = None,
+    os_name: str | None = None,
+    platform: str | None = None,
+) -> ChromeCaptureRuntimeConfig:
+    environ = os.environ if env is None else env
+    resolved_runtime = _nonblank(capture_runtime) or _env_nonblank(environ, ENV_CAPTURE_RUNTIME)
+    resolved_runtime = (resolved_runtime or DEFAULT_CAPTURE_RUNTIME).lower()
+    if resolved_runtime not in SUPPORTED_CAPTURE_RUNTIMES:
+        supported = ", ".join(sorted(SUPPORTED_CAPTURE_RUNTIMES))
+        raise ValueError(
+            "Unsupported Chrome capture runtime "
+            f"{resolved_runtime!r}. Supported runtimes: {supported}."
+        )
+
+    env_binary = _env_nonblank(environ, ENV_CHROME_BINARY) or _env_nonblank(
+        environ, ENV_CHROME_LEGACY_PATH
+    )
+    resolved_binary = chrome_binary or (Path(env_binary) if env_binary else None)
+
+    env_user_data_dir = _env_nonblank(environ, ENV_CHROME_USER_DATA_DIR)
+    resolved_user_data_dir = (
+        chrome_user_data_dir
+        or (Path(env_user_data_dir) if env_user_data_dir else None)
+        or _default_automation_chrome_user_data_dir(
+            env=environ,
+            home=home,
+            os_name=os_name,
+            platform=platform,
+        )
+    )
+
+    resolved_profile_directory = (
+        _nonblank(chrome_profile_directory)
+        or _env_nonblank(environ, ENV_CHROME_PROFILE_DIRECTORY)
+        or DEFAULT_CHROME_PROFILE_DIRECTORY
+    )
+    if not resolved_profile_directory.strip():
+        raise ValueError("chrome_profile_directory must not be blank")
+
+    env_port = _env_nonblank(environ, ENV_CHROME_REMOTE_DEBUGGING_PORT)
+    resolved_port = chrome_remote_debugging_port
+    if resolved_port is None and env_port:
+        try:
+            resolved_port = int(env_port)
+        except ValueError as exc:
+            raise ValueError(f"{ENV_CHROME_REMOTE_DEBUGGING_PORT} must be an integer port") from exc
+    if resolved_port is not None and not 1 <= resolved_port <= 65535:
+        raise ValueError("chrome_remote_debugging_port must be between 1 and 65535")
+
+    return ChromeCaptureRuntimeConfig(
+        capture_runtime=resolved_runtime,
+        chrome_binary=resolved_binary,
+        chrome_user_data_dir=resolved_user_data_dir,
+        chrome_profile_directory=resolved_profile_directory,
+        chrome_remote_debugging_port=resolved_port,
+    )
 
 
 def build_domclick_search_urls(
@@ -101,9 +185,11 @@ def capture_domclick_chrome_ssr_snapshots(
     delay_seconds: float = DEFAULT_DELAY_SECONDS,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     virtual_time_budget_ms: int = DEFAULT_VIRTUAL_TIME_BUDGET_MS,
+    capture_runtime: str | None = None,
     chrome_path: Path | None = None,
     chrome_user_data_dir: Path | None = None,
-    chrome_profile_directory: str = DEFAULT_CHROME_PROFILE_DIRECTORY,
+    chrome_profile_directory: str | None = None,
+    chrome_remote_debugging_port: int | None = None,
     capture_mode: str = DEFAULT_CAPTURE_MODE,
     min_records: int = 1,
     operator_note: str | None = None,
@@ -118,8 +204,14 @@ def capture_domclick_chrome_ssr_snapshots(
         raise ValueError("virtual_time_budget_ms must be greater than zero")
     if min_records < 0:
         raise ValueError("min_records must be zero or greater")
-    if not chrome_profile_directory.strip():
-        raise ValueError("chrome_profile_directory must not be blank")
+
+    runtime_config = resolve_chrome_capture_runtime_config(
+        capture_runtime=capture_runtime,
+        chrome_binary=chrome_path,
+        chrome_user_data_dir=chrome_user_data_dir,
+        chrome_profile_directory=chrome_profile_directory,
+        chrome_remote_debugging_port=chrome_remote_debugging_port,
+    )
 
     urls = build_domclick_search_urls(
         url_template=url_template,
@@ -135,13 +227,14 @@ def capture_domclick_chrome_ssr_snapshots(
     resolved_user_data_dir: Path | None = chrome_user_data_dir
     devtools_dumper: ChromeDevToolsDomDumper | None = None
     if capture_page_dom is None:
-        resolved_chrome_path = _resolve_chrome_path(chrome_path)
-        resolved_user_data_dir = _resolve_chrome_user_data_dir(chrome_user_data_dir)
-        _validate_chrome_profile(resolved_user_data_dir, chrome_profile_directory)
+        resolved_chrome_path = _resolve_chrome_path(runtime_config.chrome_binary)
+        resolved_user_data_dir = runtime_config.chrome_user_data_dir
+        _ensure_chrome_profile(resolved_user_data_dir, runtime_config.chrome_profile_directory)
         devtools_dumper = ChromeDevToolsDomDumper(
             chrome_path=resolved_chrome_path,
             chrome_user_data_dir=resolved_user_data_dir,
-            chrome_profile_directory=chrome_profile_directory,
+            chrome_profile_directory=runtime_config.chrome_profile_directory,
+            remote_debugging_port=runtime_config.chrome_remote_debugging_port,
             timeout_seconds=timeout_seconds,
             virtual_time_budget_ms=virtual_time_budget_ms,
         )
@@ -206,9 +299,11 @@ def capture_domclick_chrome_ssr_snapshots(
         delay_seconds=delay_seconds,
         timeout_seconds=timeout_seconds,
         virtual_time_budget_ms=virtual_time_budget_ms,
+        capture_runtime=runtime_config.capture_runtime,
         chrome_path=resolved_chrome_path,
         chrome_user_data_dir=resolved_user_data_dir,
-        chrome_profile_directory=chrome_profile_directory,
+        chrome_profile_directory=runtime_config.chrome_profile_directory,
+        chrome_remote_debugging_port=runtime_config.chrome_remote_debugging_port,
         entries=entries,
         records_seen=total_records_seen,
         operator_note=operator_note,
@@ -232,6 +327,7 @@ def dump_dom_with_chrome(
     chrome_path: Path,
     chrome_user_data_dir: Path,
     chrome_profile_directory: str,
+    remote_debugging_port: int | None = None,
     timeout_seconds: float,
     virtual_time_budget_ms: int,
 ) -> str:
@@ -267,6 +363,7 @@ def dump_dom_with_chrome(
                 chrome_path=chrome_path,
                 chrome_user_data_dir=chrome_user_data_dir,
                 chrome_profile_directory=chrome_profile_directory,
+                remote_debugging_port=remote_debugging_port,
                 timeout_seconds=timeout_seconds,
                 virtual_time_budget_ms=virtual_time_budget_ms,
             )
@@ -284,6 +381,7 @@ def dump_dom_with_chrome_devtools(
     chrome_path: Path,
     chrome_user_data_dir: Path,
     chrome_profile_directory: str,
+    remote_debugging_port: int | None = None,
     timeout_seconds: float,
     virtual_time_budget_ms: int,
 ) -> str:
@@ -291,6 +389,7 @@ def dump_dom_with_chrome_devtools(
         chrome_path=chrome_path,
         chrome_user_data_dir=chrome_user_data_dir,
         chrome_profile_directory=chrome_profile_directory,
+        remote_debugging_port=remote_debugging_port,
         timeout_seconds=timeout_seconds,
         virtual_time_budget_ms=virtual_time_budget_ms,
     ) as dumper:
@@ -304,12 +403,14 @@ class ChromeDevToolsDomDumper:
         chrome_path: Path,
         chrome_user_data_dir: Path,
         chrome_profile_directory: str,
+        remote_debugging_port: int | None = None,
         timeout_seconds: float,
         virtual_time_budget_ms: int,
     ) -> None:
         self.chrome_path = chrome_path
         self.chrome_user_data_dir = chrome_user_data_dir
         self.chrome_profile_directory = chrome_profile_directory
+        self.remote_debugging_port = remote_debugging_port
         self.timeout_seconds = timeout_seconds
         self.virtual_time_budget_ms = virtual_time_budget_ms
         self.port: int | None = None
@@ -326,7 +427,7 @@ class ChromeDevToolsDomDumper:
     def start(self) -> None:
         if self.port is not None:
             return
-        self.port = _reserve_local_port()
+        self.port = self.remote_debugging_port or _reserve_local_port()
         command = [
             str(self.chrome_path),
             f"--user-data-dir={self.chrome_user_data_dir}",
@@ -673,9 +774,11 @@ def _build_manifest(
     delay_seconds: float,
     timeout_seconds: float,
     virtual_time_budget_ms: int,
+    capture_runtime: str,
     chrome_path: Path | None,
     chrome_user_data_dir: Path | None,
     chrome_profile_directory: str,
+    chrome_remote_debugging_port: int | None,
     entries: Sequence[Mapping[str, object]],
     records_seen: int,
     operator_note: str | None,
@@ -696,11 +799,13 @@ def _build_manifest(
         "delay_seconds": delay_seconds,
         "timeout_seconds": timeout_seconds,
         "virtual_time_budget_ms": virtual_time_budget_ms,
+        "capture_runtime": capture_runtime,
         "chrome_path": str(chrome_path) if chrome_path is not None else None,
         "chrome_user_data_dir": (
             str(chrome_user_data_dir) if chrome_user_data_dir is not None else None
         ),
         "chrome_profile_directory": chrome_profile_directory,
+        "chrome_remote_debugging_port": chrome_remote_debugging_port,
         "blocked_boundary_policy": "stop_on_qrator_captcha_login_wall",
         "files_written": len(entries),
         "records_seen": records_seen,
@@ -711,9 +816,46 @@ def _build_manifest(
     return manifest
 
 
+def _nonblank(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _env_nonblank(env: Mapping[str, str], key: str) -> str | None:
+    return _nonblank(env.get(key))
+
+
+def _default_automation_chrome_user_data_dir(
+    *,
+    env: Mapping[str, str],
+    home: Path | None = None,
+    os_name: str | None = None,
+    platform: str | None = None,
+) -> Path:
+    home_dir = home or Path.home()
+    resolved_os_name = os_name or os.name
+    resolved_platform = platform or sys.platform
+    if resolved_os_name == "nt":
+        local_app_data = _env_nonblank(env, "LOCALAPPDATA")
+        root = Path(local_app_data) if local_app_data else home_dir / "AppData" / "Local"
+        return root / "RealtyScope" / "ChromeAutomation" / "User Data"
+    if resolved_platform == "darwin":
+        return (
+            home_dir
+            / "Library"
+            / "Application Support"
+            / "RealtyScope"
+            / "ChromeAutomation"
+            / "User Data"
+        )
+    return home_dir / ".local" / "share" / "realtyscope" / "chrome-automation" / "User Data"
+
+
 def _resolve_chrome_path(chrome_path: Path | None) -> Path:
     candidates: list[Path] = []
-    env_path = os.environ.get("REALTYSCOPE_CHROME_PATH")
+    env_path = os.environ.get(ENV_CHROME_BINARY) or os.environ.get(ENV_CHROME_LEGACY_PATH)
     if chrome_path is not None:
         candidates.append(chrome_path)
     if env_path:
@@ -731,31 +873,24 @@ def _resolve_chrome_path(chrome_path: Path | None) -> Path:
         if candidate.is_file():
             return candidate
     raise FileNotFoundError(
-        "Could not find Chrome. Pass --chrome-path or set REALTYSCOPE_CHROME_PATH."
+        "Could not find Chrome. Pass --chrome-binary or set REALTYSCOPE_CHROME_BINARY."
     )
 
 
 def _resolve_chrome_user_data_dir(chrome_user_data_dir: Path | None) -> Path:
     if chrome_user_data_dir is not None:
         return chrome_user_data_dir
-    if os.name == "nt":
-        local_app_data = os.environ.get("LOCALAPPDATA")
-        if local_app_data:
-            return Path(local_app_data) / "Google" / "Chrome" / "User Data"
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "Google" / "Chrome"
-    return Path.home() / ".config" / "google-chrome"
+    return _default_automation_chrome_user_data_dir(env=os.environ)
+
+
+def _ensure_chrome_profile(user_data_dir: Path, profile_directory: str) -> None:
+    user_data_dir.mkdir(parents=True, exist_ok=True)
+    profile_path = user_data_dir / profile_directory
+    profile_path.mkdir(parents=True, exist_ok=True)
 
 
 def _validate_chrome_profile(user_data_dir: Path, profile_directory: str) -> None:
-    if not user_data_dir.is_dir():
-        raise FileNotFoundError(f"Chrome user data directory does not exist: {user_data_dir}")
-    profile_path = user_data_dir / profile_directory
-    if not profile_path.is_dir():
-        raise FileNotFoundError(
-            f"Chrome profile directory does not exist: {profile_path}. "
-            "For Person 1 on this workstation, use --profile-directory Default."
-        )
+    _ensure_chrome_profile(user_data_dir, profile_directory)
 
 
 def _utc_now_iso() -> str:
@@ -787,9 +922,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--virtual-time-budget-ms", type=int, default=DEFAULT_VIRTUAL_TIME_BUDGET_MS
     )
-    parser.add_argument("--chrome-path", type=Path, default=None)
+    parser.add_argument("--capture-runtime", default=None)
+    parser.add_argument(
+        "--chrome-binary", "--chrome-path", dest="chrome_path", type=Path, default=None
+    )
     parser.add_argument("--chrome-user-data-dir", type=Path, default=None)
-    parser.add_argument("--profile-directory", default=DEFAULT_CHROME_PROFILE_DIRECTORY)
+    parser.add_argument("--profile-directory", default=None)
+    parser.add_argument("--remote-debugging-port", type=int, default=None)
     parser.add_argument("--capture-mode", default=DEFAULT_CAPTURE_MODE)
     parser.add_argument("--min-records", type=int, default=1)
     parser.add_argument("--operator-note", default=None)
@@ -807,9 +946,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         delay_seconds=args.delay_seconds,
         timeout_seconds=args.timeout_seconds,
         virtual_time_budget_ms=args.virtual_time_budget_ms,
+        capture_runtime=args.capture_runtime,
         chrome_path=args.chrome_path,
         chrome_user_data_dir=args.chrome_user_data_dir,
         chrome_profile_directory=args.profile_directory,
+        chrome_remote_debugging_port=args.remote_debugging_port,
         capture_mode=args.capture_mode,
         min_records=args.min_records,
         operator_note=args.operator_note,

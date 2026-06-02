@@ -75,11 +75,11 @@ Collector sẽ kiểm tra `robots.txt`, từ chối URL bị cấm trước khi 
 
 ## Capture Search SSR Bằng Chrome
 
-Với workflow hiện tại trên máy Windows, lệnh capture hằng ngày sẽ render trang search căn hộ bán ở Moscow bằng Chrome rồi lưu SSR state của trang thành compact JSON. Hướng này tách riêng với collector HTTP trực tiếp ở trên: nó không raw-fetch `/search`, và sẽ dừng nếu Chrome gặp QRATOR, CAPTCHA, login wall hoặc không thấy SSR state sau khi render.
+Với workflow hiện tại trên máy Windows, lệnh capture hằng ngày sẽ render trang search căn hộ bán ở Moscow bằng Chrome rồi lưu SSR state của trang thành compact JSON. Hướng này tách riêng với collector HTTP trực tiếp ở trên: nó không raw-fetch `/search`, và sẽ dừng nếu Chrome gặp QRATOR, CAPTCHA, login wall hoặc không thấy SSR state sau khi render. Lệnh này dùng Chrome DevTools/CDP automation process cho scheduled job, không dùng tab `@chrome` đang mở trong Codex.
 
 Scope mặc định:
 
-- Chrome profile hiển thị là `Person 1`, nhưng directory thật trên máy này là `Default`.
+- Capture runtime `cdp` với user-data directory riêng cho automation. Trên Windows, mặc định là `%LOCALAPPDATA%\RealtyScope\ChromeAutomation\User Data`, profile directory `Default`.
 - Domclick Moscow area id `aids=2299` (`Москва`).
 - URL template: `https://domclick.ru/search?deal_type=sale&category=living&offer_type=flat&offer_type=layout&aids=2299&offset={offset}`.
 - Offset `0..1980`, bước `20`, tối đa 100 trang và khoảng 2000 ứng viên thô mỗi ngày. Phần dư này là cố ý, vì scheduled gate yêu cầu ít nhất 1000 listing normalized/sạch sau khi parser xử lý.
@@ -91,10 +91,12 @@ $env:PYTHONIOENCODING="utf-8"
 .\.venv\Scripts\python.exe -m realtyscope.ingestion.domclick_chrome_capture `
   --output-root data/raw/domclick `
   --collection-date 2026-06-02 `
-  --profile-directory Default `
+  --capture-runtime cdp `
   --delay-seconds 3 `
   --json
 ```
+
+Chỉ dùng `REALTYSCOPE_CHROME_BINARY`, `REALTYSCOPE_CHROME_USER_DATA_DIR`, `REALTYSCOPE_CHROME_PROFILE_DIRECTORY`, và `REALTYSCOPE_CHROME_REMOTE_DEBUGGING_PORT` khi profile automation mặc định không phù hợp. Nếu trỏ capture vào profile Chrome thật `Default`, job có thể fail khi profile đó đang bị khóa bởi session Chrome thường.
 
 Lệnh ghi `data/raw/domclick/YYYY-MM-DD-bulk/manifest.json` và compact JSON trong `payloads/`. Raw data vẫn bị git ignore và không được commit.
 
