@@ -1,9 +1,11 @@
 from collections.abc import Iterator
 from decimal import Decimal
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, Query
+import joblib
+from fastapi import Depends, FastAPI, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -16,12 +18,51 @@ from realtyscope.database.models import (
     Source,
 )
 from realtyscope.database.session import create_database_engine, create_session_factory
+from services.api.app.schemas import PredictionRequest, PredictionResponse
 
 app = FastAPI(
     title="RealtyScope API",
     version="0.1.0",
     description="API skeleton for the RealtyScope grade-5 real estate data service.",
 )
+
+BASELINE_PREDICTION_CAVEAT = (
+    "Phase 4 baseline contract result; not a final independent appraisal model."
+)
+
+
+class ArtifactPredictionModel:
+    def __init__(
+        self,
+        *,
+        feature_names: tuple[str, ...],
+        feature_version: str | None,
+        metrics: dict[str, float | int],
+        model: Any,
+        model_version: str,
+    ) -> None:
+        self.feature_names = feature_names
+        self.feature_version = feature_version
+        self.metrics = metrics
+        self.model = model
+        self.model_version = model_version
+
+    @classmethod
+    def from_artifact(cls, artifact_path: Path) -> "ArtifactPredictionModel":
+        if not artifact_path.exists():
+            raise FileNotFoundError(f"Model artifact not found: {artifact_path}")
+        artifact = joblib.load(artifact_path)
+        return cls(
+            feature_names=tuple(artifact["feature_names"]),
+            feature_version=artifact.get("feature_version"),
+            metrics=artifact.get("metrics", {}),
+            model=artifact["model"],
+            model_version=artifact["model_version"],
+        )
+
+    def predict(self, features: dict[str, float]) -> float:
+        row = [[features[name] for name in self.feature_names]]
+        return float(self.model.predict(row)[0])
 
 
 @lru_cache
@@ -33,6 +74,15 @@ def get_session_factory() -> sessionmaker[Session]:
 def get_database_session() -> Iterator[Session]:
     with get_session_factory()() as session:
         yield session
+
+
+@lru_cache
+def get_prediction_model() -> ArtifactPredictionModel:
+    settings = get_settings()
+    try:
+        return ArtifactPredictionModel.from_artifact(Path(settings.active_model_artifact_path))
+    except (FileNotFoundError, KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=f"Prediction model unavailable: {exc}") from exc
 
 
 @app.get("/health")
@@ -88,8 +138,47 @@ def data_quality_stats(
     }
 
 
+@app.post("/predict", response_model=PredictionResponse)
+def predict_price(
+    request: PredictionRequest,
+    prediction_model: Annotated[ArtifactPredictionModel, Depends(get_prediction_model)],
+) -> PredictionResponse:
+    missing_features, unexpected_features = _feature_contract_diff(
+        expected=prediction_model.feature_names,
+        actual=request.features,
+    )
+    if missing_features or unexpected_features:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "missing_features": missing_features,
+                "unexpected_features": unexpected_features,
+            },
+        )
+
+    return PredictionResponse(
+        predicted_price_rub=prediction_model.predict(request.features),
+        model_version=prediction_model.model_version,
+        feature_version=prediction_model.feature_version,
+        metrics_summary=prediction_model.metrics,
+        input_features_echo=request.features,
+        feature_names=list(prediction_model.feature_names),
+        caveat=BASELINE_PREDICTION_CAVEAT,
+    )
+
+
 def _count(session: Session, model: type[Any]) -> int:
     return session.scalar(select(func.count()).select_from(model)) or 0
+
+
+def _feature_contract_diff(
+    *,
+    expected: tuple[str, ...],
+    actual: dict[str, float],
+) -> tuple[list[str], list[str]]:
+    expected_names = set(expected)
+    actual_names = set(actual)
+    return sorted(expected_names - actual_names), sorted(actual_names - expected_names)
 
 
 def _listing_payload(listing: Listing) -> dict[str, Any]:

@@ -1,6 +1,6 @@
 from typing import Any
 
-from services.streamlit.api_client import fetch_dashboard_data
+from services.streamlit.api_client import fetch_dashboard_data, request_prediction
 
 
 class FakeResponse:
@@ -83,3 +83,48 @@ def test_fetch_dashboard_data_reports_non_object_json_without_mocking_data() -> 
         "Could not load data-quality stats: Expected JSON object from RealtyScope API",
         "Could not load listings: Expected JSON object from RealtyScope API",
     ]
+
+
+def test_request_prediction_posts_feature_contract_to_api() -> None:
+    calls = []
+    payload = {
+        "predicted_price_rub": 16_550_000.0,
+        "model_version": "baseline_ridge_v1",
+        "feature_version": "ml_features_v1",
+        "metrics_summary": {"mae": 48_610.18},
+        "input_features_echo": {"rooms": 2.0, "total_area_m2": 60.5},
+        "feature_names": ["rooms", "total_area_m2"],
+        "caveat": "Phase 4 baseline contract result; not a final independent appraisal model.",
+    }
+
+    def fake_post(url: str, **kwargs: Any) -> FakeResponse:
+        calls.append((url, kwargs))
+        return FakeResponse(payload)
+
+    prediction = request_prediction(
+        "http://api.test/",
+        features={"rooms": 2.0, "total_area_m2": 60.5},
+        post=fake_post,
+    )
+
+    assert prediction.errors == []
+    assert prediction.result == payload
+    assert calls == [
+        (
+            "http://api.test/predict",
+            {
+                "json": {"features": {"rooms": 2.0, "total_area_m2": 60.5}},
+                "timeout": 10.0,
+            },
+        )
+    ]
+
+
+def test_request_prediction_reports_api_errors() -> None:
+    def fake_post(_url: str, **_kwargs: Any) -> FakeResponse:
+        raise RuntimeError("API unavailable")
+
+    prediction = request_prediction("http://api.test", features={"rooms": 2.0}, post=fake_post)
+
+    assert prediction.result is None
+    assert prediction.errors == ["Could not request prediction: API unavailable"]

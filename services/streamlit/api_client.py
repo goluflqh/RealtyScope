@@ -14,6 +14,7 @@ class HttpResponse(Protocol):
 
 
 HttpGet = Callable[..., HttpResponse]
+HttpPost = Callable[..., HttpResponse]
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,12 @@ class DashboardData:
     stats: dict[str, Any] | None
     listings: list[dict[str, Any]]
     listings_total: int | None
+    errors: list[str]
+
+
+@dataclass(frozen=True)
+class PredictionData:
+    result: dict[str, Any] | None
     errors: list[str]
 
 
@@ -67,6 +74,26 @@ def fetch_dashboard_data(
     )
 
 
+def request_prediction(
+    api_base_url: str,
+    *,
+    features: dict[str, float],
+    post: HttpPost = requests.post,
+    timeout: float = 10.0,
+) -> PredictionData:
+    base_url = api_base_url.rstrip("/")
+    try:
+        result = _post_json_object(
+            post,
+            f"{base_url}/predict",
+            json_payload={"features": features},
+            timeout=timeout,
+        )
+    except Exception as exc:  # noqa: BLE001 - UI should show upstream API errors.
+        return PredictionData(result=None, errors=[f"Could not request prediction: {exc}"])
+    return PredictionData(result=result, errors=[])
+
+
 def _get_json_object(
     get: HttpGet,
     url: str,
@@ -78,6 +105,21 @@ def _get_json_object(
     if params is not None:
         kwargs["params"] = params
     response = get(url, **kwargs)
+    return _json_object_from_response(response)
+
+
+def _post_json_object(
+    post: HttpPost,
+    url: str,
+    *,
+    json_payload: dict[str, Any],
+    timeout: float,
+) -> dict[str, Any]:
+    response = post(url, json=json_payload, timeout=timeout)
+    return _json_object_from_response(response)
+
+
+def _json_object_from_response(response: HttpResponse) -> dict[str, Any]:
     response.raise_for_status()
     payload = response.json()
     if not isinstance(payload, dict):

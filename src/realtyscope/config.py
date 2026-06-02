@@ -27,6 +27,10 @@ class Settings(BaseSettings):
         alias="MLFLOW_TRACKING_URI",
     )
     active_model_name: str = Field(default="realtyscope-price-model", alias="ACTIVE_MODEL_NAME")
+    active_model_artifact_path: str = Field(
+        default="data/processed/models/phase4/baseline_ridge_v1.joblib",
+        alias="ACTIVE_MODEL_ARTIFACT_PATH",
+    )
 
     @property
     def database_url(self) -> str:
