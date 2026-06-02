@@ -14,7 +14,7 @@ Luồng chuẩn:
    - thư mục Chrome SSR `data/raw/domclick/YYYY-MM-DD-bulk/` đã có sẵn;
    - thư mục Chrome SSR mới được capture trong lúc chạy job; hoặc
    - file URL gồm các URL Domclick được phép truy cập để collector HTTP lấy snapshot có giới hạn.
-2. Capture hoặc dùng lại snapshot. Hướng Chrome SSR dùng Chrome profile thật và ghi compact JSON vào `YYYY-MM-DD-bulk/`. Nếu capture từ URL file, job phải dùng `--max-urls`, `--delay-seconds`, `--timeout-seconds`, kiểm tra `robots.txt`, phát hiện QRATOR, và tạo `manifest.json`.
+2. Capture hoặc dùng lại snapshot. Hướng Chrome SSR tự mở một session Chrome DevTools/CDP có giới hạn bằng profile Chrome thật và ghi compact JSON vào `YYYY-MM-DD-bulk/`. Nếu capture từ URL file, job phải dùng `--max-urls`, `--delay-seconds`, `--timeout-seconds`, kiểm tra `robots.txt`, phát hiện QRATOR, và tạo `manifest.json`.
 3. Chạy inspect bằng parser Pydantic hiện có của `realtyscope.database.real_data_ingestion`.
 4. Nếu số record inspect được nhỏ hơn `--min-records`, hoặc số listing normalized/sạch nhỏ hơn `--min-normalized-records`, job fail trước khi ghi database. Với wrapper scheduled, ngưỡng sạch là 1000 listing normalized.
 5. Chỉ ghi PostgreSQL qua SQLAlchemy khi có flag `--commit`.
@@ -31,7 +31,7 @@ Entrypoint:
 
 Dùng lệnh này khi snapshot của hôm nay chưa có và máy Windows có thể truy cập Domclick hợp lệ bằng Chrome. Scope mặc định là căn hộ bán ở Moscow: `aids=2299` (`Москва`), offset `0..1980`, bước `20`, tối đa 100 trang search đã render và khoảng 2000 ứng viên thô. Vùng capture lớn hơn là cố ý, vì batch scheduled phải còn ít nhất 1000 listing normalized/sạch sau khi parser xử lý.
 
-Lệnh dùng Chrome profile directory `Default`, tức directory thật của profile Chrome hiển thị là `Person 1` trên máy này. Lệnh không bypass QRATOR, CAPTCHA, login wall hoặc ranh giới truy cập khác; nếu gặp các trang đó thì job fail.
+Lệnh dùng Chrome profile directory `Default`, tức directory thật của profile Chrome hiển thị là `Person 1` trên máy này. Hướng scheduled tự mở session Chrome DevTools/CDP riêng, nên không phụ thuộc việc bạn đã mở sẵn tab `@chrome` trong Codex. Lệnh không bypass QRATOR, CAPTCHA, login wall hoặc ranh giới truy cập khác; nếu gặp các trang đó thì job fail.
 
 ```powershell
 $env:PYTHONIOENCODING="utf-8"

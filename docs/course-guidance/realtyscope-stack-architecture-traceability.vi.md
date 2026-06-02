@@ -32,7 +32,7 @@ Tài liệu này map phần kiến trúc DataPulse và stack công nghệ thầy
 | --- | --- | --- | --- | --- | --- |
 | HTTP requests | Bắt buộc: `requests`; nâng cao: `httpx`, `aiohttp`. | `urllib.request` cho collector ít dependency; `requests` cho Streamlit API client. | `Đã có` / `Thay thế có chủ đích` | `src/realtyscope/ingestion/domclick_snapshot_collector.py`; `services/streamlit/api_client.py`; `pyproject.toml`. | Collector chỉ cần HTTP cơ bản nên stdlib đủ và ít dependency hơn. `requests` vẫn dùng ở client API nơi tiện hơn. |
 | HTML parsing | Bắt buộc: BeautifulSoup4; nâng cao: `lxml`, Scrapy, parsel. | Luồng Domclick hiện parse JSON/SSR state, không scrape HTML tự do. | `Thay thế có chủ đích` | `src/realtyscope/ingestion/domclick_chrome_capture.py`; `src/realtyscope/ingestion/domclick.py`. | Domclick có SSR JSON sau render; lấy dữ liệu có cấu trúc này ổn định hơn parse HTML. BeautifulSoup chỉ nên thêm nếu source sau thật sự cần. |
-| Browser automation | Gợi ý: Selenium; nâng cao: Playwright/Puppeteer. | Chrome headless DOM dump trực tiếp với profile thật `Default`. | `Thay thế có chủ đích` | `src/realtyscope/ingestion/domclick_chrome_capture.py`; `docs/operations/domclick-scheduled-batch-ingestion.md`; `tests/test_domclick_chrome_capture.py`. | Ít dependency hơn Selenium/Playwright nhưng vẫn capture được rendered public search state qua Chrome. Có giới hạn, có test, có docs vận hành. |
+| Browser automation | Gợi ý: Selenium; nâng cao: Playwright/Puppeteer. | Chrome DevTools/CDP-assisted SSR capture với profile thật `Default`; `--dump-dom` chỉ còn là fallback một lần. | `Thay thế có chủ đích` | `src/realtyscope/ingestion/domclick_chrome_capture.py`; `docs/operations/domclick-scheduled-batch-ingestion.md`; `tests/test_domclick_chrome_capture.py`. | Ít dependency hơn Selenium/Playwright, đồng thời không phụ thuộc việc user mở sẵn tab Chrome trong Codex. Có giới hạn, có test, có docs vận hành. |
 | Task scheduler | Bắt buộc: APScheduler; thay thế: Celery Beat, cron, Airflow. | Windows Task Scheduler cho máy local; cron/systemd examples cho Linux. | `Thay thế có chủ đích` | `scripts/run_domclick_scheduled_batch.ps1`; `docs/operations/domclick-scheduled-batch-ingestion.md`; scheduled task `RealtyScope Domclick Scheduled Batch`. | OS scheduler hợp hơn cho daily bounded batch: chạy, fail rõ, rồi thoát. APScheduler có thể xét lại nếu sau này có ingestor service chạy liên tục. |
 | Relational DB | PostgreSQL; SQLite chỉ để dev. | PostgreSQL cho runtime thật; SQLite cho test/Alembic smoke check hẹp. | `Đã có` | `docker-compose.yml`; `src/realtyscope/config.py`; `tests/*database*`. | Đúng hướng dẫn. |
 | ORM | SQLAlchemy 2.0. | SQLAlchemy 2.0 typed models. | `Đã có` | `src/realtyscope/database/base.py`; `src/realtyscope/database/models.py`; `pyproject.toml`. | Đúng hướng dẫn. |
@@ -50,12 +50,12 @@ Tài liệu này map phần kiến trúc DataPulse và stack công nghệ thầy
 
 RealtyScope hiện thay một vài công nghệ thầy gợi ý vì cách thay thế đơn giản hơn hoặc hợp vận hành hơn:
 
-- Chrome headless DOM dump thay Selenium/Playwright: ít dependency hơn, dùng Chrome profile local thật, đủ cho Domclick SSR capture.
+- Chrome DevTools/CDP SSR capture thay Selenium/Playwright: ít dependency hơn, dùng Chrome profile local thật, và ổn định hơn `--dump-dom` thuần cho Domclick SSR capture.
 - Windows Task Scheduler / cron / systemd thay APScheduler: hợp hơn cho daily bounded batch cần chạy, fail rõ, rồi thoát.
 - `uv.lock` thay `requirements.txt`: reproducibility tốt hơn, vẫn phù hợp pip/uv workflow.
 - Parse SSR JSON thay BeautifulSoup HTML scraping: có cấu trúc hơn và ít brittle hơn với source Domclick hiện tại.
 
-Những thay thế này nên tiếp tục được document. Nếu phase sau có ingestor service chạy liên tục hoặc source mới cần interaction DOM phức tạp hơn `--dump-dom`, có thể xét lại APScheduler hoặc Playwright/Selenium.
+Những thay thế này nên tiếp tục được document. Nếu phase sau có ingestor service chạy liên tục hoặc source mới cần interaction DOM phức tạp hơn việc trích SSR, có thể xét lại APScheduler hoặc Playwright/Selenium.
 
 ## Tín hiệu sẵn sàng của Phase 3
 

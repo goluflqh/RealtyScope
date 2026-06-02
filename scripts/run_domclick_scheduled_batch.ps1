@@ -86,9 +86,13 @@ function Resolve-DomclickSourceArgs {
             $CaptureArgs += @("--chrome-user-data-dir", $ChromeUserDataDir)
         }
 
-        & $Python @CaptureArgs
-        if ($LASTEXITCODE -ne 0) {
-            throw "Domclick Chrome capture failed with exit code $LASTEXITCODE"
+        $CaptureOutput = & $Python @CaptureArgs
+        $CaptureExitCode = $LASTEXITCODE
+        if ($CaptureOutput) {
+            $CaptureOutput | ForEach-Object { Write-Host $_ }
+        }
+        if ($CaptureExitCode -ne 0) {
+            throw "Domclick Chrome capture failed with exit code $CaptureExitCode"
         }
         if (Test-Path $BulkDir -PathType Container) {
             return @("--source-path", $BulkDir)

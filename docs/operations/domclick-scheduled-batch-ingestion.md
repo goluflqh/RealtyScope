@@ -10,7 +10,7 @@ This path is a scheduled batch ingestor, not a continuously running scraper. Eac
 Flow:
 
 1. Prepare or reuse one input source: an existing `data/raw/domclick/YYYY-MM-DD/` snapshot directory, an existing `data/raw/domclick/YYYY-MM-DD-bulk/` Chrome SSR directory, a newly captured Chrome SSR directory, or a URL file with allowed Domclick URLs for the bounded HTTP collector.
-2. Capture or reuse snapshots. The Chrome SSR path uses a real Chrome profile and writes compact JSON under `YYYY-MM-DD-bulk/`. URL-file capture uses explicit `--max-urls`, `--delay-seconds`, `--timeout-seconds`, robots.txt checks, QRATOR detection, and `manifest.json`.
+2. Capture or reuse snapshots. The Chrome SSR path starts a bounded Chrome DevTools/CDP session with the real Chrome profile and writes compact JSON under `YYYY-MM-DD-bulk/`. URL-file capture uses explicit `--max-urls`, `--delay-seconds`, `--timeout-seconds`, robots.txt checks, QRATOR detection, and `manifest.json`.
 3. Run the Pydantic inspect gate through `realtyscope.database.real_data_ingestion` parser functions.
 4. Fail before any database write when `records_seen < --min-records` or `normalized_listings < --min-normalized-records`. For the scheduled wrapper, the clean-data gate is 1000 normalized listings.
 5. Commit through SQLAlchemy only when `--commit` is present.
@@ -27,7 +27,7 @@ Entrypoint:
 
 Use this command when today's raw snapshot is missing and the Windows workstation can legitimately render Domclick with Chrome. The default scope is Moscow sale apartments: `aids=2299` (`Москва`), offsets `0..1980`, step `20`, up to 100 rendered search pages and roughly 2000 raw candidates. The larger capture window is intentional because the scheduled ingest must finish with at least 1000 normalized clean listings after parsing.
 
-The command uses the workstation Chrome profile directory `Default`, which is the actual directory for Chrome's visible `Person 1` profile on this machine. It does not bypass QRATOR, CAPTCHA, login walls, or other access boundaries; those pages are treated as failures.
+The command uses the workstation Chrome profile directory `Default`, which is the actual directory for Chrome's visible `Person 1` profile on this machine. The scheduled path starts its own Chrome DevTools/CDP capture session, so it does not depend on a Codex `@chrome` tab already being open. It does not bypass QRATOR, CAPTCHA, login walls, or other access boundaries; those pages are treated as failures.
 
 ```powershell
 $env:PYTHONIOENCODING="utf-8"

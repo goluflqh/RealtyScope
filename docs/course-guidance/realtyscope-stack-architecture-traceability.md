@@ -32,7 +32,7 @@ This document maps the teacher's recommended DataPulse architecture and stack gu
 | --- | --- | --- | --- | --- | --- |
 | HTTP requests | Required: `requests`; advanced: `httpx`, `aiohttp`. | `urllib.request` for low-dependency collector; `requests` for Streamlit API client. | `Implemented` / `Substituted` | `src/realtyscope/ingestion/domclick_snapshot_collector.py`; `services/streamlit/api_client.py`; `pyproject.toml`. | For collector internals, stdlib is enough and reduces dependencies. `requests` is used where ergonomic for API calls. |
 | HTML parsing | Required: BeautifulSoup4; advanced: `lxml`, Scrapy, parsel. | Current Domclick path primarily parses JSON/SSR state, not arbitrary HTML. | `Substituted` | `src/realtyscope/ingestion/domclick_chrome_capture.py`; `src/realtyscope/ingestion/domclick.py`. | Domclick exposes usable SSR JSON after render; extracting structured JSON is less brittle than HTML scraping. BeautifulSoup can be added only if a future source needs it. |
-| Browser automation | Suggested: Selenium; advanced: Playwright/Puppeteer. | Direct Chrome headless DOM dump with the real `Default` profile. | `Substituted` | `src/realtyscope/ingestion/domclick_chrome_capture.py`; `docs/operations/domclick-scheduled-batch-ingestion.md`; `tests/test_domclick_chrome_capture.py`. | This avoids adding Selenium/Playwright dependency while still capturing rendered public search state through Chrome. It is bounded, tested, and operationally documented. |
+| Browser automation | Suggested: Selenium; advanced: Playwright/Puppeteer. | Chrome DevTools/CDP-assisted SSR capture with the real `Default` profile; legacy `--dump-dom` remains a one-off fallback. | `Substituted` | `src/realtyscope/ingestion/domclick_chrome_capture.py`; `docs/operations/domclick-scheduled-batch-ingestion.md`; `tests/test_domclick_chrome_capture.py`. | This avoids a Selenium/Playwright dependency while making scheduled capture independent from a manually opened Codex Chrome tab. It is bounded, tested, and operationally documented. |
 | Task scheduler | Required: APScheduler; alternatives: Celery Beat, cron, Airflow. | Windows Task Scheduler for local capture; cron/systemd examples for Linux. | `Substituted` | `scripts/run_domclick_scheduled_batch.ps1`; `docs/operations/domclick-scheduled-batch-ingestion.md`; scheduled task `RealtyScope Domclick Scheduled Batch`. | External OS scheduler is better for a daily bounded batch than a permanently running Python process in this phase. APScheduler can be reconsidered if an ingestor service becomes long-running. |
 | Relational DB | PostgreSQL; SQLite for development only. | PostgreSQL for real runtime; SQLite for narrow tests/Alembic smoke checks. | `Implemented` | `docker-compose.yml`; `src/realtyscope/config.py`; `tests/*database*`. | Aligned with course guidance. |
 | ORM | SQLAlchemy 2.0. | SQLAlchemy 2.0 typed models. | `Implemented` | `src/realtyscope/database/base.py`; `src/realtyscope/database/models.py`; `pyproject.toml`. | Aligned with course guidance. |
@@ -50,12 +50,12 @@ This document maps the teacher's recommended DataPulse architecture and stack gu
 
 RealtyScope currently substitutes a few teacher-suggested technologies because the replacement is simpler or more operationally suitable:
 
-- Chrome headless DOM dump instead of Selenium/Playwright: fewer dependencies, uses the real local Chrome profile, and is enough for Domclick SSR capture.
+- Chrome DevTools/CDP SSR capture instead of Selenium/Playwright: fewer dependencies, uses the real local Chrome profile, and is more reliable than raw `--dump-dom` for Domclick SSR capture.
 - Windows Task Scheduler / cron / systemd instead of APScheduler: better for a daily bounded batch that should start, fail loudly, and exit.
 - `uv.lock` instead of `requirements.txt`: stronger reproducibility while still compatible with pip/uv workflows.
 - SSR JSON parsing instead of BeautifulSoup HTML scraping: more structured and less brittle for the current Domclick source.
 
-These substitutions should remain documented. If a future phase adds a continuously running ingestor service or a source that requires DOM interactions beyond `--dump-dom`, APScheduler or Playwright/Selenium can be reconsidered.
+These substitutions should remain documented. If a future phase adds a continuously running ingestor service or a source that requires rich DOM interactions beyond SSR extraction, APScheduler or Playwright/Selenium can be reconsidered.
 
 ## Phase 3 Readiness Signal
 

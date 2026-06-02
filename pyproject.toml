@@ -27,6 +27,7 @@ data = [
   "psycopg[binary]>=3.1",
   "alembic>=1.13",
   "pandas>=2.2",
+  "websockets>=12",
 ]
 ml = [
   "scikit-learn>=1.4",

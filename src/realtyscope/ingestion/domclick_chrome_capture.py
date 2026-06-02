@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import hashlib
 import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import time
+import urllib.request
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import suppress
+from contextlib import nullcontext, suppress
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -39,6 +42,16 @@ DEFAULT_MAX_PAGES = 100
 DEFAULT_DELAY_SECONDS = 3.0
 DEFAULT_TIMEOUT_SECONDS = 90.0
 DEFAULT_VIRTUAL_TIME_BUDGET_MS = 10_000
+DOMCLICK_BLOCKED_MARKERS = (
+    "captcha",
+    "403 | домклик",
+    "похоже, ваш запрос выглядит необычно",
+    "капча",
+    "подтвердите, что вы не робот",
+    "авторизуйтесь",
+    "войдите в аккаунт",
+    "login wall",
+)
 
 
 @dataclass(frozen=True)
@@ -120,20 +133,19 @@ def capture_domclick_chrome_ssr_snapshots(
 
     resolved_chrome_path: Path | None = chrome_path
     resolved_user_data_dir: Path | None = chrome_user_data_dir
+    devtools_dumper: ChromeDevToolsDomDumper | None = None
     if capture_page_dom is None:
         resolved_chrome_path = _resolve_chrome_path(chrome_path)
         resolved_user_data_dir = _resolve_chrome_user_data_dir(chrome_user_data_dir)
         _validate_chrome_profile(resolved_user_data_dir, chrome_profile_directory)
-
-        def capture_page_dom(url: str) -> str:
-            return dump_dom_with_chrome(
-                url,
-                chrome_path=resolved_chrome_path,
-                chrome_user_data_dir=resolved_user_data_dir,
-                chrome_profile_directory=chrome_profile_directory,
-                timeout_seconds=timeout_seconds,
-                virtual_time_budget_ms=virtual_time_budget_ms,
-            )
+        devtools_dumper = ChromeDevToolsDomDumper(
+            chrome_path=resolved_chrome_path,
+            chrome_user_data_dir=resolved_user_data_dir,
+            chrome_profile_directory=chrome_profile_directory,
+            timeout_seconds=timeout_seconds,
+            virtual_time_budget_ms=virtual_time_budget_ms,
+        )
+        capture_page_dom = devtools_dumper.dump_dom
 
     collection_date = collection_date or datetime.now(UTC).date()
     snapshot_dir = output_root / f"{collection_date.isoformat()}-bulk"
@@ -143,36 +155,38 @@ def capture_domclick_chrome_ssr_snapshots(
 
     entries: list[dict[str, object]] = []
     total_records_seen = 0
-    for index, (offset, url) in enumerate(urls, start=1):
-        page_dom = capture_page_dom(url)
-        _raise_if_blocked_page(page_dom, url)
-        payload = extract_domclick_ssr_state_payload(page_dom)
-        if payload is None:
-            raise ValueError(f"Domclick page does not contain parseable SSR state: {url}")
+    capture_context = devtools_dumper if devtools_dumper is not None else nullcontext()
+    with capture_context:
+        for index, (offset, url) in enumerate(urls, start=1):
+            page_dom = capture_page_dom(url)
+            _raise_if_blocked_page(page_dom, url)
+            payload = extract_domclick_ssr_state_payload(page_dom)
+            if payload is None:
+                raise ValueError(f"Domclick page does not contain parseable SSR state: {url}")
 
-        records_seen = _count_records_seen(payload, source_url=url)
-        total_records_seen += records_seen
-        relative_path = Path("payloads") / f"search-offset-{offset:06d}.json"
-        compact_text = canonical_json(payload) + "\n"
-        output_path = snapshot_dir / relative_path
-        output_path.write_text(compact_text, encoding="utf-8")
-        content_bytes = compact_text.encode("utf-8")
-        entries.append(
-            {
-                "source_url": url,
-                "source_type": "domclick_json",
-                "path": relative_path.as_posix(),
-                "offset": offset,
-                "fetched_at": _utc_now_iso(),
-                "capture_status": "rendered",
-                "records_seen": records_seen,
-                "content_bytes": len(content_bytes),
-                "content_sha256": hashlib.sha256(content_bytes).hexdigest(),
-            }
-        )
+            records_seen = _count_records_seen(payload, source_url=url)
+            total_records_seen += records_seen
+            relative_path = Path("payloads") / f"search-offset-{offset:06d}.json"
+            compact_text = canonical_json(payload) + "\n"
+            output_path = snapshot_dir / relative_path
+            output_path.write_text(compact_text, encoding="utf-8")
+            content_bytes = compact_text.encode("utf-8")
+            entries.append(
+                {
+                    "source_url": url,
+                    "source_type": "domclick_json",
+                    "path": relative_path.as_posix(),
+                    "offset": offset,
+                    "fetched_at": _utc_now_iso(),
+                    "capture_status": "rendered",
+                    "records_seen": records_seen,
+                    "content_bytes": len(content_bytes),
+                    "content_sha256": hashlib.sha256(content_bytes).hexdigest(),
+                }
+            )
 
-        if index < len(urls) and delay_seconds > 0:
-            sleep(delay_seconds)
+            if index < len(urls) and delay_seconds > 0:
+                sleep(delay_seconds)
 
     if total_records_seen < min_records:
         raise RuntimeError(
@@ -247,8 +261,310 @@ def dump_dom_with_chrome(
         raise RuntimeError(f"Chrome DOM dump failed for {url!r}: {stderr}")
     page_dom = completed.stdout.strip()
     if not page_dom:
-        raise RuntimeError(f"Chrome DOM dump returned an empty document for {url!r}")
+        try:
+            return dump_dom_with_chrome_devtools(
+                url=url,
+                chrome_path=chrome_path,
+                chrome_user_data_dir=chrome_user_data_dir,
+                chrome_profile_directory=chrome_profile_directory,
+                timeout_seconds=timeout_seconds,
+                virtual_time_budget_ms=virtual_time_budget_ms,
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Chrome DOM dump returned an empty document for {url!r}; "
+                f"DevTools fallback failed: {exc}"
+            ) from exc
     return page_dom
+
+
+def dump_dom_with_chrome_devtools(
+    *,
+    url: str,
+    chrome_path: Path,
+    chrome_user_data_dir: Path,
+    chrome_profile_directory: str,
+    timeout_seconds: float,
+    virtual_time_budget_ms: int,
+) -> str:
+    with ChromeDevToolsDomDumper(
+        chrome_path=chrome_path,
+        chrome_user_data_dir=chrome_user_data_dir,
+        chrome_profile_directory=chrome_profile_directory,
+        timeout_seconds=timeout_seconds,
+        virtual_time_budget_ms=virtual_time_budget_ms,
+    ) as dumper:
+        return dumper.dump_dom(url)
+
+
+class ChromeDevToolsDomDumper:
+    def __init__(
+        self,
+        *,
+        chrome_path: Path,
+        chrome_user_data_dir: Path,
+        chrome_profile_directory: str,
+        timeout_seconds: float,
+        virtual_time_budget_ms: int,
+    ) -> None:
+        self.chrome_path = chrome_path
+        self.chrome_user_data_dir = chrome_user_data_dir
+        self.chrome_profile_directory = chrome_profile_directory
+        self.timeout_seconds = timeout_seconds
+        self.virtual_time_budget_ms = virtual_time_budget_ms
+        self.port: int | None = None
+        self.browser_ws_url: str | None = None
+        self.process: subprocess.Popen[bytes] | None = None
+
+    def __enter__(self) -> ChromeDevToolsDomDumper:
+        self.start()
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.close()
+
+    def start(self) -> None:
+        if self.port is not None:
+            return
+        self.port = _reserve_local_port()
+        command = [
+            str(self.chrome_path),
+            f"--user-data-dir={self.chrome_user_data_dir}",
+            f"--profile-directory={self.chrome_profile_directory}",
+            f"--remote-debugging-port={self.port}",
+            "--remote-allow-origins=*",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--window-position=-32000,-32000",
+            "--window-size=1280,900",
+            "about:blank",
+        ]
+        self.process = _start_chrome_devtools_browser(command)
+        version = asyncio.run(
+            _wait_for_devtools_json(self.port, "/json/version", self.timeout_seconds)
+        )
+        self.browser_ws_url = _string_value(version.get("webSocketDebuggerUrl"))
+
+    def dump_dom(self, url: str) -> str:
+        if self.port is None:
+            self.start()
+        if self.port is None:
+            raise RuntimeError("Chrome DevTools was not started")
+        return asyncio.run(
+            _dump_dom_from_devtools_page(
+                port=self.port,
+                url=url,
+                timeout_seconds=self.timeout_seconds,
+                virtual_time_budget_ms=self.virtual_time_budget_ms,
+            )
+        )
+
+    def close(self) -> None:
+        if self.browser_ws_url:
+            asyncio.run(_close_devtools_browser(self.browser_ws_url))
+        if self.process is not None and self.process.poll() is None:
+            self.process.terminate()
+            with suppress(subprocess.TimeoutExpired):
+                self.process.wait(timeout=5)
+        if self.process is not None and self.process.poll() is None:  # pragma: no cover
+            self.process.kill()
+        if os.name == "nt" and self.port is not None:
+            _stop_windows_chrome_devtools_processes(self.port)
+        self.port = None
+        self.browser_ws_url = None
+        self.process = None
+
+
+async def _dump_dom_from_devtools_page(
+    *,
+    port: int,
+    url: str,
+    timeout_seconds: float,
+    virtual_time_budget_ms: int,
+) -> str:
+    try:
+        import websockets
+    except ImportError as exc:  # pragma: no cover - depends on installed extras.
+        raise RuntimeError("websockets is required for Chrome DevTools fallback") from exc
+
+    pages = await _wait_for_devtools_page_list(port, timeout_seconds)
+    page = next((item for item in pages if item.get("type") == "page"), None)
+    if page is None:
+        raise RuntimeError("Chrome DevTools did not expose a page target")
+    page_ws_url = _string_value(page.get("webSocketDebuggerUrl"))
+    if page_ws_url is None:
+        raise RuntimeError("Chrome DevTools page target has no websocket URL")
+
+    async with websockets.connect(page_ws_url, open_timeout=5, max_size=None) as websocket:
+        next_id = 0
+
+        async def send(method: str, params: Mapping[str, object] | None = None) -> dict[str, Any]:
+            nonlocal next_id
+            next_id += 1
+            message_id = next_id
+            await websocket.send(
+                json.dumps({"id": message_id, "method": method, "params": params or {}})
+            )
+            while True:
+                response = json.loads(await websocket.recv())
+                if response.get("id") == message_id:
+                    if "error" in response:
+                        raise RuntimeError(f"Chrome DevTools {method} failed: {response['error']}")
+                    return response
+
+        await send("Page.enable")
+        await send("Runtime.enable")
+        await send("Page.navigate", {"url": url})
+
+        deadline = time.monotonic() + timeout_seconds
+        render_seconds = max(1.0, min(virtual_time_budget_ms / 1000.0, timeout_seconds))
+        render_deadline = time.monotonic() + render_seconds
+        latest_html = ""
+        while time.monotonic() < deadline:
+            ssr_result = await send(
+                "Runtime.evaluate",
+                {
+                    "expression": (
+                        "(() => { const state = window.__SSR_STATE__; "
+                        "return state == null ? null : JSON.stringify(state); })()"
+                    ),
+                    "returnByValue": True,
+                },
+            )
+            ssr_json = _devtools_value(ssr_result).strip()
+            if ssr_json:
+                return f"<html><script>window.__SSR_STATE__={ssr_json};</script></html>"
+
+            result = await send(
+                "Runtime.evaluate",
+                {
+                    "expression": "document.documentElement.outerHTML",
+                    "returnByValue": True,
+                },
+            )
+            latest_html = _devtools_value(result).strip()
+            if latest_html and extract_domclick_ssr_state_payload(latest_html) is not None:
+                return latest_html
+            if latest_html and _page_has_blocked_marker(latest_html):
+                return latest_html
+            if (
+                latest_html
+                and not url.startswith("https://domclick.ru/search?")
+                and time.monotonic() >= render_deadline
+            ):
+                return latest_html
+            await asyncio.sleep(0.5)
+        if latest_html:
+            return latest_html
+        raise RuntimeError("Chrome DevTools returned an empty document")
+
+
+def _start_chrome_devtools_browser(command: Sequence[str]) -> subprocess.Popen[bytes] | None:
+    if os.name != "nt":
+        return subprocess.Popen(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    powershell = shutil.which("powershell.exe") or "powershell.exe"
+    ps_args = ",".join(_powershell_single_quote(argument) for argument in command[1:])
+    ps_command = (
+        "Start-Process -FilePath "
+        f"{_powershell_single_quote(command[0])} "
+        f"-ArgumentList @({ps_args}) -WindowStyle Hidden"
+    )
+    completed = subprocess.run(
+        [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_command],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if completed.returncode != 0:
+        stderr = completed.stderr.strip() or completed.stdout.strip()
+        raise RuntimeError(f"PowerShell Start-Process failed for Chrome: {stderr[:1000]}")
+    return None
+
+
+def _powershell_single_quote(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _stop_windows_chrome_devtools_processes(port: int) -> None:
+    escaped = f"remote-debugging-port={port}"
+    ps_command = (
+        "Get-CimInstance Win32_Process -Filter \"name = 'chrome.exe'\" | "
+        f"Where-Object {{ $_.CommandLine -like '*{escaped}*' }} | "
+        "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+    )
+    with suppress(Exception):
+        subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_command],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+
+
+def _reserve_local_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+async def _wait_for_devtools_json(port: int, path: str, timeout_seconds: float) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout_seconds
+    last_error: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=2) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            if isinstance(payload, dict):
+                return payload
+            raise RuntimeError(f"Chrome DevTools {path} did not return an object")
+        except Exception as exc:  # noqa: BLE001 - polling endpoint readiness.
+            last_error = exc
+            await asyncio.sleep(0.2)
+    raise RuntimeError(f"Chrome DevTools endpoint did not become ready: {last_error}")
+
+
+async def _wait_for_devtools_page_list(port: int, timeout_seconds: float) -> list[dict[str, Any]]:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        with suppress(Exception):
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/json/list", timeout=2
+            ) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            if isinstance(payload, list):
+                return [item for item in payload if isinstance(item, dict)]
+        await asyncio.sleep(0.2)
+    raise RuntimeError("Chrome DevTools page list did not become ready")
+
+
+async def _close_devtools_browser(browser_ws_url: str) -> None:
+    with suppress(Exception):
+        import websockets
+
+        async with websockets.connect(browser_ws_url, open_timeout=5) as websocket:
+            await websocket.send(json.dumps({"id": 1, "method": "Browser.close", "params": {}}))
+
+
+def _devtools_value(response: Mapping[str, object]) -> str:
+    result = response.get("result")
+    if not isinstance(result, Mapping):
+        return ""
+    nested = result.get("result")
+    if not isinstance(nested, Mapping):
+        return ""
+    value = nested.get("value")
+    return value if isinstance(value, str) else ""
+
+
+def _string_value(value: object) -> str | None:
+    return value if isinstance(value, str) else None
 
 
 def extract_domclick_ssr_state_payload(page_text: str) -> dict[str, Any] | list[Any] | None:
@@ -323,21 +639,17 @@ def _validate_domclick_search_url(url: str) -> None:
 
 
 def _raise_if_blocked_page(page_dom: str, url: str) -> None:
-    lowered = page_dom.lower()
     if is_qrator_challenge(page_dom):
         raise DomclickAccessBlocked(f"Domclick returned a QRATOR challenge for {url!r}")
-    blocked_markers = (
-        "captcha",
-        "капча",
-        "подтвердите, что вы не робот",
-        "авторизуйтесь",
-        "войдите в аккаунт",
-        "login wall",
-    )
-    if any(marker in lowered for marker in blocked_markers):
+    if _page_has_blocked_marker(page_dom):
         raise DomclickAccessBlocked(
-            f"Domclick browser capture hit a CAPTCHA/login boundary for {url!r}"
+            f"Domclick browser capture hit a CAPTCHA/login/unusual request boundary for {url!r}"
         )
+
+
+def _page_has_blocked_marker(page_dom: str) -> bool:
+    lowered = page_dom.lower()
+    return any(marker in lowered for marker in DOMCLICK_BLOCKED_MARKERS)
 
 
 def _ensure_fresh_snapshot_dir(snapshot_dir: Path) -> None:
