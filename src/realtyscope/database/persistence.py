@@ -215,7 +215,11 @@ def _create_listing_observation(
     normalized: NormalizedListing,
 ) -> bool:
     existing_id = session.scalar(
-        select(ListingObservation.id).where(ListingObservation.raw_listing_id == raw_record.id)
+        select(ListingObservation.id).where(
+            ListingObservation.source_id == source_id,
+            ListingObservation.source_listing_id == normalized.source_listing_id,
+            ListingObservation.observed_at == normalized.observed_at,
+        )
     )
     if existing_id is not None:
         return False

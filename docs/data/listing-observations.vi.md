@@ -11,7 +11,7 @@ RealtyScope bây giờ tách rõ trạng thái mới nhất của listing khỏi
 | --- | --- | --- | --- |
 | Raw source snapshot | `raw_listings` | Lưu payload gốc từ nguồn và `payload_hash` để audit/replay. | Chỉ insert một lần cho mỗi `(source_id, payload_hash)`. Nếu replay đúng payload cũ thì dùng lại row cũ. |
 | Canonical latest listing | `listings` + `listing_source_links` | Lưu trạng thái normalized mới nhất của listing: giá hiện tại, diện tích, số phòng, tầng, tọa độ, quality flags. | Update khi persist normalized record mới hơn cho cùng `(source_id, source_listing_id)`. |
-| Historical observation | `listing_observations` | Lưu snapshot normalized đã quan sát từ một raw listing: thời điểm quan sát, giá, giá/m2, diện tích, số phòng, tầng, trạng thái active/status. | Chỉ insert một lần cho mỗi `raw_listing_id`. Replay payload y hệt không tạo observation trùng. Payload nguồn thay đổi thì có raw row mới và observation mới. |
+| Historical observation | `listing_observations` | Lưu snapshot normalized đã quan sát từ một raw listing: thời điểm quan sát, giá, giá/m2, diện tích, số phòng, tầng, trạng thái active/status. | Chỉ insert một lần cho mỗi `(source_id, source_listing_id, observed_at)`. Replay cùng timestamp không tạo observation trùng. Timestamp quan sát mới có chủ ý vẫn có thể tạo observation mới dù raw payload row được reuse. |
 
 ## Vì sao cần cả canonical và observation?
 
@@ -30,7 +30,7 @@ Mỗi row Phase 3.7 trong `listing_observations` gồm:
 
 - `listing_id`: FK tới canonical listing;
 - `source_id` và `source_listing_id`: định danh nguồn để group và so sánh theo source;
-- `raw_listing_id`: FK tới raw snapshot và cũng là khóa dedup;
+- `raw_listing_id`: FK tới raw snapshot để audit/replay;
 - `observed_at`: thời điểm quan sát từ normalized listing;
 - `price_rub` và `price_per_m2`: metric chính cho lịch sử giá;
 - `total_area_m2`, `rooms`, `floor`, `floors_total`: snapshot các thuộc tính listing có thể ảnh hưởng phân tích;
@@ -41,7 +41,7 @@ Indexes phục vụ các truy vấn sau:
 - `ix_listing_observations_listing_observed`: xem lịch sử một listing theo thời gian;
 - `ix_listing_observations_source_listing_observed`: xem lịch sử theo source listing và so sánh giữa nguồn.
 
-Unique constraint `uq_listing_observations_raw_listing_id` ngăn tạo observation trùng khi replay cùng raw payload.
+Unique constraint `uq_listing_observations_source_listing_observed` ngăn tạo observation trùng cho cùng source listing tại cùng timestamp quan sát. Constraint này cố ý cho phép raw payload lặp lại tạo observation muộn hơn khi scheduled run ghi `observed_at` mới.
 
 ## Hành vi persistence
 
@@ -49,12 +49,13 @@ Khi persist một `IngestionBatch`:
 
 1. `raw_listings` được insert hoặc reuse theo `payload_hash`.
 2. `listings` được create/update theo `(source_id, source_listing_id)` thông qua `listing_source_links`.
-3. `listing_observations` chỉ được insert nếu raw snapshot đó chưa từng tạo observation.
+3. `listing_observations` chỉ được insert nếu source listing đó chưa từng tạo observation tại cùng `observed_at`.
 
 Kết quả mong đợi:
 
 - Listing xuất hiện lần đầu: một raw row, một canonical listing row, một observation row.
-- Replay cùng payload: raw row được reuse, canonical listing được refresh, không tạo observation trùng.
+- Replay cùng payload tại cùng `observed_at`: raw row được reuse, canonical listing được refresh, không tạo observation trùng.
+- Replay cùng payload tại `observed_at` mới có chủ ý: raw row được reuse, canonical listing được refresh, tạo observation row mới.
 - Cùng source listing nhưng giá hoặc payload quan trọng thay đổi: raw row mới, canonical listing update sang giá mới nhất, observation row mới.
 
 ## Ranh giới hiện tại

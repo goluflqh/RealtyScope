@@ -28,8 +28,8 @@ def _session() -> Session:
     return Session(engine)
 
 
-def _batch() -> IngestionBatch:
-    observed_at = datetime(2026, 5, 31, 10, 0, tzinfo=UTC)
+def _batch(observed_at: datetime | None = None) -> IngestionBatch:
+    observed_at = observed_at or datetime(2026, 5, 31, 10, 0, tzinfo=UTC)
     return IngestionBatch(
         raw_listings=(
             RawListing(
@@ -100,6 +100,40 @@ def test_persist_ingestion_batch_is_idempotent_for_same_raw_payload() -> None:
         assert len(session.scalars(select(RawListingRecord)).all()) == 1
         assert len(session.scalars(select(Listing)).all()) == 1
         assert len(session.scalars(select(ListingObservation)).all()) == 1
+
+
+def test_persist_ingestion_batch_creates_later_observation_for_reused_raw_payload() -> None:
+    first_observed_at = datetime(2026, 6, 1, 0, 0, tzinfo=UTC)
+    second_observed_at = datetime(2026, 6, 2, 0, 0, tzinfo=UTC)
+
+    with _session() as session:
+        persist_ingestion_batch(
+            session,
+            _batch(observed_at=first_observed_at),
+            source_name="domclick",
+        )
+        second = persist_ingestion_batch(
+            session,
+            _batch(observed_at=second_observed_at),
+            source_name="domclick",
+        )
+        session.commit()
+
+        raw_records = session.scalars(select(RawListingRecord)).all()
+        observations = session.scalars(
+            select(ListingObservation).order_by(ListingObservation.observed_at)
+        ).all()
+
+        assert second.raw_inserted == 0
+        assert second.raw_reused == 1
+        assert second.observations_inserted == 1
+        assert len(raw_records) == 1
+        assert len(observations) == 2
+        assert [_as_utc(observation.observed_at) for observation in observations] == [
+            first_observed_at,
+            second_observed_at,
+        ]
+        assert {observation.raw_listing_id for observation in observations} == {raw_records[0].id}
 
 
 def test_persist_ingestion_batch_updates_listing_and_latest_raw_link() -> None:
@@ -192,3 +226,9 @@ def test_persist_ingestion_batch_marks_missing_coordinates_not_ml_ready() -> Non
     assert listing.has_coordinates is False
     assert listing.is_ml_ready is False
     assert listing.cleaning_status == "needs_coordinates"
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value

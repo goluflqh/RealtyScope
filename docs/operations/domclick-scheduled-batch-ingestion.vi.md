@@ -121,7 +121,7 @@ Sau đó commit một batch hữu hạn:
   --json
 ```
 
-Persistence hiện tại có tính idempotent cho raw payload lặp lại. Nếu chạy lại cùng dữ liệu, report nên cho thấy raw row được reuse và listing được update, không tạo trùng canonical listing hoặc observation. Nếu Domclick trả cùng ranking search mỗi ngày, bảng canonical `listings` chủ yếu sẽ refresh cùng một lát cắt. Lịch sử `listing_observations` chỉ tăng khi raw snapshot thay đổi đủ để tạo raw row mới, ví dụ giá thay đổi cho cùng `source_listing_id`.
+Persistence hiện tại vẫn idempotent cho raw payload lặp lại, nhưng observation time được xử lý có chủ ý. Nếu chạy lại cùng dữ liệu, report nên cho thấy raw row được reuse và canonical listing được update; tuy vậy một scheduled run với timestamp mới vẫn có thể tạo row mới trong `listing_observations` cho cùng `source_listing_id`. Nhờ vậy daily run vẫn xây được evidence trend ngay cả khi Domclick trả cùng ranking search và cùng payload hash. Reprocess cùng source listing tại cùng `observed_at` vẫn idempotent và không tạo observation trùng.
 
 ## Status Và Report
 

@@ -94,9 +94,7 @@ class RawListingRecord(TimestampMixin, Base):
     source_link: Mapped[ListingSourceLink | None] = relationship(
         back_populates="raw_listing", uselist=False
     )
-    observation: Mapped[ListingObservation | None] = relationship(
-        back_populates="raw_listing", uselist=False
-    )
+    observations: Mapped[list[ListingObservation]] = relationship(back_populates="raw_listing")
 
 
 class Listing(TimestampMixin, Base):
@@ -165,7 +163,12 @@ class ListingSourceLink(TimestampMixin, Base):
 class ListingObservation(TimestampMixin, Base):
     __tablename__ = "listing_observations"
     __table_args__ = (
-        UniqueConstraint("raw_listing_id", name="uq_listing_observations_raw_listing_id"),
+        UniqueConstraint(
+            "source_id",
+            "source_listing_id",
+            "observed_at",
+            name="uq_listing_observations_source_listing_observed",
+        ),
         Index("ix_listing_observations_listing_observed", "listing_id", "observed_at"),
         Index(
             "ix_listing_observations_source_listing_observed",
@@ -196,7 +199,7 @@ class ListingObservation(TimestampMixin, Base):
 
     listing: Mapped[Listing] = relationship(back_populates="observations")
     source: Mapped[Source] = relationship(back_populates="observations")
-    raw_listing: Mapped[RawListingRecord] = relationship(back_populates="observation")
+    raw_listing: Mapped[RawListingRecord] = relationship(back_populates="observations")
 
 
 class OsmFeature(TimestampMixin, Base):

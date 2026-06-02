@@ -1,12 +1,12 @@
 import json
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from realtyscope.database.base import Base
-from realtyscope.database.models import IngestionRun, Listing, Source
+from realtyscope.database.models import IngestionRun, Listing, ListingObservation, Source
 from realtyscope.database.session import create_database_engine
 from realtyscope.ingestion.domclick_scheduled_batch import main, run_domclick_scheduled_batch
 from realtyscope.ingestion.domclick_snapshot_collector import FetchedDomclickSnapshot
@@ -94,6 +94,62 @@ def test_scheduled_batch_collects_inspects_commits_and_reports_idempotent(
         listings = session.scalars(select(Listing)).all()
         assert len(listings) == 1
         assert listings[0].address_text == "Москва, Плановая улица, 1"
+
+
+def test_scheduled_batch_reused_snapshot_records_new_observation_timestamp(
+    tmp_path: Path,
+) -> None:
+    database_url = _sqlite_database_url(tmp_path / "scheduled_domclick_reused.sqlite3")
+    engine = create_database_engine(database_url)
+    Base.metadata.create_all(engine)
+    first_started_at = datetime(2026, 6, 1, 0, 0, tzinfo=UTC)
+    second_started_at = datetime(2026, 6, 2, 0, 0, tzinfo=UTC)
+
+    first = run_domclick_scheduled_batch(
+        urls=["https://domclick.ru/card/sale__flat__scheduled-1/"],
+        output_root=tmp_path / "data" / "raw" / "domclick",
+        collection_date=date(2026, 6, 1),
+        database_url=database_url,
+        commit_to_database=True,
+        max_urls=5,
+        delay_seconds=0,
+        max_records=10,
+        min_records=1,
+        report_dir=tmp_path / "reports",
+        fetch_text=lambda _url: ROBOTS_TXT,
+        fetch_snapshot=_fetch_listing_snapshot,
+        sleep=lambda _seconds: None,
+        clock=lambda: first_started_at,
+    )
+    assert first.status == "success"
+    assert first.collection is not None
+
+    second = run_domclick_scheduled_batch(
+        source_path=Path(first.collection.snapshot_dir),
+        database_url=database_url,
+        commit_to_database=True,
+        max_records=10,
+        min_records=1,
+        report_dir=tmp_path / "reports",
+        clock=lambda: second_started_at,
+    )
+
+    assert second.status == "success"
+    assert second.persistence is not None
+    assert second.persistence.raw_inserted == 0
+    assert second.persistence.raw_reused == 1
+    assert second.persistence.observations_inserted == 1
+
+    with Session(engine) as session:
+        observations = session.scalars(
+            select(ListingObservation).order_by(ListingObservation.observed_at)
+        ).all()
+
+    assert [_as_utc(observation.observed_at) for observation in observations] == [
+        first_started_at,
+        second_started_at,
+    ]
+    assert len({observation.raw_listing_id for observation in observations}) == 1
 
 
 def test_scheduled_batch_fails_before_commit_when_inspect_count_is_too_low(
@@ -252,3 +308,9 @@ def _fetch_mixed_clean_snapshot(url: str) -> FetchedDomclickSnapshot:
 
 def _sqlite_database_url(path: Path) -> str:
     return f"sqlite+pysqlite:///{path.as_posix()}"
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value

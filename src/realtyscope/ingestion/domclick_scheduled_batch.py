@@ -118,8 +118,9 @@ def run_domclick_scheduled_batch(
     fetch_text: Callable[[str], str] | None = None,
     fetch_snapshot: Callable[[str], FetchedDomclickSnapshot] | None = None,
     sleep: Callable[[float], None] | None = None,
+    clock: Callable[[], datetime] | None = None,
 ) -> ScheduledDomclickBatchReport:
-    started_at = datetime.now(UTC)
+    started_at = _clock_now(clock)
     run_id = _make_run_id(started_at)
     collection: DomclickCollectionSummary | None = None
     inspect_result: RealSourceInspectResult | None = None
@@ -176,6 +177,7 @@ def run_domclick_scheduled_batch(
                 source_type=DOMCLICK_SNAPSHOT_SOURCE_TYPE,
                 source_path=snapshot_dir,
                 database_url=database_url,
+                observed_at=started_at,
                 max_records=max_records,
             )
 
@@ -189,7 +191,7 @@ def run_domclick_scheduled_batch(
         run_id=run_id,
         status=status,
         started_at=started_at,
-        finished_at=datetime.now(UTC),
+        finished_at=_clock_now(clock),
         commit_to_database=commit_to_database,
         min_records=min_records,
         min_normalized_records=min_normalized_records,
@@ -393,6 +395,13 @@ def _count(session: Session, statement: Any) -> int:
 
 def _make_run_id(started_at: datetime) -> str:
     return f"domclick-{started_at.strftime('%Y%m%dT%H%M%S')}-{started_at.microsecond:06d}Z"
+
+
+def _clock_now(clock: Callable[[], datetime] | None) -> datetime:
+    value = clock() if clock is not None else datetime.now(UTC)
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value
 
 
 def _write_report(

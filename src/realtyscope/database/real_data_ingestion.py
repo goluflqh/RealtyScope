@@ -258,6 +258,7 @@ def load_real_source_snapshot(
     *,
     source_type: str,
     source_path: Path,
+    observed_at: datetime | None = None,
     max_records: int = 100,
 ) -> IngestionBatch:
     if source_type not in SUPPORTED_SOURCE_TYPES:
@@ -265,11 +266,17 @@ def load_real_source_snapshot(
         raise ValueError(f"Unsupported source_type={source_type!r}; supported: {supported}")
 
     if source_type == "domclick_html":
-        return load_domclick_html_snapshot(source_path, max_records=max_records)
+        return load_domclick_html_snapshot(
+            source_path, observed_at=observed_at, max_records=max_records
+        )
     if source_type == "domclick_json":
-        return load_domclick_json_snapshot(source_path, max_records=max_records)
+        return load_domclick_json_snapshot(
+            source_path, observed_at=observed_at, max_records=max_records
+        )
     if source_type == "domclick_snapshot_dir":
-        return load_domclick_snapshot_directory(source_path, max_records=max_records)
+        return load_domclick_snapshot_directory(
+            source_path, observed_at=observed_at, max_records=max_records
+        )
     raise AssertionError(f"Unhandled source_type={source_type!r}")  # pragma: no cover
 
 
@@ -292,11 +299,13 @@ def persist_real_source_snapshot(
     source_type: str,
     source_path: Path,
     database_url: str | None = None,
+    observed_at: datetime | None = None,
     max_records: int = 100,
 ) -> PersistedIngestionResult:
     batch = load_real_source_snapshot(
         source_type=source_type,
         source_path=source_path,
+        observed_at=observed_at,
         max_records=max_records,
     )
 

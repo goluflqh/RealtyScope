@@ -38,6 +38,16 @@ def test_observation_migration_creates_history_table() -> None:
     assert "ix_listing_observations_listing_observed" in content
 
 
+def test_observation_semantics_migration_allows_reused_raw_observation_history() -> None:
+    migration = Path("alembic/versions/20260602_0004_listing_observation_semantics.py")
+    content = migration.read_text(encoding="utf-8")
+
+    assert "uq_listing_observations_raw_listing_id" in content
+    assert "uq_listing_observations_source_listing_observed" in content
+    assert "drop_constraint" in content
+    assert "create_unique_constraint" in content
+
+
 def test_osm_feature_migration_creates_enrichment_table() -> None:
     migration = Path("alembic/versions/20260602_0003_osm_features.py")
     content = migration.read_text(encoding="utf-8")
