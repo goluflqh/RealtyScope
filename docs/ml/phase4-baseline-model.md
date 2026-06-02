@@ -66,6 +66,8 @@ The live database also has one observation per listing and no meaningful price-c
 
 OSM enrichment is wired into the feature contract but live `osm_features` rows are currently absent (`osm_rows_present=0`). Training therefore exercises the missing-feature path with `osm_missing=1` for all live rows.
 
+Phase 5 update: a bounded live Overpass slice has since written 4 `osm_features` rows to the local PostgreSQL database, and `realtyscope.ml.features --limit 5 --json` reports `osm_rows_present=4`. The Phase 4 training metrics above still describe the original baseline artifact and should not be read as retrained with OSM coverage.
+
 ## Next Step
 
 Phase 4.5 should expose a minimal prediction contract against this artifact shape. The UI/API should label predictions as a baseline contract result and keep the caveat visible until a leakage-controlled feature set and richer observation history are available.

@@ -54,9 +54,9 @@
 - Modify tests under `tests/test_osm_enrichment.py`
 - Update docs under `docs/data/osm-enrichment.*.md`
 
-- [ ] Add fixture/local OSM row persistence tests first.
-- [ ] Populate real DB rows from persisted coordinates using bounded, cached, non-test execution.
-- [ ] Record row counts and OpenStreetMap attribution.
+- [x] Add fixture/local OSM row persistence tests first.
+- [x] Populate real DB rows from persisted coordinates using bounded, cached, non-test execution.
+- [x] Record row counts and OpenStreetMap attribution.
 - [ ] Commit and push the slice.
 
 ## Slice 3: Non-Leaky ML Features And MLflow Evidence

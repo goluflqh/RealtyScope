@@ -49,9 +49,9 @@
 
 ## Slice 2: OSM rows thật
 
-- [ ] Viết fixture/local persistence tests trước.
-- [ ] Populate DB rows từ coordinates persisted bằng execution bounded/cached, không nằm trong unit tests.
-- [ ] Ghi counts và OpenStreetMap attribution.
+- [x] Viết fixture/local persistence tests trước.
+- [x] Populate DB rows từ coordinates persisted bằng execution bounded/cached, không nằm trong unit tests.
+- [x] Ghi counts và OpenStreetMap attribution.
 - [ ] Commit và push slice.
 
 ## Slice 3: ML không leakage và MLflow evidence

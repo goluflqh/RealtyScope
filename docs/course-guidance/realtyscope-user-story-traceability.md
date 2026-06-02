@@ -42,7 +42,7 @@ The key boundary is that `listings` remains the canonical latest listing table, 
 Phase 4 advances `US-02`, `US-03`, `US-05`, and `US-08` with tested, repo-backed evidence:
 
 - Data readiness and observation EDA show 2,000 persisted listings/observations with strong coordinate and ML-ready coverage, but only one observation per listing and no meaningful price-change history yet.
-- OpenStreetMap enrichment has a local/fixture-tested feature contract and `osm_features` persistence. Live OSM rows are currently absent (`osm_rows_present=0`), and any UI/docs using OSM-derived data must keep visible OpenStreetMap attribution.
+- OpenStreetMap enrichment has a local/fixture-tested feature contract, `osm_features` persistence, and a Phase 5 bounded live Overpass write path. The local PostgreSQL database now has 4 live OSM rows (`osm_rows_present=4` for the first five ML feature rows), and any UI/docs using OSM-derived data must keep visible OpenStreetMap attribution.
 - ML feature snapshots are deterministic (`ml_features_v1`) and include listing facts, latest observation facts, optional OSM features, and missingness flags.
 - Baseline training writes `data/processed/models/phase4/baseline_ridge_v1.joblib`, compares Ridge against a naive median baseline, and documents live metrics. The near-perfect metrics are caveated because current feature rows include latest price fields.
 - `/predict` and Streamlit now provide a minimal baseline prediction contract with model version, feature version, metrics summary, input echo, and caveat. This is a Phase 4 contract scaffold, not final production appraisal serving.

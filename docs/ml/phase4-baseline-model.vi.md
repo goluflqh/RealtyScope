@@ -66,6 +66,8 @@ Database live hien cung chi co mot observation cho moi listing va chua co lich s
 
 OSM enrichment da co trong feature contract, nhung bang live `osm_features` hien chua co dong nao (`osm_rows_present=0`). Training vi the dang kiem thu duong missing-feature voi `osm_missing=1` cho toan bo live rows.
 
+Cap nhat Phase 5: mot live Overpass slice co gioi han da ghi 4 rows `osm_features` vao local PostgreSQL database, va `realtyscope.ml.features --limit 5 --json` bao `osm_rows_present=4`. Metrics training Phase 4 o tren van mo ta baseline artifact ban dau, chua phai ket qua retrain voi OSM coverage.
+
 ## Buoc tiep theo
 
 Phase 4.5 nen expose prediction contract toi thieu dua tren shape artifact nay. API/UI can gan nhan ket qua la baseline contract result va giu caveat hien ro cho den khi co feature set khong leakage va observation history phong phu hon.

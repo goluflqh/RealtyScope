@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from realtyscope.database.base import Base
 from realtyscope.database.models import Listing, OsmFeature
-from realtyscope.enrichment.osm import compute_osm_features, main
+from realtyscope.enrichment.osm import compute_osm_features, main, persist_osm_features
 
 
 def test_compute_osm_features_counts_infrastructure_within_radius() -> None:
@@ -107,6 +107,91 @@ def test_osm_feature_model_is_unique_per_listing_and_version() -> None:
             session.commit()
 
 
+def test_persist_osm_features_writes_and_updates_coordinate_ready_rows(tmp_path: Path) -> None:
+    database_url = _seed_coordinate_ready_database(tmp_path)
+    engine = create_engine(database_url)
+
+    with Session(engine) as session:
+        first = persist_osm_features(
+            session,
+            elements_by_listing_id={
+                1: [
+                    {
+                        "type": "node",
+                        "lat": 55.7510,
+                        "lon": 37.6110,
+                        "tags": {"public_transport": "station"},
+                    }
+                ],
+                2: [],
+            },
+            limit=2,
+        )
+        session.commit()
+
+    assert first.rows_available == 2
+    assert first.rows_selected == 2
+    assert first.rows_inserted == 2
+    assert first.rows_updated == 0
+    assert first.live_osm_called is False
+    assert "OpenStreetMap" in first.attribution
+
+    with Session(engine) as session:
+        rows = session.query(OsmFeature).order_by(OsmFeature.listing_id).all()
+        assert len(rows) == 2
+        assert rows[0].transport_count_500m == 1
+        assert rows[0].source_summary["elements_seen"] == 1
+        assert rows[1].source_summary["elements_seen"] == 0
+
+        second = persist_osm_features(
+            session,
+            elements_by_listing_id={1: [], 2: []},
+            limit=2,
+        )
+        session.commit()
+
+    assert second.rows_inserted == 0
+    assert second.rows_updated == 2
+
+    with Session(engine) as session:
+        updated = session.query(OsmFeature).filter_by(listing_id=1).one()
+        assert updated.transport_count_500m == 0
+
+
+def test_persist_osm_features_records_fetch_errors_without_aborting_successes(
+    tmp_path: Path,
+) -> None:
+    database_url = _seed_coordinate_ready_database(tmp_path)
+    engine = create_engine(database_url)
+
+    def fetch_elements(listing: Listing) -> list[dict[str, object]]:
+        if listing.id == 2:
+            raise TimeoutError("Overpass timed out")
+        return [
+            {
+                "type": "node",
+                "lat": 55.7510,
+                "lon": 37.6110,
+                "tags": {"public_transport": "station"},
+            }
+        ]
+
+    with Session(engine) as session:
+        result = persist_osm_features(
+            session,
+            fetch_elements=fetch_elements,
+            limit=2,
+        )
+        session.commit()
+
+    assert result.rows_inserted == 1
+    assert result.rows_failed == 1
+    assert result.errors == ({"listing_id": 2, "error": "TimeoutError: Overpass timed out"},)
+
+    with Session(engine) as session:
+        assert session.query(OsmFeature).count() == 1
+
+
 def test_osm_enrichment_dry_run_cli_reports_limited_coordinate_ready_rows(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -121,6 +206,55 @@ def test_osm_enrichment_dry_run_cli_reports_limited_coordinate_ready_rows(
     assert payload["rows_available"] == 2
     assert payload["feature_version"] == "osm_local_v1"
     assert "OpenStreetMap" in payload["attribution"]
+
+
+def test_osm_enrichment_write_cli_persists_fixture_elements(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    database_url = _seed_coordinate_ready_database(tmp_path)
+    elements_file = tmp_path / "osm-elements.json"
+    elements_file.write_text(
+        json.dumps(
+            {
+                "1": [
+                    {
+                        "type": "node",
+                        "lat": 55.7510,
+                        "lon": 37.6110,
+                        "tags": {"public_transport": "station"},
+                    }
+                ],
+                "2": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert (
+        main(
+            [
+                "--database-url",
+                database_url,
+                "--limit",
+                "2",
+                "--elements-file",
+                str(elements_file),
+                "--write",
+                "--json",
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["dry_run"] is False
+    assert payload["live_osm_called"] is False
+    assert payload["rows_inserted"] == 2
+    assert payload["rows_updated"] == 0
+
+    engine = create_engine(database_url)
+    with Session(engine) as session:
+        assert session.query(OsmFeature).count() == 2
 
 
 def test_osm_enrichment_module_runs_without_package_import_warning(tmp_path: Path) -> None:
