@@ -77,6 +77,7 @@ Generated model artifacts and runtime logs remain under ignored `data/processed/
 
 - English: `docs/development/local-environment.md`
 - Tiếng Việt: `docs/development/local-environment.vi.md`
+- Runtime proof and cleanup: the local environment docs include Redis cache verification plus safe Docker/storage cleanup guidance.
 
 Создать локальный Windows `.venv` из PowerShell:
 

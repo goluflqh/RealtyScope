@@ -40,16 +40,24 @@ The `PYTHONIOENCODING=utf-8` setting avoids Windows console encoding failures wh
 
 ## WSL2 Docker Runtime
 
-Run PostgreSQL through WSL2 Docker Compose:
+Use WSL2 for Docker commands because Docker is not available in this workstation's PowerShell PATH.
+
+Start the full demo/runtime stack from the repository root:
 
 ```powershell
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose up -d db"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope up --build -d"
 ```
 
-Verify the database container:
+Check service status:
 
 ```powershell
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose ps db"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope ps"
+```
+
+Run PostgreSQL only when you need the database for migrations or ingestion checks without the full app stack:
+
+```powershell
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope up -d db"
 ```
 
 Use Windows `.venv` commands against the WSL2 PostgreSQL port on `localhost:5432`:
@@ -58,6 +66,57 @@ Use Windows `.venv` commands against the WSL2 PostgreSQL port on `localhost:5432
 $env:DATABASE_URL="postgresql+psycopg://realtyscope:realtyscope@localhost:5432/realtyscope"
 .\.venv\Scripts\python.exe -m alembic upgrade head
 ```
+
+### Redis Cache Runtime Proof
+
+The API caches `/data` and `/listings` payloads in Redis for a short TTL. The current cache key format for the small data preview is `realtyscope:listings:v1:limit=3:offset=0`, with a 60-second TTL.
+
+Populate the cache by calling the API read path:
+
+```powershell
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && curl -sS -o /dev/null -w '%{http_code}' 'http://localhost:8000/data?limit=3&offset=0'"
+```
+
+Verify that Redis has the runtime key without dumping the full JSON payload:
+
+```powershell
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli --scan --pattern 'realtyscope:*' | sort | head -20"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli EXISTS 'realtyscope:listings:v1:limit=3:offset=0'"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli TTL 'realtyscope:listings:v1:limit=3:offset=0'"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli STRLEN 'realtyscope:listings:v1:limit=3:offset=0'"
+```
+
+Expected evidence: HTTP `200`, `EXISTS` returns `1`, `TTL` returns a value from `0` to `60`, and `STRLEN` is greater than `0`. If `TTL` returns `-2`, the short-lived key expired; call `/data?limit=3&offset=0` again and repeat the Redis checks.
+
+## Safe Shutdown And Storage Cleanup
+
+Use non-destructive cleanup for routine development and demos:
+
+```powershell
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope stop"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope down"
+```
+
+`stop` keeps containers and all named volumes. `down` removes containers and the Compose network, but keeps named volumes unless `-v` is explicitly added.
+
+Inspect storage before deleting anything:
+
+```powershell
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope config --volumes"
+wsl -d Ubuntu -- bash -lc "docker volume ls | grep realtyscope"
+```
+
+The important Docker-managed volumes are `postgres_data`, `redis_data`, `mlflow_data`, and `model_artifacts` with the Compose project prefix applied at runtime. They hold the database rows, Redis state, MLflow metadata/artifacts, and trained model files used during demos.
+
+Only run destructive cleanup when intentionally resetting evidence and after exporting anything you still need:
+
+```powershell
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope down -v"
+```
+
+Do not use `docker system prune --volumes` during course-readiness work unless the goal is a full Docker storage reset. It can remove unrelated project volumes too.
+
+Local raw snapshots and generated reports/artifacts under `data/raw/` and `data/processed/` are ignored runtime evidence. Delete them only when intentionally resetting captured data or model/report outputs.
 
 ## Locked CI/Linux Setup
 

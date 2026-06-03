@@ -40,16 +40,24 @@ Biến `PYTHONIOENCODING=utf-8` giúp tránh lỗi encoding trên Windows khi đ
 
 ## Runtime PostgreSQL/Docker Trong WSL2
 
-Chạy PostgreSQL bằng Docker Compose trong WSL2:
+Dùng WSL2 cho lệnh Docker vì Docker không có trong PowerShell PATH của máy này.
+
+Khởi động toàn bộ stack demo/runtime từ root của repo:
 
 ```powershell
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose up -d db"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope up --build -d"
 ```
 
-Kiểm tra container database:
+Kiểm tra trạng thái service:
 
 ```powershell
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose ps db"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope ps"
+```
+
+Chỉ chạy PostgreSQL khi cần database cho migration hoặc ingestion check mà không cần toàn bộ app stack:
+
+```powershell
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope up -d db"
 ```
 
 Các lệnh Python trong Windows `.venv` kết nối tới PostgreSQL trong WSL2 qua `localhost:5432`:
@@ -58,6 +66,57 @@ Các lệnh Python trong Windows `.venv` kết nối tới PostgreSQL trong WSL2
 $env:DATABASE_URL="postgresql+psycopg://realtyscope:realtyscope@localhost:5432/realtyscope"
 .\.venv\Scripts\python.exe -m alembic upgrade head
 ```
+
+### Bằng Chứng Runtime Cho Redis Cache
+
+API cache payload của `/data` và `/listings` vào Redis với TTL ngắn. Key hiện tại cho preview nhỏ là `realtyscope:listings:v1:limit=3:offset=0`, TTL 60 giây.
+
+Gọi API read path để populate cache:
+
+```powershell
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && curl -sS -o /dev/null -w '%{http_code}' 'http://localhost:8000/data?limit=3&offset=0'"
+```
+
+Kiểm tra Redis có key runtime mà không dump toàn bộ JSON payload:
+
+```powershell
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli --scan --pattern 'realtyscope:*' | sort | head -20"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli EXISTS 'realtyscope:listings:v1:limit=3:offset=0'"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli TTL 'realtyscope:listings:v1:limit=3:offset=0'"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli STRLEN 'realtyscope:listings:v1:limit=3:offset=0'"
+```
+
+Bằng chứng kỳ vọng: HTTP `200`, `EXISTS` trả `1`, `TTL` trả giá trị từ `0` đến `60`, và `STRLEN` lớn hơn `0`. Nếu `TTL` trả `-2`, key TTL ngắn đã hết hạn; gọi lại `/data?limit=3&offset=0` rồi kiểm tra Redis lần nữa.
+
+## Dừng Runtime Và Cleanup Storage An Toàn
+
+Dùng cleanup không phá hủy dữ liệu cho phát triển thường ngày và demo:
+
+```powershell
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope stop"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope down"
+```
+
+`stop` giữ container và toàn bộ named volume. `down` xóa container và Compose network, nhưng vẫn giữ named volume nếu không thêm `-v`.
+
+Luôn kiểm tra storage trước khi xóa:
+
+```powershell
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope config --volumes"
+wsl -d Ubuntu -- bash -lc "docker volume ls | grep realtyscope"
+```
+
+Các Docker-managed volume quan trọng là `postgres_data`, `redis_data`, `mlflow_data`, và `model_artifacts`, với Compose project prefix được thêm khi runtime chạy. Chúng chứa database rows, Redis state, MLflow metadata/artifacts, và file model đã train dùng trong demo.
+
+Chỉ chạy cleanup phá hủy khi thật sự muốn reset evidence và đã export mọi thứ cần giữ:
+
+```powershell
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope down -v"
+```
+
+Không dùng `docker system prune --volumes` trong lúc course-readiness trừ khi mục tiêu là reset toàn bộ Docker storage. Lệnh đó có thể xóa cả volume của dự án khác.
+
+Raw snapshots và reports/artifacts sinh ra dưới `data/raw/` và `data/processed/` là runtime evidence bị git ignore. Chỉ xóa chúng khi cố ý reset captured data hoặc model/report outputs.
 
 ## Cài Đặt Khóa Dependency Cho CI/Linux
 
