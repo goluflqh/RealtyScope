@@ -10,11 +10,11 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir "uv==0.11.3"
 
-COPY pyproject.toml uv.lock README.md ./
-COPY src ./src
+COPY --from=app_deps pyproject.toml uv.lock README.md ./
+COPY --from=app_src . ./src
 RUN uv sync --frozen --no-dev --extra api --extra data --no-editable
 
-COPY services ./services
+COPY --from=app_services . ./services
 
 EXPOSE 8000
 CMD ["uvicorn", "services.api.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

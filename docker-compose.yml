@@ -29,8 +29,8 @@ services:
 
   mlflow:
     build:
-      context: .
-      dockerfile: services/mlflow/Dockerfile
+      context: services/mlflow
+      dockerfile: Dockerfile
     ports:
       - "5000:5000"
     volumes:
@@ -38,8 +38,12 @@ services:
 
   api:
     build:
-      context: .
-      dockerfile: services/api/Dockerfile
+      context: services/api
+      dockerfile: Dockerfile
+      additional_contexts:
+        app_deps: docker/build/deps
+        app_services: services
+        app_src: src
     environment:
       APP_ENV: docker
       PROJECT_NAME: RealtyScope
@@ -65,8 +69,12 @@ services:
 
   streamlit:
     build:
-      context: .
-      dockerfile: services/streamlit/Dockerfile
+      context: services/streamlit
+      dockerfile: Dockerfile
+      additional_contexts:
+        app_deps: docker/build/deps
+        app_services: services
+        app_src: src
     environment:
       API_BASE_URL: http://api:8000
     ports:
@@ -83,8 +91,11 @@ services:
   trainer:
     profiles: ["tools"]
     build:
-      context: .
-      dockerfile: services/trainer/Dockerfile
+      context: services/trainer
+      dockerfile: Dockerfile
+      additional_contexts:
+        app_deps: docker/build/deps
+        app_src: src
     environment:
       APP_ENV: docker
       PROJECT_NAME: RealtyScope

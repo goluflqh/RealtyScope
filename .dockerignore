@@ -2,7 +2,8 @@
 .github/
 .claude/
 .gitnexus/
-.pytest_cache/
+.pytest_cache
+**/.pytest_cache
 .ruff_cache/
 .mypy_cache/
 __pycache__/

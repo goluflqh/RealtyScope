@@ -17,19 +17,22 @@ the MLOps path is real and reproducible from the Docker runtime.
 The committed Compose path is:
 
 ```bash
-docker compose up -d db mlflow
-docker compose --profile tools run --rm trainer
+docker compose -p realtyscope up --build -d
+docker compose -p realtyscope --profile tools run --build --rm trainer
 ```
 
-The `trainer` service installs the `data` and `ml` extras, writes the joblib artifact to the
-shared `model_artifacts` volume, logs params/metrics/artifacts to MLflow, and registers the
-sklearn model as `realtyscope-price-model`.
+Compose builds the app images from scoped in-repo contexts (`docker/build/deps`, `src`, and
+`services`) instead of using the repository root as the Docker build context. That keeps the
+one-command Docker path independent from local generated cache directories. The `trainer`
+service installs the `data` and `ml` extras, writes the joblib artifact to the shared
+`model_artifacts` volume, logs params/metrics/artifacts to MLflow, and registers the sklearn
+model as `realtyscope-price-model`.
 
 ## Runtime Evidence
 
-The verified runtime stack was the existing Docker Compose project `realtyscope` with
-PostgreSQL and MLflow running on the Docker network. The training run used the same mounted
-volumes as the committed `trainer` service:
+The verified runtime stack was the Docker Compose project `realtyscope`, rebuilt directly
+from the Windows-mounted repository with `docker compose -p realtyscope up --build -d`.
+The training run used the same mounted volumes as the committed `trainer` service:
 
 - `realtyscope_model_artifacts:/app/data/processed/models`
 - `realtyscope_mlflow_data:/mlflow`
@@ -38,11 +41,11 @@ MLflow run and registry evidence:
 
 | Field | Value |
 | --- | --- |
-| MLflow run ID | `2d3376900bc64494bb8bf504184937d5` |
+| MLflow run ID | `4999892d2d92402ab78e1209203c338e` |
 | Run status | `FINISHED` |
 | Registered model | `realtyscope-price-model` |
-| Registered version | `2` |
-| Model URI | `runs:/2d3376900bc64494bb8bf504184937d5/model` |
+| Registered version | `3` |
+| Model URI | `runs:/4999892d2d92402ab78e1209203c338e/model` |
 | Artifact path | `data/processed/models/phase5/baseline_ridge_v2_non_leaky.joblib` |
 
 Training metrics from the run:
@@ -65,7 +68,7 @@ Training metrics from the run:
 Run status and metrics were verified via MLflow REST:
 
 ```bash
-python3 -c "import json, urllib.request; run_id='2d3376900bc64494bb8bf504184937d5'; data=json.load(urllib.request.urlopen(f'http://localhost:5000/api/2.0/mlflow/runs/get?run_id={run_id}')); print(data['run']['info']['status'])"
+python3 -c "import json, urllib.request; run_id='4999892d2d92402ab78e1209203c338e'; data=json.load(urllib.request.urlopen(f'http://localhost:5000/api/2.0/mlflow/runs/get?run_id={run_id}')); print(data['run']['info']['status'])"
 ```
 
 Registered model version was verified via MLflow REST:
@@ -77,8 +80,8 @@ python3 -c "import json, urllib.parse, urllib.request; name=urllib.parse.quote('
 Artifact presence was verified through MLflow artifacts API and filesystem-backed volume:
 
 ```bash
-python3 -c "import json, urllib.request; run_id='2d3376900bc64494bb8bf504184937d5'; print(json.load(urllib.request.urlopen(f'http://localhost:5000/api/2.0/mlflow/artifacts/list?run_id={run_id}')))"
-docker exec realtyscope-mlflow-1 sh -c 'find /mlflow/artifacts/0/2d3376900bc64494bb8bf504184937d5/artifacts -maxdepth 3 -type f | sort'
+python3 -c "import json, urllib.request; run_id='4999892d2d92402ab78e1209203c338e'; print(json.load(urllib.request.urlopen(f'http://localhost:5000/api/2.0/mlflow/artifacts/list?run_id={run_id}')))"
+docker exec realtyscope-mlflow-1 sh -c 'find /mlflow/artifacts/0/4999892d2d92402ab78e1209203c338e/artifacts -maxdepth 3 -type f | sort'
 ```
 
 The verified artifact files included:
@@ -92,8 +95,7 @@ The verified artifact files included:
 
 ## Caveats
 
-During this verification pass, `docker compose build trainer` from the Windows-mounted repo reached
-base-image metadata resolution but Docker Hub IPv6 connectivity failed for `python:3.11-slim`.
-The previous `.pytest_cache` context issue was separately confirmed to affect the legacy builder;
-BuildKit did not fail on `.pytest_cache` before the remote metadata error. The real run above did
-not use the old temp build context workaround.
+The local Windows repository still contains a permission-broken generated `.pytest_cache`
+directory. Compose no longer uses the repository root as a build context, so the verified
+`up --build` and `trainer` commands above do not require deleting that local cache and do not
+use the old temp build context workaround.
