@@ -8,6 +8,12 @@ from services.streamlit.api_client import (
     fetch_monitoring_data,
     request_prediction,
 )
+from services.streamlit.dashboard_charts import (
+    listing_chart_frame,
+    map_points_frame,
+    price_band_frame,
+    room_summary_frame,
+)
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 BASELINE_FEATURE_DEFAULTS = {
@@ -106,6 +112,38 @@ if data.listings:
     st.dataframe(pd.DataFrame(data.listings), hide_index=True, width="stretch")
 else:
     st.info("No persisted listings available yet.")
+
+st.subheader("Reviewer visuals")
+chart_frame = listing_chart_frame(data.listings)
+if chart_frame.empty:
+    st.info("No listing data available for charts yet.")
+else:
+    price_bands = price_band_frame(chart_frame)
+    room_summary = room_summary_frame(chart_frame)
+    visual_columns = st.columns(2)
+    with visual_columns[0]:
+        st.caption("Price distribution")
+        if price_bands.empty:
+            st.info("No price data available.")
+        else:
+            st.bar_chart(price_bands.set_index("price_band"))
+    with visual_columns[1]:
+        st.caption("Median price by rooms")
+        if room_summary.empty:
+            st.info("No room summary available.")
+        else:
+            st.bar_chart(room_summary.set_index("rooms")[["median_price_rub"]])
+
+    map_points = map_points_frame(chart_frame)
+    st.caption("Listing map")
+    if map_points.empty:
+        st.info("No coordinates available for the current listing slice.")
+    else:
+        st.map(map_points)
+        st.caption(
+            "Map uses persisted listing coordinates and makes no live OSM/Overpass calls. "
+            "© OpenStreetMap contributors."
+        )
 
 st.subheader("Baseline prediction")
 with st.form("baseline-prediction-form"):

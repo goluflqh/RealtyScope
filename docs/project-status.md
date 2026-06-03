@@ -32,7 +32,7 @@ Fresh checks from 2026-06-03 on `phase7-course-readiness-polish`:
 | Data readiness | Improved since older docs | `3019` listings, `3989` observations, `970` listings with multiple observations, `26` price changes, coordinate coverage `1.0`, ML-ready coverage `1.0`. |
 | ML artifact | Ready | `/model/metadata` reports `realtyscope-price-model`, `baseline_ridge_v2_non_leaky`, `ml_features_v2_non_leaky`, and 23 features. |
 | Streamlit browser check | Loads and renders data | Browser shows `RealtyScope`, `Listings 3019`, `ML-ready 3019`, `Rejected 0`, `Runs 3`, latest ingestion success, and model version `baseline_ridge_v2_non_leaky`. |
-| Current visible UI gap | Still present | Streamlit works, but remains a single-page dashboard with limited row-count control and no rich charts/maps/filter workflow yet. |
+| Current visible UI gap | Reduced | Streamlit works, has filter controls, reviewer-facing charts, and a coordinate map slice. It is still a single-page dashboard with limited table pagination/tabs. |
 
 ## Course Requirement Status
 
@@ -44,12 +44,12 @@ Source requirements: `E:\Магистр\2-курс\python\MISIS_2025\season_2\О
 | Automatic data collection | Implemented as bounded batch | Domclick Chrome/CDP capture, scheduled batch runner, Windows scheduled task, and ingestion status command exist. Current task is daily at `00:00` Moscow and last result was `0`. | Decide whether to keep daily or add a second run only after checking freshness value versus anti-abuse risk and duplicate-observation semantics. |
 | PostgreSQL storage and Alembic | Implemented | SQLAlchemy 2.0 models, Alembic migrations, persisted listings, observations, OSM features, ingestion runs, and app logs. | Fresh data count check should be part of final readiness, not inferred from old docs. |
 | Data volume and quality | Runtime audit green | Fresh data-readiness reports `3019` listings, `3989` observations, `970` listings with multiple observations, `26` price changes, coordinate coverage `1.0`, ML-ready coverage `1.0`, and `0` rejected rows. | Use these fresh numbers in the demo, then re-run after any new ingestion or DB reset. |
-| EDA and visual conclusions | Partial but data is improving | Phase 4 EDA docs cover cross-sectional data quality; fresh runtime data now has multiple observations for `970` listings and `26` detected price changes. | Add reviewer-facing charts in Streamlit. Trend conclusions can become less conservative only after validating observation freshness and repeated capture semantics. |
+| EDA and visual conclusions | Partial but data is improving | Phase 4 EDA docs cover cross-sectional data quality; fresh runtime data now has multiple observations for `970` listings and `26` detected price changes. Phase 7.3 adds reviewer-facing price distribution and room-summary charts. | Trend conclusions can become less conservative only after validating observation freshness and repeated capture semantics. |
 | ML baseline and metrics | Implemented as honest baseline | `baseline_ridge_v2_non_leaky` removes latest-price leakage and uses grouped validation; Phase 6 adds Docker-backed MLflow evidence. | The model is still a baseline appraisal model. Forecast-vs-actual and richer model trust need repeated observations and/or final UI explanation. |
 | MLflow MLOps | Implemented for baseline evidence | MLflow run `4999892d2d92402ab78e1209203c338e`, registered model `realtyscope-price-model`, version `3`, and persisted artifacts. | Final demo should show MLflow URL and explain what is baseline versus final-quality claim. |
 | FastAPI and Swagger | Usable, filter slice added | Runtime HTTP checks returned 200 for `/health`, `/docs`, `/data?limit=3`, `/model/metadata`, and `/monitoring/status`; tests cover contracts. Phase 7.2 adds `/data` and `/listings` filters for price range, area range, rooms, source, and text search. | Verify Swagger in browser during final smoke and keep future query additions tested. |
 | Redis cache | Implemented and runtime-verified for read path | Redis-backed `/listings` and `/data` read path is code/test-covered; Phase 7.1 runtime proof observed the Redis preview key after a live `/data` call. Phase 7.2 makes cache keys filter-specific. | Repeat the short Redis proof during final smoke if the reviewer asks for cache behavior evidence. |
-| Streamlit dashboard | Partial but filter workflow added | Browser check confirms the app renders runtime data: `3019` listings, `3019` ML-ready rows, `0` rejected rows, `3` runs, and model version `baseline_ridge_v2_non_leaky`. Phase 7.2 adds Data Explorer sidebar controls for price, area, rooms, source, and address search. | Add clearer tabs, charts, maps or geo summary, last-update display, and visible OSM attribution when maps/OSM-derived views are shown. |
+| Streamlit dashboard | Partial but visibly stronger | Browser check confirms the app renders runtime data: `3019` listings, `3019` ML-ready rows, `0` rejected rows, `3` runs, and model version `baseline_ridge_v2_non_leaky`. Phase 7.2 adds Data Explorer sidebar controls; Phase 7.3 adds price distribution, median price by rooms, and a coordinate map with attribution. | Add clearer tabs, table pagination, last-update display, and final layout polish. |
 | Monitoring/logs | Partial | `/monitoring/status` reports environment `docker`, latest ingestion run success, `2000` normalized records, and recent errors `0`; Streamlit displays the monitoring slice. | Populate/display runtime logs more consistently and make last successful collection time obvious. |
 | Documentation and demo | Partial | README, course guidance docs, ML docs, operation docs, this status board, and safe storage cleanup docs exist. | Add a concise demo script/runbook. Keep README current with Phase 6 and Phase 7 evidence. |
 
@@ -100,10 +100,11 @@ Goal: satisfy the assignment's filter/search/table story.
 
 Goal: make the project visually explainable during demo.
 
-- Add charts for price distribution, price per square meter, rooms/area breakdown, data quality, and model metrics.
-- Add a map or geo summary only when OSM attribution is visible.
-- Add trend/observation visuals only with conservative wording if data still lacks meaningful repeated observations.
-- Verify text fitting, no overlap, and browser screenshots across desktop/mobile if UI layout changes substantially.
+- [x] Add first reviewer-facing charts for price distribution and median price by rooms.
+- [x] Add a coordinate map slice with visible OpenStreetMap attribution and no live OSM/Overpass calls.
+- [ ] Add richer data-quality/model metric charts if needed for final demo flow.
+- [ ] Add trend/observation visuals only with conservative wording if data still lacks meaningful repeated observations.
+- [ ] Verify text fitting, no overlap, and browser screenshots across desktop/mobile if UI layout changes substantially.
 
 ### Phase 7.4: Demo Script And Course Submission Polish
 

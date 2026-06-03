@@ -59,3 +59,15 @@ def test_streamlit_app_declares_data_explorer_filters() -> None:
     assert "Source" in content
     assert "Address search" in content
     assert "filters=listing_filters" in content
+
+
+def test_streamlit_app_declares_reviewer_visuals_and_map_attribution() -> None:
+    content = STREAMLIT_APP.read_text(encoding="utf-8")
+
+    assert "Reviewer visuals" in content
+    assert "Price distribution" in content
+    assert "Median price by rooms" in content
+    assert "Listing map" in content
+    assert "OpenStreetMap contributors" in content
+    assert "st.bar_chart" in content
+    assert "st.map" in content
