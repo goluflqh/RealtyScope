@@ -59,7 +59,7 @@ def fetch_dashboard_data(
     try:
         listings_payload = _get_json_object(
             get,
-            f"{base_url}/listings",
+            f"{base_url}/data",
             params={"limit": limit, "offset": 0},
             timeout=timeout,
         )

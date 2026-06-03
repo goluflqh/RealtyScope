@@ -17,14 +17,14 @@ class FakeResponse:
         return self._payload
 
 
-def test_fetch_dashboard_data_reads_stats_and_listings_from_api() -> None:
+def test_fetch_dashboard_data_reads_stats_and_data_alias_from_api() -> None:
     calls = []
 
     def fake_get(url: str, **kwargs: Any) -> FakeResponse:
         calls.append((url, kwargs))
         if url.endswith("/stats/data-quality"):
             return FakeResponse({"listings_total": 1, "ml_ready_listings": 1})
-        if url.endswith("/listings"):
+        if url.endswith("/data"):
             return FakeResponse({"items": [{"id": 1, "price_rub": 18_000_000}], "total": 1})
         raise AssertionError(f"Unexpected URL: {url}")
 
@@ -36,7 +36,7 @@ def test_fetch_dashboard_data_reads_stats_and_listings_from_api() -> None:
     assert data.listings_total == 1
     assert calls == [
         ("http://api.test/stats/data-quality", {"timeout": 10.0}),
-        ("http://api.test/listings", {"params": {"limit": 25, "offset": 0}, "timeout": 10.0}),
+        ("http://api.test/data", {"params": {"limit": 25, "offset": 0}, "timeout": 10.0}),
     ]
 
 
