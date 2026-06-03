@@ -14,7 +14,7 @@ RealtyScope là data-service project hướng grade 5 cho bài toán phân tích
 - bằng chứng data-quality và observation history;
 - FastAPI endpoints cho data, prediction, model metadata và monitoring;
 - Redis cache cho read path `/data` và `/listings`;
-- Streamlit dashboard có filters, reviewer charts, coordinate map, baseline prediction, monitoring và model insights;
+- Streamlit dashboard có tabs, filters, paginated listing preview, reviewer charts, coordinate map, baseline prediction, monitoring và model insights;
 - Docker Compose runtime với PostgreSQL, Redis, MLflow, FastAPI và Streamlit;
 - MLflow evidence cho non-leaky Ridge baseline model.
 
@@ -98,21 +98,22 @@ Mở:
 
 Đường đi demo:
 
-1. Chỉ KPI cards: listings, ML-ready rows, rejected rows, ingestion runs.
-2. Chỉ bảng latest ingestion run và monitoring section, gồm timestamp/source/record count của `Last successful collection`.
-3. Dùng sidebar filters:
+1. Trong `Overview`, chỉ KPI cards: listings, ML-ready rows, rejected rows, ingestion runs.
+2. Trong `Data Explorer`, dùng sidebar filters:
    - đặt `Rows` là `100` hoặc `500`;
+   - đặt `Page` là `1` hoặc `2`;
    - đặt `Min price (RUB)` là `10000000`;
    - đặt `Rooms` là `2`;
    - có thể search một đoạn city/address.
-4. Chỉ `Listing preview` thay đổi theo filtered API query.
-5. Chỉ `Reviewer visuals`:
+3. Chỉ `Listing preview` thay đổi theo filtered API query và row-window caption.
+4. Trong `Visuals`, chỉ reviewer charts:
    - `Price distribution`;
    - `Median price by rooms`;
    - `Listing map`.
-6. Chỉ attribution OpenStreetMap nằm dưới map. Map dùng persisted listing coordinates và không gọi live OSM/Overpass.
-7. Trong `Baseline prediction`, giữ default values hoặc chỉnh area/rooms/floor, rồi bấm `Run baseline prediction`.
-8. Chỉ predicted price, model version, feature version, caveat và metrics summary.
+5. Chỉ attribution OpenStreetMap nằm dưới map. Map dùng persisted listing coordinates và không gọi live OSM/Overpass.
+6. Trong `Prediction`, giữ default values hoặc chỉnh area/rooms/floor, rồi bấm `Run baseline prediction`.
+7. Chỉ predicted price, model version, feature version, caveat và metrics summary.
+8. Trong `Monitoring & Model`, chỉ monitoring section, gồm timestamp/source/record count của `Last successful collection`.
 9. Chỉ `Model insights` với feature importance.
 
 ## 5. Trình Bày MLflow Evidence

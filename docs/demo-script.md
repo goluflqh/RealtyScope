@@ -14,7 +14,7 @@ RealtyScope is a grade-5-oriented data-service project for Moscow apartment pric
 - data-quality and observation history evidence;
 - FastAPI data, prediction, model metadata, and monitoring endpoints;
 - Redis-backed `/data` and `/listings` read caching;
-- a Streamlit dashboard with filters, reviewer charts, a coordinate map, baseline prediction, monitoring, and model insights;
+- a Streamlit dashboard with tabs, filters, paginated listing preview, reviewer charts, a coordinate map, baseline prediction, monitoring, and model insights;
 - Docker Compose runtime with PostgreSQL, Redis, MLflow, FastAPI, and Streamlit;
 - MLflow evidence for the non-leaky Ridge baseline model.
 
@@ -98,21 +98,22 @@ Open:
 
 Demo path:
 
-1. Show KPI cards: listings, ML-ready rows, rejected rows, and ingestion runs.
-2. Show the latest ingestion run table and monitoring section, including the `Last successful collection` timestamp/source/record count.
-3. Use sidebar filters:
+1. In `Overview`, show KPI cards: listings, ML-ready rows, rejected rows, and ingestion runs.
+2. In `Data Explorer`, use sidebar filters:
    - set `Rows` to `100` or `500`;
+   - set `Page` to `1` or `2`;
    - set `Min price (RUB)` to `10000000`;
    - set `Rooms` to `2`;
    - optionally search a city/address fragment.
-4. Show `Listing preview` updating from the filtered API query.
-5. Show `Reviewer visuals`:
+3. Show `Listing preview` updating from the filtered API query and the row-window caption.
+4. In `Visuals`, show reviewer charts:
    - `Price distribution`;
    - `Median price by rooms`;
    - `Listing map`.
-6. Point out visible OpenStreetMap attribution under the map. The map uses persisted listing coordinates and makes no live OSM/Overpass calls.
-7. In `Baseline prediction`, keep default values or adjust area/rooms/floor, then press `Run baseline prediction`.
-8. Show the predicted price, model version, feature version, caveat, and metrics summary.
+5. Point out visible OpenStreetMap attribution under the map. The map uses persisted listing coordinates and makes no live OSM/Overpass calls.
+6. In `Prediction`, keep default values or adjust area/rooms/floor, then press `Run baseline prediction`.
+7. Show the predicted price, model version, feature version, caveat, and metrics summary.
+8. In `Monitoring & Model`, show the monitoring section, including the `Last successful collection` timestamp/source/record count.
 9. Show `Model insights` with feature importance.
 
 ## 5. Show MLflow Evidence

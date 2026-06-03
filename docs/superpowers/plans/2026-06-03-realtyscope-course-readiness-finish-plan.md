@@ -26,7 +26,7 @@
 The assignment source `MISIS_2025/season_2/Описание проекта.html` expects a Docker-launched data service with automatic collection, PostgreSQL, EDA, ML prediction, FastAPI/Swagger, Streamlit filters/charts/pages, monitoring/logs, MLflow, Redis, CI/tests, and course documentation. RealtyScope now covers the foundation and most grade-5 stack evidence. Remaining gaps are mostly reviewer visibility and honest final polish:
 
 - trend and forecast-vs-actual language must stay conservative unless observation freshness is revalidated;
-- table pagination/tabs and final Streamlit layout can be clearer;
+- final Streamlit browser checks should verify the new tabs/page control across desktop and narrow viewports;
 - demo script/runbook exists and should be used for final smoke evidence;
 - Domclick schedule should remain daily unless the data value of a second daily run is proven and the user approves the operational change;
 - final merge back to `main` needs fresh local, Docker, Browser, and GitHub Actions evidence.
@@ -93,9 +93,9 @@ The assignment source `MISIS_2025/season_2/Описание проекта.html`
 - Modify or create focused Streamlit helper tests under `tests/`
 - Modify: `docs/project-status.md`
 
-- [ ] Decide whether tabs are needed for demo clarity: overview, data explorer, visuals, prediction, monitoring/model.
-- [ ] If tabs are added, write scaffold tests first for expected tab labels and section ownership.
-- [ ] Add table pagination or a clearer row-window control only if it improves the reviewer workflow beyond the current row limit.
+- [x] Decide whether tabs are needed for demo clarity: overview, data explorer, visuals, prediction, monitoring/model.
+- [x] If tabs are added, write scaffold tests first for expected tab labels and section ownership.
+- [x] Add table pagination or a clearer row-window control only if it improves the reviewer workflow beyond the current row limit.
 - [ ] Add richer charts only when they explain a course requirement: data quality, model metrics, or conservative observation trends.
 - [ ] Keep OSM attribution visible for maps and OSM-derived views.
 - [ ] Browser-check desktop and a mobile/narrow viewport for text fitting and no incoherent overlap.

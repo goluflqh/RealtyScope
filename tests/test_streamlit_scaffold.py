@@ -63,6 +63,20 @@ def test_streamlit_app_declares_data_explorer_filters() -> None:
     assert "filters=listing_filters" in content
 
 
+def test_streamlit_app_declares_tabs_and_data_explorer_pagination() -> None:
+    content = STREAMLIT_APP.read_text(encoding="utf-8")
+
+    assert "st.tabs" in content
+    assert "Overview" in content
+    assert "Data Explorer" in content
+    assert "Visuals" in content
+    assert "Prediction" in content
+    assert "Monitoring & Model" in content
+    assert "Page" in content
+    assert "offset=listing_offset" in content
+    assert "Showing rows" in content
+
+
 def test_streamlit_app_declares_reviewer_visuals_and_map_attribution() -> None:
     content = STREAMLIT_APP.read_text(encoding="utf-8")
 

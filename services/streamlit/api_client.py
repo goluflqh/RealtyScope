@@ -42,6 +42,7 @@ def fetch_dashboard_data(
     api_base_url: str,
     *,
     limit: int = 1000,
+    offset: int = 0,
     filters: dict[str, Any] | None = None,
     get: HttpGet = requests.get,
     timeout: float = 10.0,
@@ -61,7 +62,7 @@ def fetch_dashboard_data(
         listings_payload = _get_json_object(
             get,
             f"{base_url}/data",
-            params=_listing_query_params(limit=limit, offset=0, filters=filters),
+            params=_listing_query_params(limit=limit, offset=offset, filters=filters),
             timeout=timeout,
         )
         items = listings_payload.get("items", [])

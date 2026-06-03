@@ -83,6 +83,26 @@ def test_fetch_dashboard_data_passes_listing_filters_to_data_alias() -> None:
     ]
 
 
+def test_fetch_dashboard_data_passes_offset_to_data_alias() -> None:
+    calls = []
+
+    def fake_get(url: str, **kwargs: Any) -> FakeResponse:
+        calls.append((url, kwargs))
+        if url.endswith("/stats/data-quality"):
+            return FakeResponse({"listings_total": 100})
+        if url.endswith("/data"):
+            return FakeResponse({"items": [], "total": 100})
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    data = fetch_dashboard_data("http://api.test/", limit=25, offset=50, get=fake_get)
+
+    assert data.errors == []
+    assert calls == [
+        ("http://api.test/stats/data-quality", {"timeout": 10.0}),
+        ("http://api.test/data", {"params": {"limit": 25, "offset": 50}, "timeout": 10.0}),
+    ]
+
+
 def test_fetch_dashboard_data_reports_api_errors_without_mocking_data() -> None:
     def fake_get(url: str, **_kwargs: Any) -> FakeResponse:
         if url.endswith("/stats/data-quality"):

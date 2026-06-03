@@ -10,7 +10,7 @@ The repository currently contains a tested course-ready foundation:
 
 - общий Python-пакет `realtyscope`;
 - FastAPI-сервис с endpoint `/health`, DB-backed `/listings`, assignment-compatible `/data`, `/predict`, `/model/metadata`, `/monitoring/status` и фильтрами для data explorer;
-- Streamlit dashboard slice, который читает DB-backed FastAPI endpoints и показывает KPI, filters, listing preview, reviewer charts/map, prediction, monitoring и model insights;
+- Streamlit dashboard slice, который читает DB-backed FastAPI endpoints и показывает tabs, KPI, filters, paginated listing preview, reviewer charts/map, prediction, monitoring и model insights;
 - Docker Compose каркас для PostgreSQL, Redis, MLflow, API и Streamlit;
 - lockfile `uv.lock` для воспроизводимой установки зависимостей;
 - базовую настройку pytest, ruff, pre-commit и GitHub Actions CI;
@@ -43,7 +43,7 @@ The repository currently contains a tested course-ready foundation:
 - Phase 7.2 API/Streamlit filters for price range, area range, rooms, source, and address search;
 - Phase 7 reviewer polish: filters, reviewer charts/map, demo runbook, and visible last-successful-collection monitoring.
 
-Important caveat: RealtyScope now has non-leaky baseline evidence and a real Docker-backed MLflow registration path, but the model is still a baseline appraisal model rather than a final production estimator. Forecast-vs-actual conclusions still need richer repeated observations per listing. The most visible remaining Phase 7 gaps are table pagination/tabs, final UI ergonomics, and final course-readiness verification.
+Important caveat: RealtyScope now has non-leaky baseline evidence and a real Docker-backed MLflow registration path, but the model is still a baseline appraisal model rather than a final production estimator. Forecast-vs-actual conclusions still need richer repeated observations per listing. The most visible remaining Phase 7 gaps are final data/runtime evidence, final browser verification, and course-readiness merge checks.
 
 Phase 7 focuses on final course-readiness polish: status/docs, fresh runtime and data checks, safe Docker/storage cleanup guidance, Streamlit data explorer filters and reviewer visuals, demo script, and a documented decision on whether Domclick ingestion should stay daily or run twice per day.
 
