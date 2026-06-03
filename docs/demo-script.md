@@ -66,19 +66,19 @@ What to point out:
 
 ## 3. Prove Redis Cache Behavior
 
-Populate a small cached read:
+Populate a small filtered cached read so the demo proves filter-specific cache keys, not only the unfiltered path:
 
 ```powershell
-wsl -d Ubuntu -- bash -lc "curl -sS -o /dev/null -w '%{http_code}' 'http://localhost:8000/data?limit=3&offset=0'"
+wsl -d Ubuntu -- bash -lc "curl -sS -o /dev/null -w '%{http_code}' 'http://localhost:8000/data?limit=3&offset=0&rooms=2&min_price_rub=10000000'"
 ```
 
 Inspect cache keys without dumping payload contents:
 
 ```powershell
 wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli --scan --pattern 'realtyscope:*' | sort | head -20"
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli EXISTS 'realtyscope:listings:v1:limit=3:offset=0'"
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli TTL 'realtyscope:listings:v1:limit=3:offset=0'"
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli STRLEN 'realtyscope:listings:v1:limit=3:offset=0'"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli EXISTS 'realtyscope:listings:v1:limit=3:offset=0:min_price_rub=10000000:rooms=2'"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli TTL 'realtyscope:listings:v1:limit=3:offset=0:min_price_rub=10000000:rooms=2'"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli STRLEN 'realtyscope:listings:v1:limit=3:offset=0:min_price_rub=10000000:rooms=2'"
 ```
 
 Expected evidence:
@@ -88,7 +88,7 @@ Expected evidence:
 - `TTL` returns a short positive value up to `60` seconds;
 - `STRLEN` is greater than `0`.
 
-If `TTL` returns `-2`, the short-lived key expired. Call `/data?limit=3&offset=0` again and repeat the Redis checks.
+If `TTL` returns `-2`, the short-lived key expired. Call the same filtered `/data` URL again and repeat the Redis checks.
 
 ## 4. Show Streamlit Dashboard
 

@@ -41,7 +41,7 @@ The key boundary is that `listings` remains the canonical latest listing table, 
 
 Phase 4 advances `US-02`, `US-03`, `US-05`, and `US-08` with tested, repo-backed evidence:
 
-- Data readiness and observation EDA show 2,000 persisted listings/observations with strong coordinate and ML-ready coverage, but only one observation per listing and no meaningful price-change history yet.
+- Current runtime readiness refreshed on 2026-06-03 shows `3019` persisted listings, `3989` observations, `970` listings with multiple observations, `26` detected price changes, full coordinate coverage, and full ML-ready coverage. Trend language still stays conservative until observation freshness and repeated-capture semantics are reviewed for the defense.
 - OpenStreetMap enrichment has a local/fixture-tested feature contract, `osm_features` persistence, and a Phase 5 bounded live Overpass write path. The local PostgreSQL database now has 4 live OSM rows (`osm_rows_present=4` for the first five ML feature rows), and any UI/docs using OSM-derived data must keep visible OpenStreetMap attribution.
 - ML feature snapshots are deterministic (`ml_features_v1`) and include listing facts, latest observation facts, optional OSM features, and missingness flags.
 - Baseline training writes `data/processed/models/phase4/baseline_ridge_v1.joblib`, compares Ridge against a naive median baseline, and documents live metrics. The near-perfect metrics are caveated because current feature rows include latest price fields.
@@ -53,7 +53,7 @@ The Phase 5 ML slice advances `US-03` and `US-08` without pretending the model i
 
 - `ml_features_v2_non_leaky` removes latest-price feature leakage while preserving the deterministic feature builder and OSM missingness behavior.
 - Training now defaults the v2 model version to `baseline_ridge_v2_non_leaky` and records grouped validation metadata by `listing_id`.
-- Runtime evidence on the local 2,000-row PostgreSQL database produced MAE `21,189,758.79` versus naive MAE `23,656,479.23` with 23 non-leaky features.
+- Current `/model/metadata` evidence on the local PostgreSQL database reports `rows_total=3019`, MAE `22,685,629.92` versus naive MAE `28,452,175.74`, `r2=0.5317`, and 23 non-leaky features.
 - Phase 5 did not claim a local `.venv` MLflow run; Phase 6 supersedes that caveat with Docker-backed MLflow evidence.
 
 ## Phase 6 MLOps And Runtime Contribution
@@ -63,7 +63,7 @@ Phase 6 advances `US-03`, `US-05`, `US-07`, and `US-08` with production-like evi
 - Docker Compose builds from scoped in-repo contexts and starts `db`, `redis`, `mlflow`, `api`, and `streamlit` from the Windows-mounted repo.
 - Redis backs the `/listings` and `/data` API read path.
 - The trainer service logs MLflow run `4999892d2d92402ab78e1209203c338e` and registers `realtyscope-price-model` version `3`.
-- GitHub Actions is green at `30bce998f1c3e5a6d13085d08a0b3692a52234a2` on `main` and `phase7-course-readiness-polish`.
+- GitHub Actions is green at `30bce998f1c3e5a6d13085d08a0b3692a52234a2` on `main`; Phase 7 is also CI-green through `83ad3e180c375215a1ff881166a803a4f9b8e7e4` on `phase7-course-readiness-polish`.
 - The remaining Phase 7 user-story gaps are mainly final polish: runtime log population, final UI/browser evidence, and a fresh final Docker/browser smoke check.
 
 ## Phase 7 Contribution
@@ -75,3 +75,4 @@ Phase 7.0-7.3 advances `US-01`, `US-04`, `US-05`, `US-07`, and `US-08` with revi
 - Phase 7.2 adds tested API and Streamlit filters for price, area, rooms, source, and address search.
 - Phase 7.3 adds tested reviewer visuals: price distribution, median price by rooms, and a coordinate map with visible OpenStreetMap attribution.
 - The latest monitoring/demo/UI slices add last-successful-collection visibility, a concise reviewer runbook, Streamlit tabs, and a simple Data Explorer page control.
+- Phase 7 final evidence refresh confirms Docker services, API `/predict`, filtered `/data`, Redis cache keying, MLflow registered model version `3`, and Streamlit Browser DOM smoke against the current runtime.

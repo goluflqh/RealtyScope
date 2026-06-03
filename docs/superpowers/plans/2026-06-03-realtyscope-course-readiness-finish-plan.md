@@ -14,11 +14,11 @@
 
 - Phase 6 is merged into `main` at `30bce998f1c3e5a6d13085d08a0b3692a52234a2` and preserved as branch `phase6-mlflow-redis-readiness`.
 - Active branch is `phase7-course-readiness-polish`.
-- Latest runtime/UI behavior slice is `6cb103b12717103369cd52fba843d31fcf0c65db feat: show last successful collection`.
-- Local checks for that monitoring slice passed: `git diff --check`, `ruff check .`, `ruff format --check .`, and full `pytest -p no:cacheprovider` with `135 passed`.
+- Latest runtime/UI behavior slice is `83ad3e180c375215a1ff881166a803a4f9b8e7e4 feat: polish streamlit demo navigation`.
+- Local checks for that UI slice passed: `git diff --check`, `ruff check .`, `ruff format --check .`, and full `pytest -p no:cacheprovider` with `137 passed`.
 - Docker smoke after Streamlit rebuild showed the compose services healthy and `http://localhost:8501` returning HTTP `200`.
-- Browser DOM snapshot confirmed `Reviewer visuals`, `Price distribution`, `Median price by rooms`, `Listing map`, and `OpenStreetMap contributors` rendered with no browser error logs.
-- GitHub Actions `ci` run `26904040922` passed for behavior SHA `6cb103b`; docs-audit run `26904605045` also passed for `66bb5be`.
+- Browser DOM smoke confirmed the Phase 7 caption, five Streamlit tabs, Data Explorer row-window caption, Visuals charts/map attribution, Prediction output, Monitoring last-success/model insight sections, and no browser warning/error logs. Screenshot capture timed out in the in-app Browser backend, so DOM/runtime evidence is the browser proof.
+- GitHub Actions `ci` run `26906383719` passed for SHA `83ad3e1`; earlier Phase 7 runs for `6cb103b`, `66bb5be`, and `a5e2583` also passed.
 - GitNexus remains indexed only through `realtyscope-phase6-index` at `30bce998`; create/refresh a Phase 7 index before using graph impact for future code edits, or explicitly treat the graph as stale.
 
 ## Requirement Coverage Snapshot
@@ -97,10 +97,11 @@ The assignment source `MISIS_2025/season_2/Описание проекта.html`
 - [x] If tabs are added, write scaffold tests first for expected tab labels and section ownership.
 - [x] Add table pagination or a clearer row-window control only if it improves the reviewer workflow beyond the current row limit.
 - [ ] Add richer charts only when they explain a course requirement: data quality, model metrics, or conservative observation trends.
-- [ ] Keep OSM attribution visible for maps and OSM-derived views.
-- [ ] Browser-check desktop and a mobile/narrow viewport for text fitting and no incoherent overlap.
-- [ ] Rebuild Streamlit image after code changes because compose does not bind-mount source.
-- [ ] Verify with tests, Docker smoke, Browser, push, and CI.
+- [x] Keep OSM attribution visible for maps and OSM-derived views.
+- [x] Browser-check desktop DOM for text fitting, tabs, data, visuals, prediction, monitoring, and no warning/error logs.
+- [x] Rebuild Streamlit image after code changes because compose does not bind-mount source.
+- [x] Verify with tests, Docker smoke, Browser, push, and CI.
+- [ ] Add narrow/mobile screenshot evidence only if final submission needs responsive proof; in-app Browser screenshot capture timed out during the Phase 7 UI slice.
 
 ## Task 5: Final Data And Runtime Evidence
 
@@ -109,12 +110,12 @@ The assignment source `MISIS_2025/season_2/Описание проекта.html`
 - Modify: `docs/demo-script.md`
 - Modify: README if final command/evidence changed.
 
-- [ ] Re-run fresh data-readiness commands against the runtime database.
-- [ ] Re-run API smoke for `/health`, `/docs`, `/data`, `/predict`, `/model/metadata`, and `/monitoring/status`.
-- [ ] Re-run Redis proof for one filtered `/data` call and document the cache key pattern.
-- [ ] Re-run MLflow/model evidence check and keep the baseline caveat explicit.
-- [ ] Re-run Streamlit Browser smoke after final UI changes.
-- [ ] Update status docs with fresh counts and evidence dates.
+- [x] Re-run fresh data-readiness commands against the runtime database.
+- [x] Re-run API smoke for `/health`, `/docs`, `/data`, `/predict`, `/model/metadata`, and `/monitoring/status`.
+- [x] Re-run Redis proof for one filtered `/data` call and document the cache key pattern.
+- [x] Re-run MLflow/model evidence check and keep the baseline caveat explicit.
+- [x] Re-run Streamlit Browser smoke after final UI changes.
+- [x] Update status docs with fresh counts and evidence dates.
 - [ ] Run standard checks, push, and CI.
 
 ## Task 6: Final Merge And Submission Checkpoint

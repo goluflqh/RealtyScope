@@ -41,7 +41,7 @@ The repository currently contains a tested course-ready foundation:
 - FastAPI `/predict` contract with Pydantic validation and model artifact loading from `ACTIVE_MODEL_ARTIFACT_PATH`;
 - Streamlit baseline prediction form that calls `/predict` and displays predicted price, model version, metrics summary, and caveat;
 - Phase 7.2 API/Streamlit filters for price range, area range, rooms, source, and address search;
-- Phase 7 reviewer polish: filters, reviewer charts/map, demo runbook, and visible last-successful-collection monitoring.
+- Phase 7 reviewer polish: filters, tabbed navigation, paginated Data Explorer, reviewer charts/map, demo runbook, and visible last-successful-collection monitoring.
 
 Important caveat: RealtyScope now has non-leaky baseline evidence and a real Docker-backed MLflow registration path, but the model is still a baseline appraisal model rather than a final production estimator. Forecast-vs-actual conclusions still need richer repeated observations per listing. The most visible remaining Phase 7 gaps are final data/runtime evidence, final browser verification, and course-readiness merge checks.
 
@@ -65,12 +65,13 @@ Phase 6 adds production-like MLOps and runtime evidence:
 - the trainer service logs a real MLflow run and registers `realtyscope-price-model` version `3`;
 - GitHub Actions is green for `main` and the Phase 6 base at `30bce998...`.
 
-Phase 7.2-7.3 adds reviewer-facing readiness polish:
+Phase 7.2-7.4 adds reviewer-facing readiness polish:
 
 - `/data` and `/listings` support filters for price range, area range, rooms, source, and address search;
-- Streamlit exposes those filters in the sidebar;
+- Streamlit exposes those filters in the sidebar and adds tabbed sections for overview, data explorer, visuals, prediction, and monitoring/model evidence;
 - Streamlit renders reviewer visuals for price distribution, median price by rooms, and a coordinate map with OpenStreetMap attribution;
-- GitHub Actions is green for the latest runtime/UI behavior slice on `phase7-course-readiness-polish` at `6cb103b...`; later docs-audit slices are tracked in `docs/project-status.md`.
+- Data Explorer has a simple `Page` control backed by real `/data` offset pagination;
+- GitHub Actions is green for the latest runtime/UI behavior slice on `phase7-course-readiness-polish` at `83ad3e1...`; current evidence is tracked in `docs/project-status.md`.
 
 Generated model artifacts and runtime logs remain under ignored `data/processed/`. See `docs/ml/phase5-non-leaky-model.md`, `docs/ml/phase6-mlflow-registration.md`, and `docs/project-status.md` for metrics, MLOps evidence, and current caveats.
 

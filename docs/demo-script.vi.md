@@ -66,19 +66,19 @@ wsl -d Ubuntu -- bash -lc "curl -sS http://localhost:8000/monitoring/status | py
 
 ## 3. Chứng Minh Redis Cache
 
-Gọi read path nhỏ để populate cache:
+Gọi read path nhỏ có filter để chứng minh cache key theo filter, không chỉ unfiltered path:
 
 ```powershell
-wsl -d Ubuntu -- bash -lc "curl -sS -o /dev/null -w '%{http_code}' 'http://localhost:8000/data?limit=3&offset=0'"
+wsl -d Ubuntu -- bash -lc "curl -sS -o /dev/null -w '%{http_code}' 'http://localhost:8000/data?limit=3&offset=0&rooms=2&min_price_rub=10000000'"
 ```
 
 Kiểm tra Redis key mà không dump payload đầy đủ:
 
 ```powershell
 wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli --scan --pattern 'realtyscope:*' | sort | head -20"
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli EXISTS 'realtyscope:listings:v1:limit=3:offset=0'"
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli TTL 'realtyscope:listings:v1:limit=3:offset=0'"
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli STRLEN 'realtyscope:listings:v1:limit=3:offset=0'"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli EXISTS 'realtyscope:listings:v1:limit=3:offset=0:min_price_rub=10000000:rooms=2'"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli TTL 'realtyscope:listings:v1:limit=3:offset=0:min_price_rub=10000000:rooms=2'"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli STRLEN 'realtyscope:listings:v1:limit=3:offset=0:min_price_rub=10000000:rooms=2'"
 ```
 
 Evidence mong đợi:
@@ -88,7 +88,7 @@ Evidence mong đợi:
 - `TTL` là số dương ngắn, tối đa `60` giây;
 - `STRLEN` lớn hơn `0`.
 
-Nếu `TTL` trả `-2`, key ngắn hạn đã hết hạn. Gọi lại `/data?limit=3&offset=0` rồi kiểm tra Redis lần nữa.
+Nếu `TTL` trả `-2`, key ngắn hạn đã hết hạn. Gọi lại URL `/data` có filter y như trên rồi kiểm tra Redis lần nữa.
 
 ## 4. Trình Bày Streamlit Dashboard
 
