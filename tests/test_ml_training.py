@@ -86,6 +86,35 @@ def test_train_baseline_model_logs_actual_feature_version_to_mlflow(
     assert fake_mlflow.artifacts == [str(result.artifact_path)]
 
 
+def test_train_baseline_model_registers_mlflow_model_when_name_is_configured(
+    tmp_path: Path, monkeypatch
+) -> None:
+    fake_mlflow = _FakeMlflow()
+    monkeypatch.setitem(sys.modules, "mlflow", fake_mlflow)
+    feature_rows = _tiny_feature_rows(
+        feature_version=NON_LEAKY_FEATURE_VERSION,
+        include_latest_price_feature=False,
+    )
+
+    result = train_baseline_model(
+        feature_rows=feature_rows,
+        output_dir=tmp_path,
+        mlflow_tracking_uri=tmp_path.as_uri(),
+        mlflow_registered_model_name="realtyscope-price-model",
+    )
+
+    assert result.mlflow_run_id == "run-123"
+    assert result.mlflow_registered_model_name == "realtyscope-price-model"
+    assert result.mlflow_model_uri == "runs:/run-123/model"
+    assert fake_mlflow.sklearn.logged_models == [
+        {
+            "artifact_path": "model",
+            "registered_model_name": "realtyscope-price-model",
+            "sk_model": result.model_version,
+        }
+    ]
+
+
 def test_train_cli_reads_feature_rows_and_writes_artifact(tmp_path: Path, capsys) -> None:
     database_url = _seed_training_database(tmp_path)
     output_dir = tmp_path / "models"
@@ -185,6 +214,7 @@ class _FakeMlflow:
         self.params: dict[str, object] = {}
         self.metrics: dict[str, float] = {}
         self.artifacts: list[str] = []
+        self.sklearn = _FakeMlflowSklearn()
 
     def set_tracking_uri(self, tracking_uri: str) -> None:
         self.tracking_uri = tracking_uri
@@ -201,6 +231,27 @@ class _FakeMlflow:
 
     def log_artifact(self, artifact_path: str) -> None:
         self.artifacts.append(artifact_path)
+
+
+class _FakeMlflowSklearn:
+    def __init__(self) -> None:
+        self.logged_models: list[dict[str, object]] = []
+
+    def log_model(
+        self,
+        *,
+        sk_model: object,
+        artifact_path: str,
+        registered_model_name: str,
+    ) -> SimpleNamespace:
+        self.logged_models.append(
+            {
+                "artifact_path": artifact_path,
+                "registered_model_name": registered_model_name,
+                "sk_model": getattr(sk_model, "model_version", "baseline_ridge_v2_non_leaky"),
+            }
+        )
+        return SimpleNamespace(model_uri="runs:/run-123/model")
 
 
 def _seed_training_database(tmp_path: Path) -> str:

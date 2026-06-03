@@ -7,6 +7,7 @@ import os
 import sys
 from collections.abc import Sequence
 from contextlib import suppress
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,13 @@ DEFAULT_OUTPUT_DIR = Path("data/processed/models/phase4")
 RANDOM_STATE = 42
 
 
+@dataclass(frozen=True)
+class MlflowLoggingResult:
+    run_id: str | None = None
+    registered_model_name: str | None = None
+    model_uri: str | None = None
+
+
 class TrainingResult(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
 
@@ -41,6 +49,8 @@ class TrainingResult(BaseModel):
     model_version: str
     metrics: dict[str, float | int]
     mlflow_run_id: str | None = None
+    mlflow_registered_model_name: str | None = None
+    mlflow_model_uri: str | None = None
     split: dict[str, Any]
 
 
@@ -50,6 +60,7 @@ def train_baseline_model(
     output_dir: Path,
     model_version: str | None = None,
     mlflow_tracking_uri: str | None = None,
+    mlflow_registered_model_name: str | None = None,
 ) -> TrainingResult:
     if len(feature_rows) < 4:
         raise ValueError("at least 4 feature rows are required for baseline training")
@@ -96,11 +107,13 @@ def train_baseline_model(
         "split": split,
     }
     joblib.dump(artifact, artifact_path)
-    mlflow_run_id = _log_mlflow_if_enabled(
+    mlflow_result = _log_mlflow_if_enabled(
         artifact_path=artifact_path,
         feature_version=feature_version,
         metrics=metrics,
+        model=model,
         model_version=model_version,
+        registered_model_name=mlflow_registered_model_name,
         tracking_uri=mlflow_tracking_uri,
     )
     return TrainingResult(
@@ -108,7 +121,9 @@ def train_baseline_model(
         feature_version=feature_version,
         model_version=model_version,
         metrics=metrics,
-        mlflow_run_id=mlflow_run_id,
+        mlflow_run_id=mlflow_result.run_id,
+        mlflow_registered_model_name=mlflow_result.registered_model_name,
+        mlflow_model_uri=mlflow_result.model_uri,
         split=split,
     )
 
@@ -121,6 +136,7 @@ def train_from_database(
     feature_version: str = FEATURE_VERSION,
     model_version: str | None = None,
     mlflow_tracking_uri: str | None = None,
+    mlflow_registered_model_name: str | None = None,
 ) -> TrainingResult:
     engine = create_database_engine(database_url)
     from sqlalchemy.orm import Session
@@ -136,6 +152,7 @@ def train_from_database(
         output_dir=output_dir,
         model_version=model_version,
         mlflow_tracking_uri=mlflow_tracking_uri,
+        mlflow_registered_model_name=mlflow_registered_model_name,
     )
 
 
@@ -163,6 +180,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=os.environ.get("MLFLOW_TRACKING_URI"),
         help="Optional MLflow tracking URI. Logging is skipped if MLflow is unavailable.",
     )
+    parser.add_argument(
+        "--mlflow-registered-model-name",
+        default=os.environ.get("ACTIVE_MODEL_NAME"),
+        help="Optional MLflow registered model name for sklearn model registration.",
+    )
     parser.add_argument("--json", action="store_true", help="Print JSON output.")
     args = parser.parse_args(argv)
 
@@ -176,6 +198,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         feature_version=args.feature_version,
         model_version=args.model_version,
         mlflow_tracking_uri=args.mlflow_tracking_uri,
+        mlflow_registered_model_name=args.mlflow_registered_model_name,
     )
     payload = _result_payload(result)
     if args.json:
@@ -289,15 +312,17 @@ def _log_mlflow_if_enabled(
     artifact_path: Path,
     feature_version: str,
     metrics: dict[str, float | int],
+    model: Any,
     model_version: str,
+    registered_model_name: str | None,
     tracking_uri: str | None,
-) -> str | None:
+) -> MlflowLoggingResult:
     if not tracking_uri:
-        return None
+        return MlflowLoggingResult()
     try:
         import mlflow
     except ImportError:
-        return None
+        return MlflowLoggingResult()
 
     mlflow.set_tracking_uri(tracking_uri)
     with mlflow.start_run(run_name=model_version) as run:
@@ -309,7 +334,29 @@ def _log_mlflow_if_enabled(
         )
         mlflow.log_metrics({key: float(value) for key, value in metrics.items()})
         mlflow.log_artifact(str(artifact_path))
-        return run.info.run_id
+        model_uri = None
+        if registered_model_name:
+            mlflow_sklearn = _mlflow_sklearn_module(mlflow)
+            if mlflow_sklearn is not None:
+                model_info = mlflow_sklearn.log_model(
+                    sk_model=model,
+                    artifact_path="model",
+                    registered_model_name=registered_model_name,
+                )
+                model_uri = getattr(model_info, "model_uri", None)
+        return MlflowLoggingResult(
+            run_id=run.info.run_id,
+            registered_model_name=registered_model_name if model_uri else None,
+            model_uri=model_uri,
+        )
+
+
+def _mlflow_sklearn_module(mlflow_module: Any) -> Any | None:
+    try:
+        import mlflow.sklearn as mlflow_sklearn
+    except ImportError:
+        return getattr(mlflow_module, "sklearn", None)
+    return mlflow_sklearn
 
 
 def _result_payload(result: TrainingResult) -> dict[str, Any]:
@@ -318,6 +365,8 @@ def _result_payload(result: TrainingResult) -> dict[str, Any]:
         "feature_version": result.feature_version,
         "metrics": result.metrics,
         "mlflow_run_id": result.mlflow_run_id,
+        "mlflow_registered_model_name": result.mlflow_registered_model_name,
+        "mlflow_model_uri": result.mlflow_model_uri,
         "model_version": result.model_version,
         "split": result.split,
     }

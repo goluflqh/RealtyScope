@@ -104,9 +104,9 @@ Code se log feature version, model version, metrics va artifact vao MLflow khi c
 `--mlflow-tracking-uri` va import duoc package `mlflow`. Unit test cover duong nay bang fake MLflow
 module de CI khong can MLflow service that.
 
-Trong runtime local lan nay, `.venv` chua cai `mlflow`. Mot lan thu cai optional dependencies da bi
-dung lai sau khi pip im lang qua lau trong luc download/install dependency set lon, vi vay khong claim
-MLflow run ID that trong evidence nay.
+Trong runtime Phase 5, `.venv` chua cai `mlflow`, vi vay chua claim MLflow run ID that o thoi diem
+do. Phase 6 da bo sung Docker-backed MLflow run va registered model version that; xem
+`docs/ml/phase6-mlflow-registration.md`.
 
 ## Luu y
 

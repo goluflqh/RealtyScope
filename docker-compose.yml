@@ -48,6 +48,8 @@ services:
       MLFLOW_TRACKING_URI: http://mlflow:5000
     ports:
       - "8000:8000"
+    volumes:
+      - model_artifacts:/app/data/processed/models
     depends_on:
       db:
         condition: service_healthy
@@ -78,7 +80,28 @@ services:
       timeout: 5s
       retries: 5
 
+  trainer:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: services/trainer/Dockerfile
+    environment:
+      APP_ENV: docker
+      PROJECT_NAME: RealtyScope
+      POSTGRES_HOST: db
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      ACTIVE_MODEL_NAME: realtyscope-price-model
+    depends_on:
+      db:
+        condition: service_healthy
+      mlflow:
+        condition: service_started
+    volumes:
+      - mlflow_data:/mlflow
+      - model_artifacts:/app/data/processed/models
+
 volumes:
   postgres_data:
   redis_data:
   mlflow_data:
+  model_artifacts:

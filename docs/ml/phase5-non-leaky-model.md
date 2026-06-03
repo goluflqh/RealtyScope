@@ -103,9 +103,9 @@ The code logs feature version, model version, metrics, and the artifact to MLflo
 `--mlflow-tracking-uri` is configured and `mlflow` is importable. Unit tests cover this path with a
 fake MLflow module so CI does not need a live MLflow service.
 
-During this local runtime pass, `mlflow` was not installed in `.venv`. An attempted optional install
-was stopped after the pip process stayed silent for several minutes while downloading/installing the
-large dependency set, so no real MLflow run ID is claimed here.
+During the Phase 5 local runtime pass, `mlflow` was not installed in `.venv`, so no real MLflow run
+ID was claimed at that time. Phase 6 supersedes that caveat with a real Docker-backed MLflow run and
+registered model version; see [Phase 6 MLflow Registration Evidence](phase6-mlflow-registration.md).
 
 ## Caveats
 
