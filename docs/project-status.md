@@ -1,8 +1,9 @@
 # RealtyScope Project Status
 
 Date: 2026-06-03
-Branch: `phase7-course-readiness-polish`
-Base commit: `30bce998f1c3e5a6d13085d08a0b3692a52234a2`
+Branch: `main`
+Phase 6 milestone commit: `30bce998f1c3e5a6d13085d08a0b3692a52234a2`
+Phase 7 merge evidence commit: `05f9b0cac3e77d55b93820be5d2b3db442d5295c`
 
 This document is the operating status board for the final course-readiness work. It consolidates the assignment requirements, implemented phase evidence, current gaps, and the next smaller workstreams so future sessions do not have to reload the full history.
 
@@ -11,17 +12,16 @@ This document is the operating status board for the final course-readiness work.
 | Item | Status | Evidence |
 | --- | --- | --- |
 | Phase 6 branch | Preserved as milestone | `phase6-mlflow-redis-readiness` remains on local and remote at `30bce998...`. |
-| Base branch | Merged | `main` was fast-forwarded from `c6e422b` to `30bce998...` on 2026-06-03. |
-| New Phase 7 branch | Active | `phase7-course-readiness-polish` was created from the updated `main` and pushed to origin. |
-| GitHub Actions on `main` | Passing | `ci` run `26893951979`, SHA `30bce998...`, conclusion `success`. |
-| GitHub Actions on Phase 7 | Passing | Latest `ci` evidence is run `26906383719` for SHA `83ad3e1...`, conclusion `success`. Earlier Phase 7 runs for `6cb103b`, `66bb5be`, and `a5e2583` also passed. |
-| Local verification before merge | Passing | Phase 6 merge checks passed with `125 passed`. Latest committed UI slice passed `git diff --check`, `ruff check .`, `ruff format --check .`, and full pytest `137 passed` with `-p no:cacheprovider`. |
-| Latest runtime/UI behavior commit | Pushed and CI-green | `83ad3e1 feat: polish streamlit demo navigation` adds tabbed Streamlit navigation, sidebar page control, and real `/data` offset pagination. |
-| GitNexus freshness | Stale for Phase 7 code | `realtyscope-phase6-index` is indexed at `30bce998...`, while active branch is now beyond that commit. Refresh or create a Phase 7 index before relying on graph impact after new Phase 7 commits. |
+| Phase 7 branch | Preserved as milestone | `phase7-course-readiness-polish` remains on local and remote at `05f9b0c...`; it was fast-forward merged into `main`. |
+| GitHub Actions on `main` | Passing after Phase 7 merge | `ci` run `26907933692`, SHA `05f9b0c...`, conclusion `success`. |
+| GitHub Actions on Phase 7 | Passing before merge | Latest Phase 7 `ci` evidence is run `26907391574`, SHA `05f9b0c...`, conclusion `success`; earlier Phase 7 runs for `6cb103b`, `66bb5be`, `a5e2583`, and `83ad3e1` also passed. |
+| Local verification after merge | Passing | On `main`, `git diff --check`, `ruff check .`, `ruff format --check .`, and full pytest `137 passed` with `-p no:cacheprovider` passed after the Phase 7 merge. |
+| Latest runtime/UI evidence commit | Merged to `main` and CI-green | `05f9b0c docs: record final runtime evidence` records Docker/API/Redis/MLflow/Browser evidence after the tabbed Streamlit, filters, charts, and map slices. |
+| GitNexus freshness | Stale for final `main` | `realtyscope-phase6-index` is indexed at `30bce998...`, while `main` is now beyond that commit. Refresh or create a Phase 7/final index before relying on graph impact after new Phase 7 commits. |
 
 ## Phase 7.1 Runtime Audit Snapshot
 
-Fresh checks from 2026-06-03 on `phase7-course-readiness-polish`:
+Fresh checks from 2026-06-03 on `main` after the Phase 7 merge:
 
 | Check | Result | Evidence |
 | --- | --- | --- |
@@ -39,11 +39,11 @@ Fresh checks from 2026-06-03 on `phase7-course-readiness-polish`:
 
 Source requirements: `E:\Магистр\2-курс\python\MISIS_2025\season_2\Описание проекта.html`, `Примерный план семестра.htm`, and repository traceability docs under `docs/course-guidance/`.
 
-| Requirement | Current status | Evidence | Remaining Phase 7 gap |
+| Requirement | Current status | Evidence | Remaining gap / future polish |
 | --- | --- | --- | --- |
-| One-command Docker project | Runtime smoke green | WSL `docker compose -p realtyscope ps` shows `db`, `redis`, `api`, and `streamlit` healthy, with `mlflow` up. Phase 6 verified `docker compose -p realtyscope up --build -d`; Phase 7 re-smokes run against the same Compose project. | Re-run final Docker smoke once more after the final merge decision; safe cleanup instructions already warn before deleting containers, volumes, raw data, or model artifacts. |
+| One-command Docker project | Runtime smoke green | WSL `docker compose -p realtyscope ps` shows `db`, `redis`, `api`, and `streamlit` healthy, with `mlflow` up. Phase 6 verified `docker compose -p realtyscope up --build -d`; Phase 7 post-merge re-smokes run against the same Compose project. | Repeat the smoke after future code/runtime changes; safe cleanup instructions already warn before deleting containers, volumes, raw data, or model artifacts. |
 | Automatic data collection | Implemented as bounded batch | Domclick Chrome/CDP capture, scheduled batch runner, Windows scheduled task, and ingestion status command exist. Current task is daily at `00:00` Moscow and last result was `0`. | Decide whether to keep daily or add a second run only after checking freshness value versus anti-abuse risk and duplicate-observation semantics. |
-| PostgreSQL storage and Alembic | Implemented | SQLAlchemy 2.0 models, Alembic migrations, persisted listings, observations, OSM features, ingestion runs, and app logs. | Fresh data count check should be part of final readiness, not inferred from old docs. |
+| PostgreSQL storage and Alembic | Implemented | SQLAlchemy 2.0 models, Alembic migrations, persisted listings, observations, OSM features, ingestion runs, and app logs. | Refresh data counts after any DB reset or new ingestion, not from old docs. |
 | Data volume and quality | Runtime audit green | Fresh data-readiness reports `3019` listings, `3989` observations, `970` listings with multiple observations, `26` price changes, coordinate coverage `1.0`, ML-ready coverage `1.0`, and `0` rejected rows. | Use these fresh numbers in the demo, then re-run after any new ingestion or DB reset. |
 | EDA and visual conclusions | Partial but data is improving | Phase 4 EDA docs cover cross-sectional data quality; fresh runtime data now has multiple observations for `970` listings and `26` detected price changes. Phase 7.3 adds reviewer-facing price distribution and room-summary charts. | Trend conclusions can become less conservative only after validating observation freshness and repeated capture semantics. |
 | ML baseline and metrics | Implemented as honest baseline | `baseline_ridge_v2_non_leaky` removes latest-price leakage and uses grouped validation; Phase 6 adds Docker-backed MLflow evidence. | The model is still a baseline appraisal model. Forecast-vs-actual and richer model trust need repeated observations and/or final UI explanation. |
@@ -52,7 +52,7 @@ Source requirements: `E:\Магистр\2-курс\python\MISIS_2025\season_2\О
 | Redis cache | Implemented and runtime-verified for filtered read path | Redis-backed `/listings` and `/data` read path is code/test-covered; Phase 7 runtime proof observed the filter-specific key `realtyscope:listings:v1:limit=3:offset=0:min_price_rub=10000000:rooms=2` after a live `/data` call. | Repeat the short Redis proof during the live demo if the reviewer asks for cache behavior evidence. |
 | Streamlit dashboard | Implemented for course demo scope | Browser check confirms the app renders runtime data: `3019` listings, `3019` ML-ready rows, `0` rejected rows, `3` runs, model version `baseline_ridge_v2_non_leaky`, Data Explorer filters/page control, reviewer charts/map, prediction, monitoring, and model insights. | Optional richer metric/trend charts can be added only if they improve the defense without overstating repeated-observation maturity. |
 | Monitoring/logs | Clearer last-success display, logs still partial | `/monitoring/status` reports environment `docker`, latest ingestion run success, `2000` normalized records, latest successful ingestion details, and recent errors `0`; Streamlit displays the last successful collection timestamp/source/record count. | Populate runtime `app_logs` more consistently if deeper operations evidence is needed. |
-| Documentation and demo | Stronger, final smoke still required | README, course guidance docs, ML docs, operation docs, this status board, safe storage cleanup docs, and demo scripts exist. | Keep README/status current after remaining Phase 7 changes and use the demo script during final smoke. |
+| Documentation and demo | Ready for Phase 7 course demo | README, course guidance docs, ML docs, operation docs, this status board, safe storage cleanup docs, and demo scripts exist. | Keep README/status current after future changes and use the demo script for any live defense smoke. |
 
 ## Domclick Schedule Decision
 
@@ -117,7 +117,7 @@ Goal: make the defense path easy to follow.
 - [x] Add a concise demo script: Docker start, verify data/API, open API docs, open Streamlit, run prediction, inspect MLflow, prove Redis, and stop services safely.
 - [x] Add README runbook links and safe cleanup caveats.
 - [x] Decide and document that Domclick remains daily for now; do not add a second daily trigger without fresh data value evidence and user approval.
-- [ ] Confirm GitHub Actions, local checks, Docker smoke, and browser check are green after this final docs/evidence slice and before merge.
+- [x] Confirm GitHub Actions, local checks, Docker smoke, and browser check are green after this final docs/evidence slice and merge.
 
 ## Success Check For Final Course Readiness
 

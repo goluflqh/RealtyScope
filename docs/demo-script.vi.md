@@ -1,7 +1,7 @@
 # Kịch Bản Demo RealtyScope
 
 Ngày: 2026-06-03
-Branch: `phase7-course-readiness-polish`
+Branch: `main` sau khi merge Phase 7
 Đối tượng: reviewer môn học, người vận hành project, và các phiên demo sau.
 
 Tài liệu này là đường đi demo ngắn để trình bày RealtyScope mà không cần đọc lại toàn bộ lịch sử project. Giả định repo đã có trên Windows workstation và WSL2 Ubuntu có Docker.

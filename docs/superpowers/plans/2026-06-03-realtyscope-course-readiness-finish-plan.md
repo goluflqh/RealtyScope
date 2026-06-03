@@ -13,23 +13,23 @@
 ## Current Evidence Baseline
 
 - Phase 6 is merged into `main` at `30bce998f1c3e5a6d13085d08a0b3692a52234a2` and preserved as branch `phase6-mlflow-redis-readiness`.
-- Active branch is `phase7-course-readiness-polish`.
-- Latest runtime/UI behavior slice is `83ad3e180c375215a1ff881166a803a4f9b8e7e4 feat: polish streamlit demo navigation`.
-- Local checks for that UI slice passed: `git diff --check`, `ruff check .`, `ruff format --check .`, and full `pytest -p no:cacheprovider` with `137 passed`.
-- Docker smoke after Streamlit rebuild showed the compose services healthy and `http://localhost:8501` returning HTTP `200`.
+- Phase 7 is merged into `main` at `05f9b0cac3e77d55b93820be5d2b3db442d5295c` and preserved as branch `phase7-course-readiness-polish`.
+- Latest runtime/UI evidence slice is `05f9b0cac3e77d55b93820be5d2b3db442d5295c docs: record final runtime evidence`.
+- Local checks after the Phase 7 merge passed: `git diff --check`, `ruff check .`, `ruff format --check .`, and full `pytest -p no:cacheprovider` with `137 passed`.
+- Docker smoke after the Phase 7 merge showed the compose services healthy and `http://localhost:8501` returning HTTP `200`.
 - Browser DOM smoke confirmed the Phase 7 caption, five Streamlit tabs, Data Explorer row-window caption, Visuals charts/map attribution, Prediction output, Monitoring last-success/model insight sections, and no browser warning/error logs. Screenshot capture timed out in the in-app Browser backend, so DOM/runtime evidence is the browser proof.
-- GitHub Actions `ci` run `26906383719` passed for SHA `83ad3e1`; earlier Phase 7 runs for `6cb103b`, `66bb5be`, and `a5e2583` also passed.
-- GitNexus remains indexed only through `realtyscope-phase6-index` at `30bce998`; create/refresh a Phase 7 index before using graph impact for future code edits, or explicitly treat the graph as stale.
+- GitHub Actions `ci` run `26907933692` passed on `main` for SHA `05f9b0c`; Phase 7 branch run `26907391574` also passed for the same SHA.
+- GitNexus remains indexed only through `realtyscope-phase6-index` at `30bce998`; create/refresh a Phase 7/final index before using graph impact for future code edits, or explicitly treat the graph as stale.
 
 ## Requirement Coverage Snapshot
 
-The assignment source `MISIS_2025/season_2/Описание проекта.html` expects a Docker-launched data service with automatic collection, PostgreSQL, EDA, ML prediction, FastAPI/Swagger, Streamlit filters/charts/pages, monitoring/logs, MLflow, Redis, CI/tests, and course documentation. RealtyScope now covers the foundation and most grade-5 stack evidence. Remaining gaps are mostly reviewer visibility and honest final polish:
+The assignment source `MISIS_2025/season_2/Описание проекта.html` expects a Docker-launched data service with automatic collection, PostgreSQL, EDA, ML prediction, FastAPI/Swagger, Streamlit filters/charts/pages, monitoring/logs, MLflow, Redis, CI/tests, and course documentation. RealtyScope now covers the foundation and most grade-5 stack evidence. Remaining gaps are future polish rather than blockers for the Phase 7 course demo:
 
 - trend and forecast-vs-actual language must stay conservative unless observation freshness is revalidated;
-- final Streamlit browser checks should verify the new tabs/page control across desktop and narrow viewports;
-- demo script/runbook exists and should be used for final smoke evidence;
+- optional narrow/mobile screenshot evidence can be added if a reviewer specifically asks for responsive proof;
+- demo script/runbook exists and should be used for any live smoke evidence;
 - Domclick schedule should remain daily unless the data value of a second daily run is proven and the user approves the operational change;
-- final merge back to `main` needs fresh local, Docker, Browser, and GitHub Actions evidence.
+- final merge back to `main` is complete; repeat local, Docker, Browser, and GitHub Actions evidence after future changes.
 
 ## Task 1: Requirement Traceability And Status Sync
 
@@ -123,10 +123,10 @@ The assignment source `MISIS_2025/season_2/Описание проекта.html`
 **Files:**
 - Modify only docs if the final merge produces new evidence to record.
 
-- [ ] Ensure `phase7-course-readiness-polish` is clean and CI-green.
-- [ ] Decide whether to merge into `main` directly or via PR, based on branch state and user preference.
-- [ ] Preserve old phase branches as milestones.
-- [ ] Merge to `main`, push, and wait for GitHub Actions on `main` to pass.
+- [x] Ensure `phase7-course-readiness-polish` is clean and CI-green.
+- [x] Decide whether to merge into `main` directly or via PR, based on branch state and user preference.
+- [x] Preserve old phase branches as milestones.
+- [x] Merge to `main`, push, and wait for GitHub Actions on `main` to pass.
 - [ ] Save a mem0 checkpoint with final commit SHA, CI run IDs, local checks, Docker/Browser evidence, and remaining caveats.
 
 ## Verification Gate For Every Slice

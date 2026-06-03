@@ -1,7 +1,7 @@
 # RealtyScope Demo Script
 
 Date: 2026-06-03
-Branch: `phase7-course-readiness-polish`
+Branch: `main` after the Phase 7 merge
 Audience: course reviewer, project operator, and future demo sessions.
 
 This script is the short defense path for showing RealtyScope without reloading the full project history. It assumes the repository is already cloned on the Windows workstation and that WSL2 Ubuntu has Docker available.

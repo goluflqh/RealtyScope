@@ -63,12 +63,12 @@ Phase 6 advances `US-03`, `US-05`, `US-07`, and `US-08` with production-like evi
 - Docker Compose builds from scoped in-repo contexts and starts `db`, `redis`, `mlflow`, `api`, and `streamlit` from the Windows-mounted repo.
 - Redis backs the `/listings` and `/data` API read path.
 - The trainer service logs MLflow run `4999892d2d92402ab78e1209203c338e` and registers `realtyscope-price-model` version `3`.
-- GitHub Actions is green at `30bce998f1c3e5a6d13085d08a0b3692a52234a2` on `main`; Phase 7 is also CI-green through `83ad3e180c375215a1ff881166a803a4f9b8e7e4` on `phase7-course-readiness-polish`.
-- The remaining Phase 7 user-story gaps are mainly final polish: runtime log population, final UI/browser evidence, and a fresh final Docker/browser smoke check.
+- GitHub Actions is green at `30bce998f1c3e5a6d13085d08a0b3692a52234a2` for the Phase 6 milestone and at `05f9b0cac3e77d55b93820be5d2b3db442d5295c` on `main` after the Phase 7 merge.
+- The remaining post-Phase-7 user-story gaps are mainly future polish: richer trend/forecast-vs-actual UI, more consistent runtime app-log population, optional SHAP-style explanations, and responsive screenshot evidence if a reviewer specifically asks.
 
 ## Phase 7 Contribution
 
-Phase 7.0-7.3 advances `US-01`, `US-04`, `US-05`, `US-07`, and `US-08` with reviewer-facing evidence:
+Phase 7.0-7.4 advances `US-01`, `US-04`, `US-05`, `US-07`, and `US-08` with reviewer-facing evidence:
 
 - `docs/project-status.md` now acts as the live status board for branch, CI, runtime data, requirements, and remaining work.
 - Phase 7.1 documents fresh runtime/data evidence plus safe Docker/storage cleanup guidance.
