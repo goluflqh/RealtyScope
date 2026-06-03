@@ -52,7 +52,7 @@ Source requirements: `E:\Магистр\2-курс\python\MISIS_2025\season_2\О
 | Redis cache | Implemented and runtime-verified for read path | Redis-backed `/listings` and `/data` read path is code/test-covered; Phase 7.1 runtime proof observed the Redis preview key after a live `/data` call. Phase 7.2 makes cache keys filter-specific. | Repeat the short Redis proof during final smoke if the reviewer asks for cache behavior evidence. |
 | Streamlit dashboard | Partial but visibly stronger | Browser check confirms the app renders runtime data: `3019` listings, `3019` ML-ready rows, `0` rejected rows, `3` runs, and model version `baseline_ridge_v2_non_leaky`. Phase 7.2 adds Data Explorer sidebar controls; Phase 7.3 adds price distribution, median price by rooms, and a coordinate map with attribution. | Add clearer tabs, table pagination, last-update display, and final layout polish. |
 | Monitoring/logs | Partial | `/monitoring/status` reports environment `docker`, latest ingestion run success, `2000` normalized records, and recent errors `0`; Streamlit displays the monitoring slice. | Populate/display runtime logs more consistently and make last successful collection time obvious. |
-| Documentation and demo | Partial | README, course guidance docs, ML docs, operation docs, this status board, and safe storage cleanup docs exist. | Add a concise demo script/runbook. Keep README current with Phase 6 and Phase 7 evidence. |
+| Documentation and demo | Stronger, final smoke still required | README, course guidance docs, ML docs, operation docs, this status board, safe storage cleanup docs, and demo scripts exist. | Keep README/status current after remaining Phase 7 changes and use the demo script during final smoke. |
 
 ## Domclick Schedule Decision
 
@@ -113,10 +113,10 @@ Goal: make the project visually explainable during demo.
 
 Goal: make the defense path easy to follow.
 
-- Add a concise demo script: clone/setup, Docker start, seed/verify data, open API docs, open Streamlit, run prediction, inspect MLflow.
-- Add final README runbook links and caveats.
-- Decide and document whether Domclick remains daily or moves to twice daily.
-- Confirm GitHub Actions, local checks, Docker smoke, and browser check are green.
+- [x] Add a concise demo script: Docker start, verify data/API, open API docs, open Streamlit, run prediction, inspect MLflow, prove Redis, and stop services safely.
+- [x] Add README runbook links and safe cleanup caveats.
+- [ ] Decide and document whether Domclick remains daily or moves to twice daily.
+- [ ] Confirm GitHub Actions, local checks, Docker smoke, and browser check are green after the final Phase 7 changes.
 
 ## Success Check For Final Course Readiness
 

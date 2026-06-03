@@ -56,10 +56,10 @@ The assignment source `MISIS_2025/season_2/Описание проекта.html`
 - Modify: `README.md`
 - Modify: `docs/project-status.md`
 
-- [ ] Write a linear demo path: start Docker, open Swagger, inspect `/health`, `/data`, `/model/metadata`, `/monitoring/status`, open Streamlit, apply filters, inspect charts/map, run prediction, open MLflow, prove Redis cache, and cleanly stop services.
-- [ ] Include exact WSL Docker commands because PowerShell does not have `docker` in PATH on this machine.
-- [ ] Include destructive cleanup warnings: do not run `docker compose down -v` or volume prune unless the user explicitly wants data/model artifacts deleted.
-- [ ] Verify docs links from README.
+- [x] Write a linear demo path: start Docker, open Swagger, inspect `/health`, `/data`, `/model/metadata`, `/monitoring/status`, open Streamlit, apply filters, inspect charts/map, run prediction, open MLflow, prove Redis cache, and cleanly stop services.
+- [x] Include exact WSL Docker commands because PowerShell does not have `docker` in PATH on this machine.
+- [x] Include destructive cleanup warnings: do not run `docker compose down -v` or volume prune unless the user explicitly wants data/model artifacts deleted.
+- [x] Verify docs links from README.
 - [ ] Run the standard local checks and push/CI.
 
 ## Task 3: Last-Update Monitoring And Domclick Schedule Decision
