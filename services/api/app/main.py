@@ -1,5 +1,6 @@
+import json
 from collections.abc import Iterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
 from decimal import Decimal
 from functools import lru_cache
@@ -26,6 +27,7 @@ from services.api.app.schemas import PredictionRequest, PredictionResponse
 BASELINE_PREDICTION_CAVEAT = (
     "Phase 5 non-leaky baseline contract result; not a final independent appraisal model."
 )
+LISTINGS_CACHE_TTL_SECONDS = 60
 
 
 class ArtifactPredictionModel:
@@ -89,6 +91,9 @@ class ArtifactPredictionModel:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> Iterator[None]:
     app.state.session_factory = create_session_factory(create_database_engine())
+    redis_client, redis_error = _create_redis_client()
+    app.state.redis_client = redis_client
+    app.state.redis_error = redis_error
     settings = get_settings()
     try:
         app.state.prediction_model = ArtifactPredictionModel.from_artifact(
@@ -98,7 +103,12 @@ async def lifespan(app: FastAPI) -> Iterator[None]:
     except (FileNotFoundError, KeyError, TypeError, ValueError) as exc:
         app.state.prediction_model = None
         app.state.prediction_model_error = str(exc)
-    yield
+    try:
+        yield
+    finally:
+        if redis_client is not None:
+            with suppress(Exception):
+                redis_client.close()
 
 
 app = FastAPI(
@@ -121,6 +131,31 @@ def get_database_session(request: Request) -> Iterator[Session]:
         session_factory = get_session_factory()
     with session_factory() as session:
         yield session
+
+
+def get_redis_client(request: Request) -> Any | None:
+    return getattr(request.app.state, "redis_client", None)
+
+
+def _create_redis_client() -> tuple[Any | None, str | None]:
+    try:
+        from redis import Redis
+        from redis.exceptions import RedisError
+    except ImportError as exc:
+        return None, f"Redis package unavailable: {exc}"
+
+    settings = get_settings()
+    try:
+        client = Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=1.0,
+            socket_timeout=1.0,
+        )
+        client.ping()
+    except RedisError as exc:
+        return None, str(exc)
+    return client, None
 
 
 @lru_cache
@@ -162,12 +197,30 @@ def health() -> dict[str, str]:
     }
 
 
+@app.get("/data")
 @app.get("/listings")
 def list_listings(
     session: Annotated[Session, Depends(get_database_session)],
+    redis_client: Annotated[Any | None, Depends(get_redis_client)] = None,
     limit: Annotated[int, Query(ge=1, le=2000)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> dict[str, Any]:
+    cache_key = _listings_cache_key(limit=limit, offset=offset)
+    cached_payload = _read_json_cache(redis_client, cache_key)
+    if cached_payload is not None:
+        return cached_payload
+
+    payload = _listings_payload(session, limit=limit, offset=offset)
+    _write_json_cache(
+        redis_client,
+        cache_key,
+        payload,
+        ttl_seconds=LISTINGS_CACHE_TTL_SECONDS,
+    )
+    return payload
+
+
+def _listings_payload(session: Session, *, limit: int, offset: int) -> dict[str, Any]:
     total = session.scalar(select(func.count()).select_from(Listing)) or 0
     listings = session.scalars(
         select(Listing).order_by(Listing.id).limit(limit).offset(offset)
@@ -269,6 +322,46 @@ def predict_price(
 
 def _count(session: Session, model: type[Any]) -> int:
     return session.scalar(select(func.count()).select_from(model)) or 0
+
+
+def _listings_cache_key(*, limit: int, offset: int) -> str:
+    return f"realtyscope:listings:v1:limit={limit}:offset={offset}"
+
+
+def _read_json_cache(redis_client: Any | None, key: str) -> dict[str, Any] | None:
+    if redis_client is None:
+        return None
+
+    try:
+        cached_value = redis_client.get(key)
+    except Exception:
+        return None
+    if not cached_value:
+        return None
+    if isinstance(cached_value, bytes):
+        cached_value = cached_value.decode("utf-8")
+
+    try:
+        payload = json.loads(cached_value)
+    except (TypeError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _write_json_cache(
+    redis_client: Any | None,
+    key: str,
+    payload: dict[str, Any],
+    *,
+    ttl_seconds: int,
+) -> None:
+    if redis_client is None:
+        return
+
+    try:
+        redis_client.setex(key, ttl_seconds, json.dumps(payload, sort_keys=True))
+    except Exception:
+        return
 
 
 def _feature_contract_diff(

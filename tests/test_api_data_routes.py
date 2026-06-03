@@ -1,3 +1,4 @@
+import json
 from collections.abc import Iterator
 from datetime import UTC, datetime
 
@@ -14,6 +15,20 @@ from realtyscope.ingestion.contracts import (
     RawListing,
     RejectedListing,
 )
+
+
+class _FakeRedisCache:
+    def __init__(self, *, cached_payload: str | None = None) -> None:
+        self.cached_payload = cached_payload
+        self.get_calls = 0
+        self.setex_calls: list[tuple[str, int, str]] = []
+
+    def get(self, key: str) -> str | None:
+        self.get_calls += 1
+        return self.cached_payload
+
+    def setex(self, key: str, ttl_seconds: int, value: str) -> None:
+        self.setex_calls.append((key, ttl_seconds, value))
 
 
 def _seed_session(session: Session) -> None:
@@ -110,6 +125,61 @@ def test_listings_endpoint_reads_persisted_database_rows(tmp_path) -> None:
         "offset": 0,
         "total": 1,
     }
+
+
+def test_data_alias_matches_listings_payload(tmp_path) -> None:
+    client = _client_with_seeded_database(tmp_path)
+    try:
+        listings_response = client.get("/listings", params={"limit": 10, "offset": 0})
+        data_response = client.get("/data", params={"limit": 10, "offset": 0})
+    finally:
+        api_main.app.dependency_overrides.clear()
+
+    assert data_response.status_code == 200
+    assert data_response.json() == listings_response.json()
+
+
+def test_listings_endpoint_serves_redis_cache_hit_without_database_query() -> None:
+    cached_payload = {
+        "items": [],
+        "limit": 10,
+        "offset": 0,
+        "total": 0,
+    }
+    fake_cache = _FakeRedisCache(cached_payload=json.dumps(cached_payload))
+
+    def override_session() -> Iterator[object]:
+        yield object()
+
+    api_main.app.dependency_overrides[api_main.get_database_session] = override_session
+    api_main.app.dependency_overrides[api_main.get_redis_client] = lambda: fake_cache
+    client = TestClient(api_main.app)
+    try:
+        response = client.get("/listings", params={"limit": 10, "offset": 0})
+    finally:
+        api_main.app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == cached_payload
+    assert fake_cache.get_calls == 1
+    assert fake_cache.setex_calls == []
+
+
+def test_data_endpoint_populates_redis_cache_from_database(tmp_path) -> None:
+    fake_cache = _FakeRedisCache()
+    client = _client_with_seeded_database(tmp_path)
+    api_main.app.dependency_overrides[api_main.get_redis_client] = lambda: fake_cache
+    try:
+        response = client.get("/data", params={"limit": 10, "offset": 0})
+    finally:
+        api_main.app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert fake_cache.get_calls == 1
+    assert len(fake_cache.setex_calls) == 1
+    _, ttl_seconds, cached_json = fake_cache.setex_calls[0]
+    assert ttl_seconds > 0
+    assert json.loads(cached_json) == response.json()
 
 
 def test_data_quality_stats_endpoint_reads_database_counts(tmp_path) -> None:
