@@ -70,7 +70,7 @@ Phase 7.2-7.3 adds reviewer-facing readiness polish:
 - `/data` and `/listings` support filters for price range, area range, rooms, source, and address search;
 - Streamlit exposes those filters in the sidebar;
 - Streamlit renders reviewer visuals for price distribution, median price by rooms, and a coordinate map with OpenStreetMap attribution;
-- GitHub Actions is green for `phase7-course-readiness-polish` at `6cb103b...`.
+- GitHub Actions is green for the latest runtime/UI behavior slice on `phase7-course-readiness-polish` at `6cb103b...`; later docs-audit slices are tracked in `docs/project-status.md`.
 
 Generated model artifacts and runtime logs remain under ignored `data/processed/`. See `docs/ml/phase5-non-leaky-model.md`, `docs/ml/phase6-mlflow-registration.md`, and `docs/project-status.md` for metrics, MLOps evidence, and current caveats.
 

@@ -14,9 +14,9 @@ This document is the operating status board for the final course-readiness work.
 | Base branch | Merged | `main` was fast-forwarded from `c6e422b` to `30bce998...` on 2026-06-03. |
 | New Phase 7 branch | Active | `phase7-course-readiness-polish` was created from the updated `main` and pushed to origin. |
 | GitHub Actions on `main` | Passing | `ci` run `26893951979`, SHA `30bce998...`, conclusion `success`. |
-| GitHub Actions on Phase 7 | Passing | Latest `ci` run `26904040922`, SHA `6cb103b...`, conclusion `success`. |
-| Local verification before merge | Passing | Phase 6 merge checks passed with `125 passed`. Latest Phase 7 monitoring slice also passed `git diff --check`, `ruff check .`, `ruff format --check .`, and full pytest `135 passed` with `-p no:cacheprovider`. |
-| Latest Phase 7 commit | Pushed and CI-green | `6cb103b feat: show last successful collection` adds tested API/Streamlit visibility for the latest successful Domclick collection. |
+| GitHub Actions on Phase 7 | Passing | Recent `ci` evidence includes run `26904040922` for behavior SHA `6cb103b...` and run `26904605045` for docs-audit SHA `66bb5be...`, both conclusion `success`. |
+| Local verification before merge | Passing | Phase 6 merge checks passed with `125 passed`. The latest runtime/UI behavior slice also passed `git diff --check`, `ruff check .`, `ruff format --check .`, and full pytest `135 passed` with `-p no:cacheprovider`. |
+| Latest runtime/UI behavior commit | Pushed and CI-green | `6cb103b feat: show last successful collection` adds tested API/Streamlit visibility for the latest successful Domclick collection. |
 | GitNexus freshness | Stale for Phase 7 code | `realtyscope-phase6-index` is indexed at `30bce998...`, while active branch is now beyond that commit. Refresh or create a Phase 7 index before relying on graph impact after new Phase 7 commits. |
 
 ## Phase 7.1 Runtime Audit Snapshot

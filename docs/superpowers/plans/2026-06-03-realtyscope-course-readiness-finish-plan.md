@@ -14,11 +14,11 @@
 
 - Phase 6 is merged into `main` at `30bce998f1c3e5a6d13085d08a0b3692a52234a2` and preserved as branch `phase6-mlflow-redis-readiness`.
 - Active branch is `phase7-course-readiness-polish`.
-- Latest Phase 7 slice is `6cb103b12717103369cd52fba843d31fcf0c65db feat: show last successful collection`.
-- Local checks for the latest monitoring slice passed: `git diff --check`, `ruff check .`, `ruff format --check .`, and full `pytest -p no:cacheprovider` with `135 passed`.
+- Latest runtime/UI behavior slice is `6cb103b12717103369cd52fba843d31fcf0c65db feat: show last successful collection`.
+- Local checks for that monitoring slice passed: `git diff --check`, `ruff check .`, `ruff format --check .`, and full `pytest -p no:cacheprovider` with `135 passed`.
 - Docker smoke after Streamlit rebuild showed the compose services healthy and `http://localhost:8501` returning HTTP `200`.
 - Browser DOM snapshot confirmed `Reviewer visuals`, `Price distribution`, `Median price by rooms`, `Listing map`, and `OpenStreetMap contributors` rendered with no browser error logs.
-- GitHub Actions `ci` run `26904040922` passed for `6cb103b`.
+- GitHub Actions `ci` run `26904040922` passed for behavior SHA `6cb103b`; docs-audit run `26904605045` also passed for `66bb5be`.
 - GitNexus remains indexed only through `realtyscope-phase6-index` at `30bce998`; create/refresh a Phase 7 index before using graph impact for future code edits, or explicitly treat the graph as stale.
 
 ## Requirement Coverage Snapshot
