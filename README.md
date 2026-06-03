@@ -2,9 +2,11 @@
 
 RealtyScope — учебный data-service проект уровня grade 5 для оценки стоимости квартир в Москве.
 
-## Статус Phase 4
+## Current Status After Phase 6
 
-Репозиторий содержит технический каркас проекта, начальный foundation для ingestion и базовый database/persistence слой:
+Phase 6 has been merged into `main` at `30bce998f1c3e5a6d13085d08a0b3692a52234a2`. The active follow-up branch is `phase7-course-readiness-polish`. For the current readiness board, requirement checklist, Domclick schedule note, and Phase 7 roadmap, see `docs/project-status.md`.
+
+The repository currently contains a tested course-ready foundation:
 
 - общий Python-пакет `realtyscope`;
 - FastAPI-сервис с endpoint `/health`, DB-backed `/listings` и `/stats/data-quality`;
@@ -39,13 +41,13 @@ RealtyScope — учебный data-service проект уровня grade 5 д
 - FastAPI `/predict` contract with Pydantic validation and model artifact loading from `ACTIVE_MODEL_ARTIFACT_PATH`;
 - Streamlit baseline prediction form that calls `/predict` and displays predicted price, model version, metrics summary, and caveat.
 
-Текущие Phase 4 ограничения зафиксированы явно: live `osm_features` rows пока отсутствуют (`osm_rows_present=0`), observation history содержит один observation на listing, а baseline `baseline_ridge_v1` использует текущие listing/observation price fields, поэтому его почти идеальные метрики являются evidence для training/API contract, а не доказательством независимой production-оценки. MLflow logging поддержан, но live run ID равен `null`, если tracking URI/package не включены в локальном запуске.
+Important caveat: RealtyScope now has non-leaky baseline evidence and a real Docker-backed MLflow registration path, but the model is still a baseline appraisal model rather than a final production estimator. Forecast-vs-actual conclusions still need richer repeated observations per listing, and reviewer-facing Streamlit charts/maps/filters remain the most visible Phase 7 gap.
 
-Следующие phase должны убрать target-leakage из feature set, накопить повторные daily observations для trend/actual-vs-predicted анализа, добавить feature importance/SHAP, production model serving, реальное использование Redis cache и полноценные многостраничные dashboard views.
+Phase 7 focuses on final course-readiness polish: status/docs, fresh runtime and data checks, safe Docker/storage cleanup guidance, Streamlit data explorer filters, charts/maps, demo script, and a documented decision on whether Domclick ingestion should stay daily or run twice per day.
 
-## Phase 5 updates
+## Phase 5-6 updates
 
-Phase 5 adds the current hardening layer on top of the Phase 4 baseline:
+Phase 5 adds the hardening layer on top of the Phase 4 baseline:
 
 - scheduled ingestion now stores deliberate daily observation evidence even when raw payloads are reused;
 - bounded live OSM enrichment has written real `osm_features` rows for local evidence;
@@ -54,7 +56,14 @@ Phase 5 adds the current hardening layer on top of the Phase 4 baseline:
 - Streamlit now has overview, prediction, monitoring, and model-insight sections backed by the API client;
 - default `ACTIVE_MODEL_ARTIFACT_PATH` points to `data/processed/models/phase5/baseline_ridge_v2_non_leaky.joblib`.
 
-Generated model artifacts and runtime logs remain under ignored `data/processed/`. See `docs/ml/phase5-non-leaky-model.md` for metrics and MLflow caveats.
+Phase 6 adds production-like MLOps and runtime evidence:
+
+- Docker Compose builds from scoped in-repo contexts instead of the repository root;
+- Redis backs the `/listings` and `/data` read path;
+- the trainer service logs a real MLflow run and registers `realtyscope-price-model` version `3`;
+- GitHub Actions is green for `main` and `phase7-course-readiness-polish` at `30bce998...`.
+
+Generated model artifacts and runtime logs remain under ignored `data/processed/`. See `docs/ml/phase5-non-leaky-model.md`, `docs/ml/phase6-mlflow-registration.md`, and `docs/project-status.md` for metrics, MLOps evidence, and current caveats.
 
 ## Локальная установка
 
