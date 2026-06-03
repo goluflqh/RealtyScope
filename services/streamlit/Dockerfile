@@ -14,7 +14,7 @@ COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 RUN uv sync --frozen --no-dev --extra streamlit --no-editable
 
-COPY services/streamlit/app.py ./app.py
+COPY services ./services
 
 EXPOSE 8501
-CMD ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501", "--server.headless=true", "--browser.gatherUsageStats=false"]
+CMD ["streamlit", "run", "services/streamlit/app.py", "--server.address=0.0.0.0", "--server.port=8501", "--server.headless=true", "--browser.gatherUsageStats=false"]
