@@ -2,15 +2,15 @@
 
 RealtyScope — учебный data-service проект уровня grade 5 для оценки стоимости квартир в Москве.
 
-## Current Status After Phase 6
+## Current Status After Phase 7.3
 
 Phase 6 has been merged into `main` at `30bce998f1c3e5a6d13085d08a0b3692a52234a2`. The active follow-up branch is `phase7-course-readiness-polish`. For the current readiness board, requirement checklist, Domclick schedule note, and Phase 7 roadmap, see `docs/project-status.md`.
 
 The repository currently contains a tested course-ready foundation:
 
 - общий Python-пакет `realtyscope`;
-- FastAPI-сервис с endpoint `/health`, DB-backed `/listings` и `/stats/data-quality`;
-- Streamlit dashboard slice, который читает DB-backed FastAPI endpoints;
+- FastAPI-сервис с endpoint `/health`, DB-backed `/listings`, assignment-compatible `/data`, `/predict`, `/model/metadata`, `/monitoring/status` и фильтрами для data explorer;
+- Streamlit dashboard slice, который читает DB-backed FastAPI endpoints и показывает KPI, filters, listing preview, reviewer charts/map, prediction, monitoring и model insights;
 - Docker Compose каркас для PostgreSQL, Redis, MLflow, API и Streamlit;
 - lockfile `uv.lock` для воспроизводимой установки зависимостей;
 - базовую настройку pytest, ruff, pre-commit и GitHub Actions CI;
@@ -39,11 +39,13 @@ The repository currently contains a tested course-ready foundation:
 - baseline training command with joblib artifact output: `python -m realtyscope.ml.train --output-dir data/processed/models/phase4 --json`;
 - Phase 4 baseline model evidence in `docs/ml/phase4-baseline-model.md` and `docs/ml/phase4-baseline-model.vi.md`;
 - FastAPI `/predict` contract with Pydantic validation and model artifact loading from `ACTIVE_MODEL_ARTIFACT_PATH`;
-- Streamlit baseline prediction form that calls `/predict` and displays predicted price, model version, metrics summary, and caveat.
+- Streamlit baseline prediction form that calls `/predict` and displays predicted price, model version, metrics summary, and caveat;
+- Phase 7.2 API/Streamlit filters for price range, area range, rooms, source, and address search;
+- Phase 7.3 reviewer visuals: price distribution, median price by rooms, and a coordinate map with visible OpenStreetMap attribution.
 
-Important caveat: RealtyScope now has non-leaky baseline evidence and a real Docker-backed MLflow registration path, but the model is still a baseline appraisal model rather than a final production estimator. Forecast-vs-actual conclusions still need richer repeated observations per listing, and reviewer-facing Streamlit charts/maps/filters remain the most visible Phase 7 gap.
+Important caveat: RealtyScope now has non-leaky baseline evidence and a real Docker-backed MLflow registration path, but the model is still a baseline appraisal model rather than a final production estimator. Forecast-vs-actual conclusions still need richer repeated observations per listing. The most visible remaining Phase 7 gaps are demo/runbook polish, clearer last-update monitoring, table pagination/tabs, and final course-readiness verification.
 
-Phase 7 focuses on final course-readiness polish: status/docs, fresh runtime and data checks, safe Docker/storage cleanup guidance, Streamlit data explorer filters, charts/maps, demo script, and a documented decision on whether Domclick ingestion should stay daily or run twice per day.
+Phase 7 focuses on final course-readiness polish: status/docs, fresh runtime and data checks, safe Docker/storage cleanup guidance, Streamlit data explorer filters and reviewer visuals, demo script, and a documented decision on whether Domclick ingestion should stay daily or run twice per day.
 
 ## Phase 5-6 updates
 
@@ -61,7 +63,14 @@ Phase 6 adds production-like MLOps and runtime evidence:
 - Docker Compose builds from scoped in-repo contexts instead of the repository root;
 - Redis backs the `/listings` and `/data` read path;
 - the trainer service logs a real MLflow run and registers `realtyscope-price-model` version `3`;
-- GitHub Actions is green for `main` and `phase7-course-readiness-polish` at `30bce998...`.
+- GitHub Actions is green for `main` and the Phase 6 base at `30bce998...`.
+
+Phase 7.2-7.3 adds reviewer-facing readiness polish:
+
+- `/data` and `/listings` support filters for price range, area range, rooms, source, and address search;
+- Streamlit exposes those filters in the sidebar;
+- Streamlit renders reviewer visuals for price distribution, median price by rooms, and a coordinate map with OpenStreetMap attribution;
+- GitHub Actions is green for `phase7-course-readiness-polish` at `544b07c...`.
 
 Generated model artifacts and runtime logs remain under ignored `data/processed/`. See `docs/ml/phase5-non-leaky-model.md`, `docs/ml/phase6-mlflow-registration.md`, and `docs/project-status.md` for metrics, MLOps evidence, and current caveats.
 

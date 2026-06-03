@@ -14,9 +14,10 @@ This document is the operating status board for the final course-readiness work.
 | Base branch | Merged | `main` was fast-forwarded from `c6e422b` to `30bce998...` on 2026-06-03. |
 | New Phase 7 branch | Active | `phase7-course-readiness-polish` was created from the updated `main` and pushed to origin. |
 | GitHub Actions on `main` | Passing | `ci` run `26893951979`, SHA `30bce998...`, conclusion `success`. |
-| GitHub Actions on Phase 7 | Passing | `ci` run `26893965255`, SHA `30bce998...`, conclusion `success`. |
-| Local verification before merge | Passing | `.venv` ruff check passed, ruff format check found 69 formatted files, pytest reported `125 passed in 13.06s` with `-p no:cacheprovider`. |
-| GitNexus freshness | Fresh for base SHA | `realtyscope-phase6-index` is indexed at `30bce998...`. Refresh or create a Phase 7 index before relying on graph impact after new Phase 7 commits. |
+| GitHub Actions on Phase 7 | Passing | Latest `ci` run `26901678942`, SHA `544b07c...`, conclusion `success`. |
+| Local verification before merge | Passing | Phase 6 merge checks passed with `125 passed`. Latest Phase 7.3 slice also passed `git diff --check`, `ruff check .`, `ruff format --check .`, and full pytest `135 passed` with `-p no:cacheprovider`. |
+| Latest Phase 7 commit | Pushed and CI-green | `544b07c feat: add reviewer visuals` adds tested Streamlit charts/map helpers and reviewer-facing UI. |
+| GitNexus freshness | Stale for Phase 7 code | `realtyscope-phase6-index` is indexed at `30bce998...`, while active branch is now beyond that commit. Refresh or create a Phase 7 index before relying on graph impact after new Phase 7 commits. |
 
 ## Phase 7.1 Runtime Audit Snapshot
 
@@ -67,6 +68,8 @@ Recommendation for now: keep the installed schedule at once per day until Phase 
 ## Phase 7 Workstreams
 
 Phase 7 should be split into small, independently verifiable slices. Do not batch all UI, data, docs, and ops changes into one commit.
+
+Detailed finish plan after Phase 7.3: `docs/superpowers/plans/2026-06-03-realtyscope-course-readiness-finish-plan.md`.
 
 ### Phase 7.0: Status And README Sync
 
