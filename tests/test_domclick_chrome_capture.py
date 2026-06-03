@@ -1,6 +1,6 @@
 import json
 from datetime import date
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
 
@@ -35,7 +35,7 @@ def test_resolve_chrome_capture_runtime_config_uses_dedicated_profile_by_default
 
     assert config.capture_runtime == DEFAULT_CAPTURE_RUNTIME
     assert config.chrome_binary is None
-    assert config.chrome_user_data_dir == Path(
+    assert PureWindowsPath(config.chrome_user_data_dir) == PureWindowsPath(
         r"C:\Users\demo\AppData\Local\RealtyScope\ChromeAutomation\User Data"
     )
     assert config.chrome_profile_directory == "Default"
