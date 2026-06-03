@@ -1,10 +1,17 @@
 from pathlib import Path
 
 STREAMLIT_APP = Path("services/streamlit/app.py")
+STREAMLIT_DOCKERFILE = Path("services/streamlit/Dockerfile")
 
 
 def test_streamlit_app_file_exists() -> None:
     assert STREAMLIT_APP.exists()
+
+
+def test_streamlit_dockerfile_keeps_repo_root_on_pythonpath() -> None:
+    content = STREAMLIT_DOCKERFILE.read_text(encoding="utf-8")
+
+    assert "PYTHONPATH=/app" in content
 
 
 def test_streamlit_app_declares_real_data_dashboard_slice() -> None:
