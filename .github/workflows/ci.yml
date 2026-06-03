@@ -23,7 +23,7 @@ jobs:
         run: python -m pip install uv==0.11.3
 
       - name: Install dependencies
-        run: uv sync --frozen --extra dev --extra api --extra streamlit
+        run: uv sync --frozen --extra dev --extra api --extra streamlit --extra data
 
       - name: Ruff check
         run: uv run ruff check .
