@@ -99,7 +99,7 @@ Open:
 Demo path:
 
 1. Show KPI cards: listings, ML-ready rows, rejected rows, and ingestion runs.
-2. Show the latest ingestion run table and monitoring section.
+2. Show the latest ingestion run table and monitoring section, including the `Last successful collection` timestamp/source/record count.
 3. Use sidebar filters:
    - set `Rows` to `100` or `500`;
    - set `Min price (RUB)` to `10000000`;

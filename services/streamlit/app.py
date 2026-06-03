@@ -102,6 +102,22 @@ with status_columns[1]:
 with status_columns[2]:
     recent_errors = monitoring_status.get("recent_errors")
     st.metric("Recent errors", len(recent_errors) if isinstance(recent_errors, list) else 0)
+data_quality = monitoring_status.get("data_quality")
+if isinstance(data_quality, dict):
+    latest_successful_run = data_quality.get("latest_successful_ingestion_run")
+    if isinstance(latest_successful_run, dict):
+        collection_columns = st.columns(3)
+        with collection_columns[0]:
+            st.metric(
+                "Last successful collection",
+                latest_successful_run.get("finished_at")
+                or latest_successful_run.get("started_at")
+                or "unknown",
+            )
+        with collection_columns[1]:
+            st.metric("Collection source", latest_successful_run.get("source_name", "unknown"))
+        with collection_columns[2]:
+            st.metric("Records seen", latest_successful_run.get("records_seen", 0))
 if isinstance(recent_errors, list) and recent_errors:
     st.dataframe(pd.DataFrame(recent_errors), hide_index=True, width="stretch")
 

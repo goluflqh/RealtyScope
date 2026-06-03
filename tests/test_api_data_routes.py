@@ -383,5 +383,20 @@ def test_data_quality_stats_endpoint_reads_database_counts(tmp_path) -> None:
             "updated_count": 0,
             "error_summary": None,
         },
+        "latest_successful_ingestion_run": {
+            "id": 1,
+            "source_name": "domclick",
+            "status": "success",
+            "started_at": "2026-05-31T12:00:00+00:00",
+            "finished_at": payload["latest_successful_ingestion_run"]["finished_at"],
+            "records_seen": 2,
+            "raw_count": 1,
+            "normalized_count": 1,
+            "rejected_count": 1,
+            "inserted_count": 4,
+            "updated_count": 0,
+            "error_summary": None,
+        },
     }
     assert isinstance(payload["latest_ingestion_run"]["finished_at"], str)
+    assert isinstance(payload["latest_successful_ingestion_run"]["finished_at"], str)

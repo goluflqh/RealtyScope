@@ -181,6 +181,8 @@ If the task performs URL-file capture, pass `-SkipCapture` and provide `data/raw
 
 The task currently installed on the development machine is named `RealtyScope Domclick Scheduled Batch` and runs daily at 00:00 Moscow time.
 
+Fresh inspection on 2026-06-03 confirmed a daily trigger with `StartBoundary = 2026-06-02T00:00:00+03:00`, `DaysInterval = 1`, last run `03.06.2026 0:00:00`, result `0`, and next run `04.06.2026 0:00:00`. Keep this once-daily schedule for now. A second daily trigger should be added only if a fresh data audit proves it improves trend evidence enough to justify extra Domclick access pressure and duplicate-observation review. Ask before changing the installed Windows scheduled task.
+
 ## WSL Cron
 
 Use WSL cron for offline ingest/status jobs when snapshots are already present. Do not reuse the Windows `.venv` from WSL; install a Linux environment from `uv.lock` first.

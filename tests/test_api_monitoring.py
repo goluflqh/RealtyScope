@@ -84,6 +84,12 @@ def test_monitoring_status_endpoint_combines_counts_model_and_recent_errors(tmp_
     assert payload["data_quality"]["latest_ingestion_run"]["started_at"] == (
         "2026-05-31T12:00:00+00:00"
     )
+    latest_success = payload["data_quality"]["latest_successful_ingestion_run"]
+    assert latest_success["source_name"] == "domclick"
+    assert latest_success["status"] == "success"
+    assert latest_success["started_at"] == "2026-05-31T12:00:00+00:00"
+    assert latest_success["records_seen"] == 2
+    assert latest_success["normalized_count"] == 1
     assert payload["model"]["status"] == "ready"
     assert payload["model"]["feature_version"] == "ml_features_v2_non_leaky"
     assert payload["recent_errors"] == [

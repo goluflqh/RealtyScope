@@ -51,19 +51,19 @@ Source requirements: `E:\Магистр\2-курс\python\MISIS_2025\season_2\О
 | FastAPI and Swagger | Usable, filter slice added | Runtime HTTP checks returned 200 for `/health`, `/docs`, `/data?limit=3`, `/model/metadata`, and `/monitoring/status`; tests cover contracts. Phase 7.2 adds `/data` and `/listings` filters for price range, area range, rooms, source, and text search. | Verify Swagger in browser during final smoke and keep future query additions tested. |
 | Redis cache | Implemented and runtime-verified for read path | Redis-backed `/listings` and `/data` read path is code/test-covered; Phase 7.1 runtime proof observed the Redis preview key after a live `/data` call. Phase 7.2 makes cache keys filter-specific. | Repeat the short Redis proof during final smoke if the reviewer asks for cache behavior evidence. |
 | Streamlit dashboard | Partial but visibly stronger | Browser check confirms the app renders runtime data: `3019` listings, `3019` ML-ready rows, `0` rejected rows, `3` runs, and model version `baseline_ridge_v2_non_leaky`. Phase 7.2 adds Data Explorer sidebar controls; Phase 7.3 adds price distribution, median price by rooms, and a coordinate map with attribution. | Add clearer tabs, table pagination, last-update display, and final layout polish. |
-| Monitoring/logs | Partial | `/monitoring/status` reports environment `docker`, latest ingestion run success, `2000` normalized records, and recent errors `0`; Streamlit displays the monitoring slice. | Populate/display runtime logs more consistently and make last successful collection time obvious. |
+| Monitoring/logs | Clearer last-success display, logs still partial | `/monitoring/status` reports environment `docker`, latest ingestion run success, `2000` normalized records, latest successful ingestion details, and recent errors `0`; Streamlit displays the last successful collection timestamp/source/record count. | Populate runtime `app_logs` more consistently if deeper operations evidence is needed. |
 | Documentation and demo | Stronger, final smoke still required | README, course guidance docs, ML docs, operation docs, this status board, safe storage cleanup docs, and demo scripts exist. | Keep README/status current after remaining Phase 7 changes and use the demo script during final smoke. |
 
 ## Domclick Schedule Decision
 
-Current evidence:
+Current evidence checked again on 2026-06-03:
 
 - Scheduled task name: `RealtyScope Domclick Scheduled Batch`.
 - Trigger: daily, `StartBoundary = 2026-06-02T00:00:00+03:00`, `DaysInterval = 1`.
 - Last run: `03.06.2026 0:00:00`, result `0`.
 - Next run: `04.06.2026 0:00:00`.
 
-Recommendation for now: keep the installed schedule at once per day until Phase 7.1 validates runtime data freshness. A second run per day can help trend evidence only if it either captures fresh data or intentionally records a new observation timestamp without misleading the reviewer. It also increases Domclick access pressure and duplicate-report noise. If adopted, prefer two explicit daily triggers such as `00:00` and `12:00` Moscow, not an infinite loop.
+Decision for now: keep the installed schedule at once per day. A second run per day can help trend evidence only if it captures meaningfully fresh data or intentionally records a new observation timestamp without misleading the reviewer. It also increases Domclick access pressure and duplicate-report noise. If adopted later, prefer two explicit daily triggers such as `00:00` and `12:00` Moscow, not an infinite loop, and ask before changing the real scheduled task.
 
 ## Phase 7 Workstreams
 
@@ -115,7 +115,7 @@ Goal: make the defense path easy to follow.
 
 - [x] Add a concise demo script: Docker start, verify data/API, open API docs, open Streamlit, run prediction, inspect MLflow, prove Redis, and stop services safely.
 - [x] Add README runbook links and safe cleanup caveats.
-- [ ] Decide and document whether Domclick remains daily or moves to twice daily.
+- [x] Decide and document that Domclick remains daily for now; do not add a second daily trigger without fresh data value evidence and user approval.
 - [ ] Confirm GitHub Actions, local checks, Docker smoke, and browser check are green after the final Phase 7 changes.
 
 ## Success Check For Final Course Readiness

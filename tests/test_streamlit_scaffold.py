@@ -41,6 +41,8 @@ def test_streamlit_app_declares_monitoring_and_model_insights() -> None:
 
     assert "fetch_monitoring_data" in content
     assert "Monitoring" in content
+    assert "Last successful collection" in content
+    assert "latest_successful_ingestion_run" in content
     assert "Model insights" in content
     assert "feature_importance" in content
     assert "latest_observation_price_rub" not in content

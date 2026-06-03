@@ -305,6 +305,13 @@ def _data_quality_stats_payload(session: Session) -> dict[str, Any]:
         .order_by(IngestionRun.started_at.desc(), IngestionRun.id.desc())
         .limit(1)
     ).first()
+    latest_successful_run = session.execute(
+        select(IngestionRun, Source.name)
+        .join(Source, IngestionRun.source_id == Source.id)
+        .where(IngestionRun.status == "success")
+        .order_by(IngestionRun.started_at.desc(), IngestionRun.id.desc())
+        .limit(1)
+    ).first()
     return {
         "sources_total": _count(session, Source),
         "ingestion_runs_total": _count(session, IngestionRun),
@@ -316,6 +323,7 @@ def _data_quality_stats_payload(session: Session) -> dict[str, Any]:
         or 0,
         "rejected_listings_total": _count(session, RejectedListingRecord),
         "latest_ingestion_run": _latest_run_payload(latest_run),
+        "latest_successful_ingestion_run": _latest_run_payload(latest_successful_run),
     }
 
 

@@ -185,6 +185,8 @@ Nếu task capture từ URL file, truyền `-SkipCapture` và chuẩn bị `data
 
 Task đã được cài trên máy dev hiện có tên `RealtyScope Domclick Scheduled Batch` và chạy hằng ngày lúc 00:00 theo giờ Moscow.
 
+Kiểm tra mới ngày 2026-06-03 xác nhận trigger daily với `StartBoundary = 2026-06-02T00:00:00+03:00`, `DaysInterval = 1`, lần chạy gần nhất `03.06.2026 0:00:00`, result `0`, và lần chạy kế tiếp `04.06.2026 0:00:00`. Giữ lịch một lần mỗi ngày ở thời điểm hiện tại. Chỉ nên thêm trigger thứ hai trong ngày nếu audit dữ liệu mới chứng minh nó cải thiện trend evidence đủ đáng để chấp nhận thêm áp lực truy cập Domclick và phải review duplicate observations. Hỏi user trước khi thay đổi Windows scheduled task thật.
+
 ## WSL Cron
 
 Dùng WSL cron cho các job offline ingest/status khi snapshot đã có sẵn. Không dùng lại Windows `.venv` trong WSL; phải cài môi trường Linux riêng từ `uv.lock`.

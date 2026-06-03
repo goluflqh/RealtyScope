@@ -76,13 +76,14 @@ The assignment source `MISIS_2025/season_2/Описание проекта.html`
 - Modify: `docs/operations/domclick-scheduled-batch-ingestion.md`
 - Modify: `docs/operations/domclick-scheduled-batch-ingestion.vi.md`
 
-- [ ] Write RED API tests requiring `latest_success_started_at`, `latest_success_finished_at`, and `latest_success_record_count` or equivalent clear fields in `/monitoring/status`.
-- [ ] Implement the smallest schema/query change that exposes last successful collection time without breaking existing fields.
-- [ ] Write Streamlit client/scaffold tests requiring visible last-success text.
-- [ ] Render the last successful collection time in the Streamlit monitoring section.
-- [ ] Check current schedule evidence. Keep the installed schedule daily unless fresh data proves a second daily run improves trend evidence and the user approves changing the real scheduled task.
-- [ ] If only documenting the decision, commit docs/code normally. If changing the actual Windows scheduled task, ask the user immediately before the state-changing command.
-- [ ] Verify with local tests, Docker smoke, Browser check, push, and CI.
+- [x] Write RED API tests requiring `latest_success_started_at`, `latest_success_finished_at`, and `latest_success_record_count` or equivalent clear fields in `/monitoring/status`.
+- [x] Implement the smallest schema/query change that exposes last successful collection time without breaking existing fields.
+- [x] Write Streamlit client/scaffold tests requiring visible last-success text.
+- [x] Render the last successful collection time in the Streamlit monitoring section.
+- [x] Check current schedule evidence. Keep the installed schedule daily unless fresh data proves a second daily run improves trend evidence and the user approves changing the real scheduled task.
+- [x] If only documenting the decision, commit docs/code normally. If changing the actual Windows scheduled task, ask the user immediately before the state-changing command.
+- [x] Verify with local tests, Docker smoke, and Browser check.
+- [ ] Push and wait for CI.
 
 ## Task 4: Streamlit Final UX Polish
 

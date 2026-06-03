@@ -99,7 +99,7 @@ Mở:
 Đường đi demo:
 
 1. Chỉ KPI cards: listings, ML-ready rows, rejected rows, ingestion runs.
-2. Chỉ bảng latest ingestion run và monitoring section.
+2. Chỉ bảng latest ingestion run và monitoring section, gồm timestamp/source/record count của `Last successful collection`.
 3. Dùng sidebar filters:
    - đặt `Rows` là `100` hoặc `500`;
    - đặt `Min price (RUB)` là `10000000`;
