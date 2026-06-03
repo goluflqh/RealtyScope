@@ -42,6 +42,7 @@ def fetch_dashboard_data(
     api_base_url: str,
     *,
     limit: int = 1000,
+    filters: dict[str, Any] | None = None,
     get: HttpGet = requests.get,
     timeout: float = 10.0,
 ) -> DashboardData:
@@ -60,7 +61,7 @@ def fetch_dashboard_data(
         listings_payload = _get_json_object(
             get,
             f"{base_url}/data",
-            params={"limit": limit, "offset": 0},
+            params=_listing_query_params(limit=limit, offset=0, filters=filters),
             timeout=timeout,
         )
         items = listings_payload.get("items", [])
@@ -123,6 +124,24 @@ def fetch_monitoring_data(
         errors.append(f"Could not load model metadata: {exc}")
 
     return MonitoringData(status=status, model_metadata=model_metadata, errors=errors)
+
+
+def _listing_query_params(
+    *,
+    limit: int,
+    offset: int,
+    filters: dict[str, Any] | None,
+) -> dict[str, Any]:
+    params: dict[str, Any] = {"limit": limit, "offset": offset}
+    for key, value in (filters or {}).items():
+        if value is None:
+            continue
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                continue
+        params[key] = value
+    return params
 
 
 def _get_json_object(

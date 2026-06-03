@@ -47,9 +47,9 @@ Source requirements: `E:\Магистр\2-курс\python\MISIS_2025\season_2\О
 | EDA and visual conclusions | Partial but data is improving | Phase 4 EDA docs cover cross-sectional data quality; fresh runtime data now has multiple observations for `970` listings and `26` detected price changes. | Add reviewer-facing charts in Streamlit. Trend conclusions can become less conservative only after validating observation freshness and repeated capture semantics. |
 | ML baseline and metrics | Implemented as honest baseline | `baseline_ridge_v2_non_leaky` removes latest-price leakage and uses grouped validation; Phase 6 adds Docker-backed MLflow evidence. | The model is still a baseline appraisal model. Forecast-vs-actual and richer model trust need repeated observations and/or final UI explanation. |
 | MLflow MLOps | Implemented for baseline evidence | MLflow run `4999892d2d92402ab78e1209203c338e`, registered model `realtyscope-price-model`, version `3`, and persisted artifacts. | Final demo should show MLflow URL and explain what is baseline versus final-quality claim. |
-| FastAPI and Swagger | Partial but usable | Runtime HTTP checks returned 200 for `/health`, `/docs`, `/data?limit=3`, `/model/metadata`, and `/monitoring/status`; tests cover contracts. | Add richer filters/search parameters if Phase 7 upgrades the Data Explorer. Verify Swagger in browser during final smoke. |
-| Redis cache | Implemented and runtime-verified for read path | Redis-backed `/listings` and `/data` read path is code/test-covered; Phase 7.1 runtime proof observed the Redis preview key after a live `/data` call. | Repeat the short Redis proof during final smoke if the reviewer asks for cache behavior evidence. |
-| Streamlit dashboard | Partial and highest visible gap | Browser check confirms the app renders runtime data: `3019` listings, `3019` ML-ready rows, `0` rejected rows, `3` runs, and model version `baseline_ridge_v2_non_leaky`. | Add clearer multipage/tabs, charts, maps or geo summary, filters/search/table ergonomics, last-update display, and visible OSM attribution when maps/OSM-derived views are shown. |
+| FastAPI and Swagger | Usable, filter slice added | Runtime HTTP checks returned 200 for `/health`, `/docs`, `/data?limit=3`, `/model/metadata`, and `/monitoring/status`; tests cover contracts. Phase 7.2 adds `/data` and `/listings` filters for price range, area range, rooms, source, and text search. | Verify Swagger in browser during final smoke and keep future query additions tested. |
+| Redis cache | Implemented and runtime-verified for read path | Redis-backed `/listings` and `/data` read path is code/test-covered; Phase 7.1 runtime proof observed the Redis preview key after a live `/data` call. Phase 7.2 makes cache keys filter-specific. | Repeat the short Redis proof during final smoke if the reviewer asks for cache behavior evidence. |
+| Streamlit dashboard | Partial but filter workflow added | Browser check confirms the app renders runtime data: `3019` listings, `3019` ML-ready rows, `0` rejected rows, `3` runs, and model version `baseline_ridge_v2_non_leaky`. Phase 7.2 adds Data Explorer sidebar controls for price, area, rooms, source, and address search. | Add clearer tabs, charts, maps or geo summary, last-update display, and visible OSM attribution when maps/OSM-derived views are shown. |
 | Monitoring/logs | Partial | `/monitoring/status` reports environment `docker`, latest ingestion run success, `2000` normalized records, and recent errors `0`; Streamlit displays the monitoring slice. | Populate/display runtime logs more consistently and make last successful collection time obvious. |
 | Documentation and demo | Partial | README, course guidance docs, ML docs, operation docs, this status board, and safe storage cleanup docs exist. | Add a concise demo script/runbook. Keep README current with Phase 6 and Phase 7 evidence. |
 
@@ -91,9 +91,10 @@ Goal: prove the current data/runtime state from fresh commands.
 
 Goal: satisfy the assignment's filter/search/table story.
 
-- Add tested API query parameters for useful filters such as price range, area range, rooms, source, and text/address search.
-- Update Streamlit with sidebar controls and a clearer paginated table view.
-- Verify with API tests, Streamlit client tests, Docker smoke, and browser check.
+- [x] Add tested API query parameters for useful filters such as price range, area range, rooms, source, and text/address search.
+- [x] Update Streamlit with sidebar controls wired through the API client.
+- [ ] Add a clearer paginated table view if the final demo needs browsing beyond the row-limit selector.
+- [x] Verify with API tests, Streamlit client tests, Docker smoke, and browser check.
 
 ### Phase 7.3: Reviewer-Facing Charts And Map
 

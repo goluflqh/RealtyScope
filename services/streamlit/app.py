@@ -42,7 +42,25 @@ st.title("RealtyScope")
 st.caption("Phase 5 monitoring and non-leaky baseline dashboard")
 
 row_limit = st.sidebar.selectbox("Rows", [25, 100, 500, 1000], index=3)
-data = fetch_dashboard_data(API_BASE_URL, limit=row_limit)
+st.sidebar.subheader("Data explorer filters")
+min_price_rub = st.sidebar.number_input("Min price (RUB)", min_value=0, value=0, step=500_000)
+max_price_rub = st.sidebar.number_input("Max price (RUB)", min_value=0, value=0, step=500_000)
+min_area_m2 = st.sidebar.number_input("Min area (m2)", min_value=0.0, value=0.0, step=5.0)
+max_area_m2 = st.sidebar.number_input("Max area (m2)", min_value=0.0, value=0.0, step=5.0)
+rooms_choice = st.sidebar.selectbox("Rooms", ["Any", 1, 2, 3, 4, 5])
+source_name = st.sidebar.text_input("Source", value="")
+address_search = st.sidebar.text_input("Address search", value="")
+listing_filters = {
+    "min_price_rub": min_price_rub or None,
+    "max_price_rub": max_price_rub or None,
+    "min_area_m2": min_area_m2 or None,
+    "max_area_m2": max_area_m2 or None,
+    "rooms": rooms_choice if isinstance(rooms_choice, int) else None,
+    "source_name": source_name,
+    "search": address_search,
+}
+
+data = fetch_dashboard_data(API_BASE_URL, limit=row_limit, filters=listing_filters)
 monitoring = fetch_monitoring_data(API_BASE_URL)
 
 if data.errors:

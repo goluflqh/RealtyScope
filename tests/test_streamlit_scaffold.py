@@ -45,3 +45,17 @@ def test_streamlit_app_declares_monitoring_and_model_insights() -> None:
     assert "feature_importance" in content
     assert "latest_observation_price_rub" not in content
     assert "latest_observation_price_per_m2" not in content
+
+
+def test_streamlit_app_declares_data_explorer_filters() -> None:
+    content = STREAMLIT_APP.read_text(encoding="utf-8")
+
+    assert "Data explorer filters" in content
+    assert "Min price (RUB)" in content
+    assert "Max price (RUB)" in content
+    assert "Min area (m2)" in content
+    assert "Max area (m2)" in content
+    assert "Rooms" in content
+    assert "Source" in content
+    assert "Address search" in content
+    assert "filters=listing_filters" in content

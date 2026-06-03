@@ -9,7 +9,7 @@ from typing import Annotated, Any
 
 import joblib
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from realtyscope.config import get_settings
@@ -17,6 +17,7 @@ from realtyscope.database.models import (
     AppLog,
     IngestionRun,
     Listing,
+    ListingSourceLink,
     RawListingRecord,
     RejectedListingRecord,
     Source,
@@ -204,13 +205,29 @@ def list_listings(
     redis_client: Annotated[Any | None, Depends(get_redis_client)] = None,
     limit: Annotated[int, Query(ge=1, le=2000)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
+    min_price_rub: Annotated[int | None, Query(ge=0)] = None,
+    max_price_rub: Annotated[int | None, Query(ge=0)] = None,
+    min_area_m2: Annotated[float | None, Query(ge=0)] = None,
+    max_area_m2: Annotated[float | None, Query(ge=0)] = None,
+    rooms: Annotated[int | None, Query(ge=0)] = None,
+    source_name: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
+    search: Annotated[str | None, Query(min_length=1, max_length=200)] = None,
 ) -> dict[str, Any]:
-    cache_key = _listings_cache_key(limit=limit, offset=offset)
+    filters = _active_listing_filters(
+        min_price_rub=min_price_rub,
+        max_price_rub=max_price_rub,
+        min_area_m2=min_area_m2,
+        max_area_m2=max_area_m2,
+        rooms=rooms,
+        source_name=source_name,
+        search=search,
+    )
+    cache_key = _listings_cache_key(limit=limit, offset=offset, filters=filters)
     cached_payload = _read_json_cache(redis_client, cache_key)
     if cached_payload is not None:
         return cached_payload
 
-    payload = _listings_payload(session, limit=limit, offset=offset)
+    payload = _listings_payload(session, limit=limit, offset=offset, filters=filters)
     _write_json_cache(
         redis_client,
         cache_key,
@@ -220,11 +237,22 @@ def list_listings(
     return payload
 
 
-def _listings_payload(session: Session, *, limit: int, offset: int) -> dict[str, Any]:
-    total = session.scalar(select(func.count()).select_from(Listing)) or 0
-    listings = session.scalars(
-        select(Listing).order_by(Listing.id).limit(limit).offset(offset)
-    ).all()
+def _listings_payload(
+    session: Session,
+    *,
+    limit: int,
+    offset: int,
+    filters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    conditions = _listing_filter_conditions(filters or {})
+    count_query = select(func.count()).select_from(Listing)
+    listings_query = select(Listing).order_by(Listing.id).limit(limit).offset(offset)
+    for condition in conditions:
+        count_query = count_query.where(condition)
+        listings_query = listings_query.where(condition)
+
+    total = session.scalar(count_query) or 0
+    listings = session.scalars(listings_query).all()
     return {
         "items": [_listing_payload(listing) for listing in listings],
         "limit": limit,
@@ -324,8 +352,70 @@ def _count(session: Session, model: type[Any]) -> int:
     return session.scalar(select(func.count()).select_from(model)) or 0
 
 
-def _listings_cache_key(*, limit: int, offset: int) -> str:
-    return f"realtyscope:listings:v1:limit={limit}:offset={offset}"
+def _active_listing_filters(
+    *,
+    min_price_rub: int | None,
+    max_price_rub: int | None,
+    min_area_m2: float | None,
+    max_area_m2: float | None,
+    rooms: int | None,
+    source_name: str | None,
+    search: str | None,
+) -> dict[str, Any]:
+    filters: dict[str, Any] = {}
+    for key, value in {
+        "min_price_rub": min_price_rub,
+        "max_price_rub": max_price_rub,
+        "min_area_m2": min_area_m2,
+        "max_area_m2": max_area_m2,
+        "rooms": rooms,
+    }.items():
+        if value is not None:
+            filters[key] = value
+
+    for key, value in {"source_name": source_name, "search": search}.items():
+        if value is not None and value.strip():
+            filters[key] = value.strip()
+    return filters
+
+
+def _listing_filter_conditions(filters: dict[str, Any]) -> list[Any]:
+    conditions: list[Any] = []
+    if "min_price_rub" in filters:
+        conditions.append(Listing.price_rub >= filters["min_price_rub"])
+    if "max_price_rub" in filters:
+        conditions.append(Listing.price_rub <= filters["max_price_rub"])
+    if "min_area_m2" in filters:
+        conditions.append(Listing.total_area_m2 >= filters["min_area_m2"])
+    if "max_area_m2" in filters:
+        conditions.append(Listing.total_area_m2 <= filters["max_area_m2"])
+    if "rooms" in filters:
+        conditions.append(Listing.rooms == filters["rooms"])
+    if source_name := filters.get("source_name"):
+        source_ids = select(Source.id).where(Source.name == source_name)
+        conditions.append(Listing.links.any(ListingSourceLink.source_id.in_(source_ids)))
+    if search := filters.get("search"):
+        pattern = f"%{str(search).lower()}%"
+        conditions.append(
+            or_(
+                func.lower(Listing.city).like(pattern),
+                func.lower(func.coalesce(Listing.address_text, "")).like(pattern),
+            )
+        )
+    return conditions
+
+
+def _listings_cache_key(
+    *,
+    limit: int,
+    offset: int,
+    filters: dict[str, Any] | None = None,
+) -> str:
+    key = f"realtyscope:listings:v1:limit={limit}:offset={offset}"
+    if not filters:
+        return key
+    filter_suffix = ":".join(f"{name}={value}" for name, value in sorted(filters.items()))
+    return f"{key}:{filter_suffix}"
 
 
 def _read_json_cache(redis_client: Any | None, key: str) -> dict[str, Any] | None:
