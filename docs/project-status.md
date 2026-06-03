@@ -18,23 +18,38 @@ This document is the operating status board for the final course-readiness work.
 | Local verification before merge | Passing | `.venv` ruff check passed, ruff format check found 69 formatted files, pytest reported `125 passed in 13.06s` with `-p no:cacheprovider`. |
 | GitNexus freshness | Fresh for base SHA | `realtyscope-phase6-index` is indexed at `30bce998...`. Refresh or create a Phase 7 index before relying on graph impact after new Phase 7 commits. |
 
+## Phase 7.1 Runtime Audit Snapshot
+
+Fresh checks from 2026-06-03 on `phase7-course-readiness-polish`:
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Docker runtime location | WSL2 Docker, not PowerShell PATH | PowerShell has no `docker` command; WSL reports Docker `29.2.1` and Compose `v5.1.0`. |
+| Compose services | Running | `db`, `redis`, `api`, and `streamlit` are healthy; `mlflow` is up on port `5000`. |
+| API health and docs | HTTP 200 | `/health`, `/docs`, `/data?limit=3`, `/model/metadata`, and `/monitoring/status` responded from localhost. |
+| Data status | Healthy | Runtime DB has `3019` listings, `3191` raw listings, `3` ingestion runs, `0` rejected rows, and latest run status `success`. |
+| Data readiness | Improved since older docs | `3019` listings, `3989` observations, `970` listings with multiple observations, `26` price changes, coordinate coverage `1.0`, ML-ready coverage `1.0`. |
+| ML artifact | Ready | `/model/metadata` reports `realtyscope-price-model`, `baseline_ridge_v2_non_leaky`, `ml_features_v2_non_leaky`, and 23 features. |
+| Streamlit browser check | Loads and renders data | Browser shows `RealtyScope`, `Listings 3019`, `ML-ready 3019`, `Rejected 0`, `Runs 3`, latest ingestion success, and model version `baseline_ridge_v2_non_leaky`. |
+| Current visible UI gap | Still present | Streamlit works, but remains a single-page dashboard with limited row-count control and no rich charts/maps/filter workflow yet. |
+
 ## Course Requirement Status
 
 Source requirements: `E:\Магистр\2-курс\python\MISIS_2025\season_2\Описание проекта.html`, `Примерный план семестра.htm`, and repository traceability docs under `docs/course-guidance/`.
 
 | Requirement | Current status | Evidence | Remaining Phase 7 gap |
 | --- | --- | --- | --- |
-| One-command Docker project | Strong foundation, needs final re-smoke | `docker-compose.yml` has `db`, `redis`, `mlflow`, `api`, `streamlit`; Phase 6 verified `docker compose -p realtyscope up --build -d`. | Re-run final Docker smoke after Phase 7 docs/UI changes and add safe cleanup instructions for containers, volumes, raw data, and model artifacts. |
+| One-command Docker project | Runtime smoke green, final re-smoke still required | WSL `docker compose -p realtyscope ps` shows `db`, `redis`, `api`, and `streamlit` healthy, with `mlflow` up. Phase 6 also verified `docker compose -p realtyscope up --build -d`. | Re-run final Docker smoke after future Phase 7 UI/docs changes and add safe cleanup instructions for containers, volumes, raw data, and model artifacts. |
 | Automatic data collection | Implemented as bounded batch | Domclick Chrome/CDP capture, scheduled batch runner, Windows scheduled task, and ingestion status command exist. Current task is daily at `00:00` Moscow and last result was `0`. | Decide whether to keep daily or add a second run only after checking freshness value versus anti-abuse risk and duplicate-observation semantics. |
 | PostgreSQL storage and Alembic | Implemented | SQLAlchemy 2.0 models, Alembic migrations, persisted listings, observations, OSM features, ingestion runs, and app logs. | Fresh data count check should be part of final readiness, not inferred from old docs. |
-| Data volume and quality | Partially proven | Prior docs record 2,000 Domclick listings/observations, strong coordinate coverage, ML-ready flags, and 4 live OSM rows. | Re-run data-readiness/status commands on the current runtime DB before final claim. |
-| EDA and visual conclusions | Partial | Phase 4 EDA docs cover cross-sectional data quality and observation limitations. | Add reviewer-facing charts in Streamlit and keep trend conclusions conservative until multiple meaningful observations per listing exist. |
+| Data volume and quality | Runtime audit green | Fresh data-readiness reports `3019` listings, `3989` observations, `970` listings with multiple observations, `26` price changes, coordinate coverage `1.0`, ML-ready coverage `1.0`, and `0` rejected rows. | Use these fresh numbers in the demo, then re-run after any new ingestion or DB reset. |
+| EDA and visual conclusions | Partial but data is improving | Phase 4 EDA docs cover cross-sectional data quality; fresh runtime data now has multiple observations for `970` listings and `26` detected price changes. | Add reviewer-facing charts in Streamlit. Trend conclusions can become less conservative only after validating observation freshness and repeated capture semantics. |
 | ML baseline and metrics | Implemented as honest baseline | `baseline_ridge_v2_non_leaky` removes latest-price leakage and uses grouped validation; Phase 6 adds Docker-backed MLflow evidence. | The model is still a baseline appraisal model. Forecast-vs-actual and richer model trust need repeated observations and/or final UI explanation. |
 | MLflow MLOps | Implemented for baseline evidence | MLflow run `4999892d2d92402ab78e1209203c338e`, registered model `realtyscope-price-model`, version `3`, and persisted artifacts. | Final demo should show MLflow URL and explain what is baseline versus final-quality claim. |
-| FastAPI and Swagger | Partial but usable | `/health`, `/listings`, `/data`, `/stats/data-quality`, `/predict`, `/model/metadata`, `/monitoring/status`; tests cover contracts. | Add richer filters/search parameters if Phase 7 upgrades the Data Explorer. Verify Swagger in browser during final smoke. |
+| FastAPI and Swagger | Partial but usable | Runtime HTTP checks returned 200 for `/health`, `/docs`, `/data?limit=3`, `/model/metadata`, and `/monitoring/status`; tests cover contracts. | Add richer filters/search parameters if Phase 7 upgrades the Data Explorer. Verify Swagger in browser during final smoke. |
 | Redis cache | Implemented for read path | Redis-backed `/listings` and `/data` read path is code/test-covered. | Include a runtime check or demo note proving cache path is active in Docker. |
-| Streamlit dashboard | Partial and highest visible gap | Current app has overview, prediction, monitoring, and model-insight sections through the API client. | Add clearer multipage/tabs, charts, maps or geo summary, filters/search/table ergonomics, last-update display, and visible OSM attribution when maps/OSM-derived views are shown. |
-| Monitoring/logs | Partial | `/monitoring/status`, latest ingestion summary, model metadata, recent app logs, and Streamlit monitoring section. | Populate/display runtime logs more consistently and make last successful collection time obvious. |
+| Streamlit dashboard | Partial and highest visible gap | Browser check confirms the app renders runtime data: `3019` listings, `3019` ML-ready rows, `0` rejected rows, `3` runs, and model version `baseline_ridge_v2_non_leaky`. | Add clearer multipage/tabs, charts, maps or geo summary, filters/search/table ergonomics, last-update display, and visible OSM attribution when maps/OSM-derived views are shown. |
+| Monitoring/logs | Partial | `/monitoring/status` reports environment `docker`, latest ingestion run success, `2000` normalized records, and recent errors `0`; Streamlit displays the monitoring slice. | Populate/display runtime logs more consistently and make last successful collection time obvious. |
 | Documentation and demo | Partial | README, course guidance docs, ML docs, operation docs, and this status board exist. | Add a concise demo script/runbook and safe storage cleanup instructions. Keep README current with Phase 6 and Phase 7 evidence. |
 
 ## Domclick Schedule Decision
@@ -65,10 +80,11 @@ Goal: make the project state readable and management-friendly.
 
 Goal: prove the current data/runtime state from fresh commands.
 
-- Re-run data-readiness/status commands against the runtime DB.
-- Re-run Docker Compose smoke from the current branch.
-- Verify API health, Swagger, Streamlit, Redis read path, MLflow, and model artifact availability.
-- Add safe cleanup docs for containers, named volumes, raw snapshots, reports, and model artifacts. Explicitly warn before destructive volume/data deletion.
+- [x] Re-run data-readiness/status commands against the runtime DB.
+- [x] Re-run Docker Compose smoke from the current branch.
+- [x] Verify API health, Swagger, Streamlit, MLflow reachability, and model artifact availability.
+- [ ] Add safe cleanup docs for containers, named volumes, raw snapshots, reports, and model artifacts. Explicitly warn before destructive volume/data deletion.
+- [ ] Add an explicit Redis runtime evidence command or demo note if the final reviewer script should prove cache behavior, not only endpoint behavior.
 
 ### Phase 7.2: Data Explorer Filters
 
