@@ -14,9 +14,9 @@ This document is the operating status board for the final course-readiness work.
 | Base branch | Merged | `main` was fast-forwarded from `c6e422b` to `30bce998...` on 2026-06-03. |
 | New Phase 7 branch | Active | `phase7-course-readiness-polish` was created from the updated `main` and pushed to origin. |
 | GitHub Actions on `main` | Passing | `ci` run `26893951979`, SHA `30bce998...`, conclusion `success`. |
-| GitHub Actions on Phase 7 | Passing | Latest `ci` run `26901678942`, SHA `544b07c...`, conclusion `success`. |
-| Local verification before merge | Passing | Phase 6 merge checks passed with `125 passed`. Latest Phase 7.3 slice also passed `git diff --check`, `ruff check .`, `ruff format --check .`, and full pytest `135 passed` with `-p no:cacheprovider`. |
-| Latest Phase 7 commit | Pushed and CI-green | `544b07c feat: add reviewer visuals` adds tested Streamlit charts/map helpers and reviewer-facing UI. |
+| GitHub Actions on Phase 7 | Passing | Latest `ci` run `26904040922`, SHA `6cb103b...`, conclusion `success`. |
+| Local verification before merge | Passing | Phase 6 merge checks passed with `125 passed`. Latest Phase 7 monitoring slice also passed `git diff --check`, `ruff check .`, `ruff format --check .`, and full pytest `135 passed` with `-p no:cacheprovider`. |
+| Latest Phase 7 commit | Pushed and CI-green | `6cb103b feat: show last successful collection` adds tested API/Streamlit visibility for the latest successful Domclick collection. |
 | GitNexus freshness | Stale for Phase 7 code | `realtyscope-phase6-index` is indexed at `30bce998...`, while active branch is now beyond that commit. Refresh or create a Phase 7 index before relying on graph impact after new Phase 7 commits. |
 
 ## Phase 7.1 Runtime Audit Snapshot
@@ -50,7 +50,7 @@ Source requirements: `E:\Магистр\2-курс\python\MISIS_2025\season_2\О
 | MLflow MLOps | Implemented for baseline evidence | MLflow run `4999892d2d92402ab78e1209203c338e`, registered model `realtyscope-price-model`, version `3`, and persisted artifacts. | Final demo should show MLflow URL and explain what is baseline versus final-quality claim. |
 | FastAPI and Swagger | Usable, filter slice added | Runtime HTTP checks returned 200 for `/health`, `/docs`, `/data?limit=3`, `/model/metadata`, and `/monitoring/status`; tests cover contracts. Phase 7.2 adds `/data` and `/listings` filters for price range, area range, rooms, source, and text search. | Verify Swagger in browser during final smoke and keep future query additions tested. |
 | Redis cache | Implemented and runtime-verified for read path | Redis-backed `/listings` and `/data` read path is code/test-covered; Phase 7.1 runtime proof observed the Redis preview key after a live `/data` call. Phase 7.2 makes cache keys filter-specific. | Repeat the short Redis proof during final smoke if the reviewer asks for cache behavior evidence. |
-| Streamlit dashboard | Partial but visibly stronger | Browser check confirms the app renders runtime data: `3019` listings, `3019` ML-ready rows, `0` rejected rows, `3` runs, and model version `baseline_ridge_v2_non_leaky`. Phase 7.2 adds Data Explorer sidebar controls; Phase 7.3 adds price distribution, median price by rooms, and a coordinate map with attribution. | Add clearer tabs, table pagination, last-update display, and final layout polish. |
+| Streamlit dashboard | Partial but visibly stronger | Browser check confirms the app renders runtime data: `3019` listings, `3019` ML-ready rows, `0` rejected rows, `3` runs, and model version `baseline_ridge_v2_non_leaky`. Phase 7.2 adds Data Explorer sidebar controls; Phase 7.3 adds price distribution, median price by rooms, and a coordinate map with attribution; the latest monitoring slice adds last-successful-collection metrics. | Add clearer tabs, table pagination, and final layout polish. |
 | Monitoring/logs | Clearer last-success display, logs still partial | `/monitoring/status` reports environment `docker`, latest ingestion run success, `2000` normalized records, latest successful ingestion details, and recent errors `0`; Streamlit displays the last successful collection timestamp/source/record count. | Populate runtime `app_logs` more consistently if deeper operations evidence is needed. |
 | Documentation and demo | Stronger, final smoke still required | README, course guidance docs, ML docs, operation docs, this status board, safe storage cleanup docs, and demo scripts exist. | Keep README/status current after remaining Phase 7 changes and use the demo script during final smoke. |
 
@@ -69,7 +69,7 @@ Decision for now: keep the installed schedule at once per day. A second run per 
 
 Phase 7 should be split into small, independently verifiable slices. Do not batch all UI, data, docs, and ops changes into one commit.
 
-Detailed finish plan after Phase 7.3: `docs/superpowers/plans/2026-06-03-realtyscope-course-readiness-finish-plan.md`.
+Detailed finish plan after the latest Phase 7 monitoring slice: `docs/superpowers/plans/2026-06-03-realtyscope-course-readiness-finish-plan.md`.
 
 ### Phase 7.0: Status And README Sync
 

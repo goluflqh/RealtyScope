@@ -2,7 +2,7 @@
 
 RealtyScope — учебный data-service проект уровня grade 5 для оценки стоимости квартир в Москве.
 
-## Current Status After Phase 7.3
+## Current Status In Phase 7
 
 Phase 6 has been merged into `main` at `30bce998f1c3e5a6d13085d08a0b3692a52234a2`. The active follow-up branch is `phase7-course-readiness-polish`. For the current readiness board, requirement checklist, Domclick schedule note, and Phase 7 roadmap, see `docs/project-status.md`.
 
@@ -41,9 +41,9 @@ The repository currently contains a tested course-ready foundation:
 - FastAPI `/predict` contract with Pydantic validation and model artifact loading from `ACTIVE_MODEL_ARTIFACT_PATH`;
 - Streamlit baseline prediction form that calls `/predict` and displays predicted price, model version, metrics summary, and caveat;
 - Phase 7.2 API/Streamlit filters for price range, area range, rooms, source, and address search;
-- Phase 7.3 reviewer visuals: price distribution, median price by rooms, and a coordinate map with visible OpenStreetMap attribution.
+- Phase 7 reviewer polish: filters, reviewer charts/map, demo runbook, and visible last-successful-collection monitoring.
 
-Important caveat: RealtyScope now has non-leaky baseline evidence and a real Docker-backed MLflow registration path, but the model is still a baseline appraisal model rather than a final production estimator. Forecast-vs-actual conclusions still need richer repeated observations per listing. The most visible remaining Phase 7 gaps are demo/runbook polish, clearer last-update monitoring, table pagination/tabs, and final course-readiness verification.
+Important caveat: RealtyScope now has non-leaky baseline evidence and a real Docker-backed MLflow registration path, but the model is still a baseline appraisal model rather than a final production estimator. Forecast-vs-actual conclusions still need richer repeated observations per listing. The most visible remaining Phase 7 gaps are table pagination/tabs, final UI ergonomics, and final course-readiness verification.
 
 Phase 7 focuses on final course-readiness polish: status/docs, fresh runtime and data checks, safe Docker/storage cleanup guidance, Streamlit data explorer filters and reviewer visuals, demo script, and a documented decision on whether Domclick ingestion should stay daily or run twice per day.
 
@@ -70,7 +70,7 @@ Phase 7.2-7.3 adds reviewer-facing readiness polish:
 - `/data` and `/listings` support filters for price range, area range, rooms, source, and address search;
 - Streamlit exposes those filters in the sidebar;
 - Streamlit renders reviewer visuals for price distribution, median price by rooms, and a coordinate map with OpenStreetMap attribution;
-- GitHub Actions is green for `phase7-course-readiness-polish` at `544b07c...`.
+- GitHub Actions is green for `phase7-course-readiness-polish` at `6cb103b...`.
 
 Generated model artifacts and runtime logs remain under ignored `data/processed/`. See `docs/ml/phase5-non-leaky-model.md`, `docs/ml/phase6-mlflow-registration.md`, and `docs/project-status.md` for metrics, MLOps evidence, and current caveats.
 

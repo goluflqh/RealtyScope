@@ -14,21 +14,20 @@
 
 - Phase 6 is merged into `main` at `30bce998f1c3e5a6d13085d08a0b3692a52234a2` and preserved as branch `phase6-mlflow-redis-readiness`.
 - Active branch is `phase7-course-readiness-polish`.
-- Latest Phase 7 UI slice is `544b07cf63e1c6d0331043de6fa040adbb8ba71e feat: add reviewer visuals`.
-- Local checks for the UI slice passed: `git diff --check`, `ruff check .`, `ruff format --check .`, and full `pytest -p no:cacheprovider` with `135 passed`.
+- Latest Phase 7 slice is `6cb103b12717103369cd52fba843d31fcf0c65db feat: show last successful collection`.
+- Local checks for the latest monitoring slice passed: `git diff --check`, `ruff check .`, `ruff format --check .`, and full `pytest -p no:cacheprovider` with `135 passed`.
 - Docker smoke after Streamlit rebuild showed the compose services healthy and `http://localhost:8501` returning HTTP `200`.
 - Browser DOM snapshot confirmed `Reviewer visuals`, `Price distribution`, `Median price by rooms`, `Listing map`, and `OpenStreetMap contributors` rendered with no browser error logs.
-- GitHub Actions `ci` run `26901678942` passed for `544b07c`.
+- GitHub Actions `ci` run `26904040922` passed for `6cb103b`.
 - GitNexus remains indexed only through `realtyscope-phase6-index` at `30bce998`; create/refresh a Phase 7 index before using graph impact for future code edits, or explicitly treat the graph as stale.
 
 ## Requirement Coverage Snapshot
 
 The assignment source `MISIS_2025/season_2/Описание проекта.html` expects a Docker-launched data service with automatic collection, PostgreSQL, EDA, ML prediction, FastAPI/Swagger, Streamlit filters/charts/pages, monitoring/logs, MLflow, Redis, CI/tests, and course documentation. RealtyScope now covers the foundation and most grade-5 stack evidence. Remaining gaps are mostly reviewer visibility and honest final polish:
 
-- last successful collection time should be obvious in API/Streamlit;
 - trend and forecast-vs-actual language must stay conservative unless observation freshness is revalidated;
 - table pagination/tabs and final Streamlit layout can be clearer;
-- demo script/runbook should walk a reviewer through Docker, API docs, Streamlit, prediction, MLflow, Redis proof, and safe cleanup;
+- demo script/runbook exists and should be used for final smoke evidence;
 - Domclick schedule should remain daily unless the data value of a second daily run is proven and the user approves the operational change;
 - final merge back to `main` needs fresh local, Docker, Browser, and GitHub Actions evidence.
 
@@ -60,7 +59,7 @@ The assignment source `MISIS_2025/season_2/Описание проекта.html`
 - [x] Include exact WSL Docker commands because PowerShell does not have `docker` in PATH on this machine.
 - [x] Include destructive cleanup warnings: do not run `docker compose down -v` or volume prune unless the user explicitly wants data/model artifacts deleted.
 - [x] Verify docs links from README.
-- [ ] Run the standard local checks and push/CI.
+- [x] Run the standard local checks and push/CI.
 
 ## Task 3: Last-Update Monitoring And Domclick Schedule Decision
 
@@ -83,7 +82,7 @@ The assignment source `MISIS_2025/season_2/Описание проекта.html`
 - [x] Check current schedule evidence. Keep the installed schedule daily unless fresh data proves a second daily run improves trend evidence and the user approves changing the real scheduled task.
 - [x] If only documenting the decision, commit docs/code normally. If changing the actual Windows scheduled task, ask the user immediately before the state-changing command.
 - [x] Verify with local tests, Docker smoke, and Browser check.
-- [ ] Push and wait for CI.
+- [x] Push and wait for CI.
 
 ## Task 4: Streamlit Final UX Polish
 
