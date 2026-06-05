@@ -440,7 +440,11 @@ def test_scheduled_batch_script_calls_chrome_capture_before_url_file_fallback() 
     assert '"--offset-stop", "$CaptureOffsetStop"' in script
     assert "[int]$MinCleanRecords = 1000" in script
     assert '"--min-normalized-records", "$MinCleanRecords"' in script
-    assert "$CaptureOutput = & $Python @CaptureArgs" in script
+    capture_command_log_index = script.index(
+        'Write-Host ("Capture command: " + $Python + " " + ($CaptureArgs -join " "))'
+    )
+    capture_invocation_index = script.index("$CaptureOutput = & $Python @CaptureArgs 2>&1")
+    assert capture_command_log_index < capture_invocation_index
     assert "$CaptureOutput | ForEach-Object { Write-Host $_ }" in script
     assert "[switch]$DryRun" in script
 

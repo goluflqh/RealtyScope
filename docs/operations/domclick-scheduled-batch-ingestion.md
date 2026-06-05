@@ -137,6 +137,16 @@ Observed 2026-06-05 partial evidence from the development machine:
 - Earliest payload timestamp: `2026-06-04T21:00:46.0884704Z` (`2026-06-05 00:00:46` Moscow).
 - No-write recovery smoke: `1120` records, `1120` normalized listings, `1120` ML-ready listings, `0` rejected rows, `commit_to_database=false`.
 
+Observed 2026-06-06 scheduled partial and manual retry evidence:
+
+- The installed task ran at `2026-06-06 00:00:00` Moscow and returned result `1` without missing runs.
+- Directory `data/raw/domclick/2026-06-06-bulk/` contained `38` JSON payloads under `payloads/`, offsets `000000..000740`, and no `manifest.json`; the earliest payload timestamp was `2026-06-05T21:00:39.2157733Z` (`2026-06-06 00:00:39` Moscow).
+- The wrapper recovered the partial source with `--allow-missing-manifest --observed-at 2026-06-05T21:00:39.2157733Z`, then the scheduled batch failed safely because `normalized_listings=760` was below `min_normalized_records=1000`; no database commit was made.
+- Root cause: the Chrome/CDP capture process exited before completing the bounded `0..1980` offset window and before writing `manifest.json`. The old transcript did not preserve the child capture stderr, so the exact Chrome/CDP exception from that run is unavailable. The wrapper now logs the non-dry-run capture command and redirects capture stderr into the transcript so future early exits show the original error.
+- Manual retry into `data/raw/domclick-retry-2026-06-06-001/` with the same bounded offset window produced `100` payload files, `2000` records, and `manifest.json`. Inspect-only reported `2000` normalized listings and `0` rejected rows.
+- Explicit DB commit of the retry used `observed_at = 2026-06-05T21:46:30.914168Z` (`2026-06-06 00:46:30` Moscow) from the retry manifest's first payload fetch. It created ingestion run `5`, inserted `2000` observations, created `1055` listings, updated `945` listings, inserted/reused raw rows `1271/729`, and rejected `0` rows.
+- Post-retry status reported `5` ingestion runs, `5335` raw listings, `4840` canonical listings, and `0` rejected listings. Data-readiness reported `7109` observations, `1622` listings with multiple observations, `80` price changes, and full coordinate/ML-ready coverage.
+
 No-write recovery smoke command:
 
 ```powershell

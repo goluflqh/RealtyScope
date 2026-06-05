@@ -141,6 +141,16 @@ Bằng chứng partial 2026-06-05 trên máy dev:
 - Timestamp payload sớm nhất: `2026-06-04T21:00:46.0884704Z` (`2026-06-05 00:00:46` Moscow).
 - No-write recovery smoke: `1120` records, `1120` normalized listings, `1120` ML-ready listings, `0` rejected rows, `commit_to_database=false`.
 
+Bằng chứng partial scheduled và manual retry ngày 2026-06-06:
+
+- Windows task thật chạy lúc `2026-06-06 00:00:00` Moscow, result `1`, không có missed runs.
+- Directory `data/raw/domclick/2026-06-06-bulk/` có `38` JSON payload trong `payloads/`, offsets `000000..000740`, và không có `manifest.json`; timestamp payload sớm nhất là `2026-06-05T21:00:39.2157733Z` (`2026-06-06 00:00:39` Moscow).
+- Wrapper đã recover partial source với `--allow-missing-manifest --observed-at 2026-06-05T21:00:39.2157733Z`, sau đó scheduled batch fail an toàn vì `normalized_listings=760` thấp hơn `min_normalized_records=1000`; không ghi database.
+- Root cause: Chrome/CDP capture process thoát trước khi chạy hết bounded offset window `0..1980` và trước khi ghi `manifest.json`. Transcript cũ không giữ stderr của child capture, nên exception Chrome/CDP chính xác của lần đó không còn. Wrapper hiện log capture command ở non-dry-run và redirect stderr của capture vào transcript để các lần early exit sau có lỗi gốc.
+- Manual retry vào `data/raw/domclick-retry-2026-06-06-001/` với cùng bounded offset window tạo được `100` payload files, `2000` records, và `manifest.json`. Inspect-only báo `2000` normalized listings và `0` rejected rows.
+- DB commit explicit của retry dùng `observed_at = 2026-06-05T21:46:30.914168Z` (`2026-06-06 00:46:30` Moscow) lấy từ payload đầu tiên trong manifest retry. Commit tạo ingestion run `5`, insert `2000` observations, tạo `1055` listings, update `945` listings, raw inserted/reused `1271/729`, và `0` rejected rows.
+- Status sau retry báo `5` ingestion runs, `5335` raw listings, `4840` canonical listings, và `0` rejected listings. Data-readiness báo `7109` observations, `1622` listings có nhiều observations, `80` price changes, và coordinate/ML-ready coverage đầy đủ.
+
 Lệnh smoke recovery không ghi DB:
 
 ```powershell
