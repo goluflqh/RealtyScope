@@ -40,6 +40,56 @@ function ConvertTo-WslPath {
     return "/mnt/$Drive/$Tail"
 }
 
+function Get-DomclickSnapshotPayloadFiles {
+    param([string]$SnapshotDir)
+
+    if (-not (Test-Path $SnapshotDir -PathType Container)) {
+        return @()
+    }
+
+    return @(
+        Get-ChildItem -LiteralPath $SnapshotDir -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object {
+                $_.Name.ToLowerInvariant() -ne "manifest.json" -and
+                @( ".json", ".html", ".htm" ) -contains $_.Extension.ToLowerInvariant()
+            }
+    )
+}
+
+function Get-DomclickPartialSnapshotObservedAt {
+    param([object[]]$PayloadFiles)
+
+    $EarliestPayload = @($PayloadFiles) | Sort-Object LastWriteTimeUtc | Select-Object -First 1
+    if ($null -eq $EarliestPayload) {
+        return ""
+    }
+    return $EarliestPayload.LastWriteTimeUtc.ToString("o", [System.Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Resolve-DomclickExistingSnapshotArgs {
+    param([string]$SnapshotDir)
+
+    if (-not (Test-Path $SnapshotDir -PathType Container)) {
+        return $null
+    }
+
+    $ManifestPath = Join-Path $SnapshotDir "manifest.json"
+    if (Test-Path $ManifestPath -PathType Leaf) {
+        return @("--source-path", $SnapshotDir)
+    }
+
+    $PayloadFiles = @(Get-DomclickSnapshotPayloadFiles -SnapshotDir $SnapshotDir)
+    if ($PayloadFiles.Count -gt 0) {
+        $ObservedAt = Get-DomclickPartialSnapshotObservedAt -PayloadFiles $PayloadFiles
+        $script:DomclickAllowMissingManifest = $true
+        $script:DomclickObservedAt = $ObservedAt
+        Write-Host "Partial Domclick payloads found in $SnapshotDir without manifest.json; recovery observed_at=$ObservedAt"
+        return @("--source-path", $SnapshotDir)
+    }
+
+    return $null
+}
+
 function Resolve-DomclickSourceArgs {
     param(
         [string]$RepoRoot,
@@ -49,9 +99,16 @@ function Resolve-DomclickSourceArgs {
         [switch]$DryRun
     )
 
+    $script:DomclickAllowMissingManifest = $false
+    $script:DomclickObservedAt = ""
+
     if (-not [string]::IsNullOrWhiteSpace($SourcePath)) {
         if (-not (Test-Path $SourcePath -PathType Container)) {
             throw "Configured source path does not exist: $SourcePath"
+        }
+        $ExistingSourceArgs = Resolve-DomclickExistingSnapshotArgs -SnapshotDir $SourcePath
+        if ($null -ne $ExistingSourceArgs) {
+            return $ExistingSourceArgs
         }
         return @("--source-path", $SourcePath)
     }
@@ -61,11 +118,13 @@ function Resolve-DomclickSourceArgs {
     $BulkDir = Join-Path $RawRoot "$CollectionDate-bulk"
     $UrlFile = Join-Path $RepoRoot "data\raw\domclick-urls.txt"
 
-    if (Test-Path $DayDir -PathType Container) {
-        return @("--source-path", $DayDir)
+    $ExistingDayArgs = Resolve-DomclickExistingSnapshotArgs -SnapshotDir $DayDir
+    if ($null -ne $ExistingDayArgs) {
+        return $ExistingDayArgs
     }
-    if (Test-Path $BulkDir -PathType Container) {
-        return @("--source-path", $BulkDir)
+    $ExistingBulkArgs = Resolve-DomclickExistingSnapshotArgs -SnapshotDir $BulkDir
+    if ($null -ne $ExistingBulkArgs) {
+        return $ExistingBulkArgs
     }
     if (-not $SkipCapture) {
         if ([string]::IsNullOrWhiteSpace($CaptureRuntime)) {
@@ -115,10 +174,15 @@ function Resolve-DomclickSourceArgs {
             $CaptureOutput | ForEach-Object { Write-Host $_ }
         }
         if ($CaptureExitCode -ne 0) {
+            $PartialBulkArgs = Resolve-DomclickExistingSnapshotArgs -SnapshotDir $BulkDir
+            if ($null -ne $PartialBulkArgs) {
+                return $PartialBulkArgs
+            }
             throw "Domclick Chrome capture failed with exit code $CaptureExitCode"
         }
-        if (Test-Path $BulkDir -PathType Container) {
-            return @("--source-path", $BulkDir)
+        $CapturedBulkArgs = Resolve-DomclickExistingSnapshotArgs -SnapshotDir $BulkDir
+        if ($null -ne $CapturedBulkArgs) {
+            return $CapturedBulkArgs
         }
         throw "Domclick Chrome capture completed but did not create expected snapshot directory: $BulkDir"
     }
@@ -176,6 +240,13 @@ try {
         )
         $BatchArgs += $SourceArgs
 
+        if ($script:DomclickAllowMissingManifest) {
+            $BatchArgs += @("--allow-missing-manifest")
+        }
+        if (-not [string]::IsNullOrWhiteSpace($script:DomclickObservedAt)) {
+            $BatchArgs += @("--observed-at", $script:DomclickObservedAt)
+        }
+
         if ($SourceArgs[0] -eq "--url-file") {
             $BatchArgs += @(
                 "--output-root", (Join-Path $RepoRoot "data\raw\domclick"),
@@ -222,6 +293,13 @@ try {
         "--json"
     )
     $BatchArgs += $SourceArgs
+
+    if ($script:DomclickAllowMissingManifest) {
+        $BatchArgs += @("--allow-missing-manifest")
+    }
+    if (-not [string]::IsNullOrWhiteSpace($script:DomclickObservedAt)) {
+        $BatchArgs += @("--observed-at", $script:DomclickObservedAt)
+    }
 
     if ($SourceArgs[0] -eq "--url-file") {
         $BatchArgs += @(

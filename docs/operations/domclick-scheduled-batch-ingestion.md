@@ -119,6 +119,44 @@ Then commit one bounded batch:
 
 The persistence layer is idempotent for repeated raw payloads and deliberate about observation time. A repeat run should show reused raw rows and updated canonical listings, but a new scheduled run timestamp may still create a new `listing_observations` row for the same `source_listing_id`. This lets daily runs build trend evidence even when Domclick returns the same ranked search pages and the same payload hash. Reprocessing the same source listing at the same `observed_at` remains idempotent and does not create duplicate observations.
 
+## Partial Capture Recovery
+
+Chrome/CDP capture writes compact payload files as each rendered offset succeeds, but `manifest.json` is written only after the full bounded capture finishes. If a later offset fails, the directory may contain valid payloads without a manifest. Treat this as a partial recovery case, not as a normal successful capture.
+
+Recovery rules:
+
+- Do not invent rows for a day with no parseable payloads. The 2026-06-04 failed directory had no parseable JSON/HTML files and must not be recovered as data.
+- A missing-manifest recovery commit must pass an explicit `--observed-at` timestamp. The batch command refuses `--commit --allow-missing-manifest` without this value so a later manual recovery time cannot become the observation time by accident.
+- Prefer the earliest payload file `LastWriteTimeUtc` for a partial Chrome capture when recovering the same failed scheduled run. The wrapper uses that timestamp when it detects payloads without `manifest.json`.
+- Run the recovery as no-write inspect/report first. Add `--commit` only after the record counts and `observed_at` are reviewed.
+
+Observed 2026-06-05 partial evidence from the development machine:
+
+- Directory: `data/raw/domclick/2026-06-05-bulk/`.
+- Payload files: `56` JSON files, no `manifest.json`.
+- Earliest payload timestamp: `2026-06-04T21:00:46.0884704Z` (`2026-06-05 00:00:46` Moscow).
+- No-write recovery smoke: `1120` records, `1120` normalized listings, `1120` ML-ready listings, `0` rejected rows, `commit_to_database=false`.
+
+No-write recovery smoke command:
+
+```powershell
+$ObservedAt = "2026-06-04T21:00:46.0884704Z"
+.\.venv\Scripts\python.exe -m realtyscope.ingestion.domclick_scheduled_batch run `
+  --source-path data/raw/domclick/2026-06-05-bulk `
+  --allow-missing-manifest `
+  --observed-at $ObservedAt `
+  --max-records 2000 `
+  --min-records 1 `
+  --min-normalized-records 1000 `
+  --json
+```
+
+The scheduled wrapper dry-run shows the same recovery flags without running Docker, Alembic, Chrome, batch ingestion, or database commits:
+
+```powershell
+.\scripts\run_domclick_scheduled_batch.ps1 -DryRun -SkipDockerStart -CollectionDate 2026-06-05
+```
+
 ## Status And Reports
 
 Check database status:

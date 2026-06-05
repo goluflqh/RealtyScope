@@ -123,6 +123,44 @@ Sau đó commit một batch hữu hạn:
 
 Persistence hiện tại vẫn idempotent cho raw payload lặp lại, nhưng observation time được xử lý có chủ ý. Nếu chạy lại cùng dữ liệu, report nên cho thấy raw row được reuse và canonical listing được update; tuy vậy một scheduled run với timestamp mới vẫn có thể tạo row mới trong `listing_observations` cho cùng `source_listing_id`. Nhờ vậy daily run vẫn xây được evidence trend ngay cả khi Domclick trả cùng ranking search và cùng payload hash. Reprocess cùng source listing tại cùng `observed_at` vẫn idempotent và không tạo observation trùng.
 
+## Recovery Cho Partial Capture
+
+Chrome/CDP capture ghi compact payload file ngay sau mỗi offset render thành công, nhưng chỉ ghi `manifest.json` sau khi toàn bộ bounded capture hoàn tất. Nếu một offset phía sau fail, directory có thể còn payload hợp lệ nhưng thiếu manifest. Đây là case recovery partial, không phải capture success bình thường.
+
+Quy tắc recovery:
+
+- Không bịa row cho ngày không có payload parseable. Failed directory 2026-06-04 không có JSON/HTML parseable nên không được recover thành data.
+- Commit recovery thiếu manifest bắt buộc truyền `--observed-at` explicit. Batch command từ chối `--commit --allow-missing-manifest` nếu thiếu giá trị này để tránh lấy nhầm thời điểm manual recovery làm observation time.
+- Với partial Chrome capture của cùng scheduled run bị fail, ưu tiên timestamp `LastWriteTimeUtc` sớm nhất trong payload files. Wrapper dùng timestamp đó khi phát hiện payload thiếu `manifest.json`.
+- Luôn chạy recovery ở chế độ inspect/report không ghi DB trước. Chỉ thêm `--commit` sau khi đã review counts và `observed_at`.
+
+Bằng chứng partial 2026-06-05 trên máy dev:
+
+- Directory: `data/raw/domclick/2026-06-05-bulk/`.
+- Payload files: `56` JSON files, không có `manifest.json`.
+- Timestamp payload sớm nhất: `2026-06-04T21:00:46.0884704Z` (`2026-06-05 00:00:46` Moscow).
+- No-write recovery smoke: `1120` records, `1120` normalized listings, `1120` ML-ready listings, `0` rejected rows, `commit_to_database=false`.
+
+Lệnh smoke recovery không ghi DB:
+
+```powershell
+$ObservedAt = "2026-06-04T21:00:46.0884704Z"
+.\.venv\Scripts\python.exe -m realtyscope.ingestion.domclick_scheduled_batch run `
+  --source-path data/raw/domclick/2026-06-05-bulk `
+  --allow-missing-manifest `
+  --observed-at $ObservedAt `
+  --max-records 2000 `
+  --min-records 1 `
+  --min-normalized-records 1000 `
+  --json
+```
+
+Scheduled wrapper dry-run hiển thị cùng recovery flags mà không chạy Docker, Alembic, Chrome, batch ingestion hoặc database commit:
+
+```powershell
+.\scripts\run_domclick_scheduled_batch.ps1 -DryRun -SkipDockerStart -CollectionDate 2026-06-05
+```
+
 ## Status Và Report
 
 Xem trạng thái database:

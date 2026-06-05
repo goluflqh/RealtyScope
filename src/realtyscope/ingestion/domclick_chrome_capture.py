@@ -756,7 +756,7 @@ def _page_has_blocked_marker(page_dom: str) -> bool:
 def _ensure_fresh_snapshot_dir(snapshot_dir: Path) -> None:
     if not snapshot_dir.exists():
         return
-    if any(snapshot_dir.iterdir()):
+    if any(candidate.is_file() for candidate in snapshot_dir.rglob("*")):
         raise FileExistsError(
             f"Refusing to write Chrome capture into a non-empty snapshot directory: {snapshot_dir}"
         )

@@ -152,6 +152,70 @@ def test_scheduled_batch_reused_snapshot_records_new_observation_timestamp(
     assert len({observation.raw_listing_id for observation in observations}) == 1
 
 
+def test_missing_manifest_partial_commit_requires_explicit_observed_at(
+    tmp_path: Path,
+) -> None:
+    database_url = _sqlite_database_url(tmp_path / "scheduled_domclick_partial.sqlite3")
+    engine = create_database_engine(database_url)
+    Base.metadata.create_all(engine)
+    snapshot_dir = _write_partial_payload_snapshot(tmp_path)
+    recovery_started_at = datetime(2026, 6, 5, 1, 54, tzinfo=UTC)
+
+    report = run_domclick_scheduled_batch(
+        source_path=snapshot_dir,
+        database_url=database_url,
+        commit_to_database=True,
+        max_records=10,
+        min_records=1,
+        require_manifest=False,
+        report_dir=tmp_path / "reports",
+        clock=lambda: recovery_started_at,
+    )
+
+    assert report.status == "failed"
+    assert report.persistence is None
+    assert report.error_summary is not None
+    assert "observed_at" in report.error_summary
+
+    with Session(engine) as session:
+        assert session.scalar(select(Source)) is None
+
+
+def test_missing_manifest_partial_recovery_uses_explicit_observed_at(
+    tmp_path: Path,
+) -> None:
+    database_url = _sqlite_database_url(tmp_path / "scheduled_domclick_partial_recovery.sqlite3")
+    engine = create_database_engine(database_url)
+    Base.metadata.create_all(engine)
+    snapshot_dir = _write_partial_payload_snapshot(tmp_path)
+    capture_observed_at = datetime(2026, 6, 4, 21, 0, 46, tzinfo=UTC)
+    recovery_started_at = datetime(2026, 6, 4, 22, 54, 10, tzinfo=UTC)
+
+    report = run_domclick_scheduled_batch(
+        source_path=snapshot_dir,
+        database_url=database_url,
+        commit_to_database=True,
+        max_records=10,
+        min_records=1,
+        require_manifest=False,
+        observed_at=capture_observed_at,
+        report_dir=tmp_path / "reports",
+        clock=lambda: recovery_started_at,
+    )
+
+    assert report.status == "success"
+    assert report.persistence is not None
+    assert report.persistence.observations_inserted == 1
+    assert report.observed_at == capture_observed_at
+
+    with Session(engine) as session:
+        observation = session.scalars(select(ListingObservation)).one()
+        run = session.scalars(select(IngestionRun)).one()
+
+    assert _as_utc(observation.observed_at) == capture_observed_at
+    assert _as_utc(run.started_at) == capture_observed_at
+
+
 def test_scheduled_batch_fails_before_commit_when_inspect_count_is_too_low(
     tmp_path: Path,
 ) -> None:
@@ -304,6 +368,30 @@ def _fetch_mixed_clean_snapshot(url: str) -> FetchedDomclickSnapshot:
             ensure_ascii=False,
         ).encode("utf-8"),
     )
+
+
+def _write_partial_payload_snapshot(tmp_path: Path) -> Path:
+    snapshot_dir = tmp_path / "data" / "raw" / "domclick" / "2026-06-05-bulk"
+    payloads_dir = snapshot_dir / "payloads"
+    payloads_dir.mkdir(parents=True)
+    payload = {
+        "items": [
+            {
+                "id": "partial-1",
+                "url": "https://domclick.ru/card/sale__flat__partial-1/",
+                "address": "Москва, Частичная улица, 1",
+                "price": 12_700_000,
+                "area": 42.5,
+                "rooms": 2,
+                "lat": 55.821,
+                "lng": 37.498,
+            }
+        ]
+    }
+    (payloads_dir / "search-offset-000000.json").write_text(
+        json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+    )
+    return snapshot_dir
 
 
 def _sqlite_database_url(path: Path) -> str:
