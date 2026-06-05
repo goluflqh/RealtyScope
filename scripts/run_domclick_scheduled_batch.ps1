@@ -168,7 +168,8 @@ function Resolve-DomclickSourceArgs {
             return @("--source-path", $BulkDir)
         }
 
-        $CaptureOutput = & $Python @CaptureArgs
+        Write-Host ("Capture command: " + $Python + " " + ($CaptureArgs -join " "))
+        $CaptureOutput = & $Python @CaptureArgs 2>&1
         $CaptureExitCode = $LASTEXITCODE
         if ($CaptureOutput) {
             $CaptureOutput | ForEach-Object { Write-Host $_ }
