@@ -145,6 +145,44 @@ def test_chrome_capture_writes_bulk_compact_json_and_manifest(tmp_path: Path) ->
     assert all(entry["content_sha256"] for entry in manifest["entries"])
 
 
+def test_chrome_capture_allows_retry_after_empty_failed_bulk_directory(
+    tmp_path: Path,
+) -> None:
+    output_root = tmp_path / "data" / "raw" / "domclick"
+    leftover_payloads_dir = output_root / "2026-06-02-bulk" / "payloads"
+    leftover_payloads_dir.mkdir(parents=True)
+
+    def capture_page_dom(url: str) -> str:
+        offset = int(url.rsplit("offset=", maxsplit=1)[1])
+        payload = {
+            "items": [
+                {
+                    "id": f"retry-{offset}",
+                    "url": f"https://domclick.ru/card/sale__flat__retry-{offset}/",
+                    "address": f"Москва, Retry Street, {offset}",
+                    "price": 12_000_000 + offset,
+                    "area": 40.0,
+                    "rooms": 2,
+                }
+            ]
+        }
+        return f"<html><script>window.__SSR_STATE__={json.dumps(payload)};</script></html>"
+
+    result = capture_domclick_chrome_ssr_snapshots(
+        output_root=output_root,
+        collection_date=date(2026, 6, 2),
+        offset_start=0,
+        offset_stop=0,
+        max_pages=1,
+        delay_seconds=0,
+        capture_page_dom=capture_page_dom,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result.files_written == 1
+    assert result.manifest_path.is_file()
+
+
 def test_chrome_capture_stops_on_qrator_boundary(tmp_path: Path) -> None:
     with pytest.raises(DomclickAccessBlocked, match="QRATOR"):
         capture_domclick_chrome_ssr_snapshots(
@@ -405,3 +443,13 @@ def test_scheduled_batch_script_calls_chrome_capture_before_url_file_fallback() 
     assert "$CaptureOutput = & $Python @CaptureArgs" in script
     assert "$CaptureOutput | ForEach-Object { Write-Host $_ }" in script
     assert "[switch]$DryRun" in script
+
+
+def test_scheduled_batch_script_recovers_partial_bulk_payloads_with_observed_at() -> None:
+    script = Path("scripts/run_domclick_scheduled_batch.ps1").read_text(encoding="utf-8")
+
+    assert "Get-DomclickSnapshotPayloadFiles" in script
+    assert "Get-DomclickPartialSnapshotObservedAt" in script
+    assert '"--allow-missing-manifest"' in script
+    assert '"--observed-at"' in script
+    assert "Partial Domclick payloads found" in script
