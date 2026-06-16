@@ -143,24 +143,27 @@ def test_chrome_capture_writes_bulk_compact_json_and_manifest(tmp_path: Path) ->
         "payloads/search-offset-000020.json",
     ]
     assert all(entry["content_sha256"] for entry in manifest["entries"])
+    assert manifest["page_retries"] == 2
+    assert manifest["retry_delay_seconds"] == 5.0
+    assert manifest["entries"][0]["extraction_strategy"] == "page:__SSR_STATE__"
 
 
-def test_chrome_capture_allows_retry_after_empty_failed_bulk_directory(
+def test_chrome_capture_retries_unparseable_page_and_writes_diagnostic(
     tmp_path: Path,
 ) -> None:
-    output_root = tmp_path / "data" / "raw" / "domclick"
-    leftover_payloads_dir = output_root / "2026-06-02-bulk" / "payloads"
-    leftover_payloads_dir.mkdir(parents=True)
+    calls: list[str] = []
 
     def capture_page_dom(url: str) -> str:
-        offset = int(url.rsplit("offset=", maxsplit=1)[1])
+        calls.append(url)
+        if len(calls) == 1:
+            return "<html><script>window.appConfig={};</script></html>"
         payload = {
             "items": [
                 {
-                    "id": f"retry-{offset}",
-                    "url": f"https://domclick.ru/card/sale__flat__retry-{offset}/",
-                    "address": f"Москва, Retry Street, {offset}",
-                    "price": 12_000_000 + offset,
+                    "id": "retry-ok",
+                    "url": "https://domclick.ru/card/sale__flat__retry-ok/",
+                    "address": "Moscow, Retry Street, 1",
+                    "price": 12_000_000,
                     "area": 40.0,
                     "rooms": 2,
                 }
@@ -169,24 +172,31 @@ def test_chrome_capture_allows_retry_after_empty_failed_bulk_directory(
         return f"<html><script>window.__SSR_STATE__={json.dumps(payload)};</script></html>"
 
     result = capture_domclick_chrome_ssr_snapshots(
-        output_root=output_root,
+        output_root=tmp_path / "data" / "raw" / "domclick",
         collection_date=date(2026, 6, 2),
         offset_start=0,
         offset_stop=0,
         max_pages=1,
         delay_seconds=0,
+        page_retries=1,
+        retry_delay_seconds=0,
         capture_page_dom=capture_page_dom,
         sleep=lambda _seconds: None,
     )
 
+    assert len(calls) == 2
     assert result.files_written == 1
-    assert result.manifest_path.is_file()
+    diagnostic = result.snapshot_dir / "diagnostics" / "search-offset-000000-attempt-01.html"
+    assert diagnostic.is_file()
+    assert "missing-parseable-listing-payload" in diagnostic.read_text(encoding="utf-8")
 
 
 def test_chrome_capture_stops_on_qrator_boundary(tmp_path: Path) -> None:
+    output_root = tmp_path / "data" / "raw" / "domclick"
+
     with pytest.raises(DomclickAccessBlocked, match="QRATOR"):
         capture_domclick_chrome_ssr_snapshots(
-            output_root=tmp_path / "data" / "raw" / "domclick",
+            output_root=output_root,
             collection_date=date(2026, 6, 2),
             offset_start=0,
             offset_stop=0,
@@ -197,6 +207,8 @@ def test_chrome_capture_stops_on_qrator_boundary(tmp_path: Path) -> None:
             ),
             sleep=lambda _seconds: None,
         )
+
+    assert not (output_root / "2026-06-02-bulk").exists()
 
 
 def test_chrome_capture_stops_on_domclick_unusual_request_boundary(tmp_path: Path) -> None:
@@ -413,10 +425,49 @@ def test_chrome_capture_passes_resolved_runtime_config_to_devtools(
 
 def test_extract_domclick_ssr_state_payload_handles_undefined_values() -> None:
     payload = extract_domclick_ssr_state_payload(
-        '<script>window.__SSR_STATE__={"items":[{"id":"1","description":undefined}]};</script>'
+        "<script>window.__SSR_STATE__="
+        '{"items":[{"id":"1","url":"https://domclick.ru/card/sale__flat__1/",'
+        '"price":12000000,"area":40,"rooms":2,"description":undefined}]};</script>'
     )
 
-    assert payload == {"items": [{"id": "1", "description": None}]}
+    assert payload == {
+        "items": [
+            {
+                "id": "1",
+                "url": "https://domclick.ru/card/sale__flat__1/",
+                "price": 12000000,
+                "area": 40,
+                "rooms": 2,
+                "description": None,
+            }
+        ]
+    }
+
+
+def test_extract_domclick_payload_from_next_data_script() -> None:
+    payload = {
+        "props": {
+            "pageProps": {
+                "listings": [
+                    {
+                        "id": "next-data-1",
+                        "url": "https://domclick.ru/card/sale__flat__next-data-1/",
+                        "address": "Moscow, Next Street, 1",
+                        "price": 12_000_000,
+                        "area": 40.0,
+                        "rooms": 2,
+                    }
+                ]
+            }
+        }
+    }
+
+    next_data = json.dumps(payload)
+    extracted = extract_domclick_ssr_state_payload(
+        f'<html><script id="__NEXT_DATA__" type="application/json">{next_data}</script></html>'
+    )
+
+    assert extracted == payload
 
 
 def test_scheduled_batch_script_calls_chrome_capture_before_url_file_fallback() -> None:
@@ -438,14 +489,17 @@ def test_scheduled_batch_script_calls_chrome_capture_before_url_file_fallback() 
     assert '"--profile-directory", $ChromeProfileDirectory' in script
     assert '"--remote-debugging-port", $ChromeRemoteDebuggingPort' in script
     assert '"--offset-stop", "$CaptureOffsetStop"' in script
+    assert "[int]$CapturePageRetries = 2" in script
+    assert "[double]$CaptureRetryDelaySeconds = 5" in script
+    assert "[string]$CaptureDiagnosticsDir = $env:REALTYSCOPE_CAPTURE_DIAGNOSTICS_DIR" in script
+    assert '"--page-retries", "$CapturePageRetries"' in script
+    assert '"--retry-delay-seconds", "$CaptureRetryDelaySeconds"' in script
+    assert '"--diagnostics-dir", $CaptureDiagnosticsDir' in script
     assert "[int]$MinCleanRecords = 1000" in script
     assert '"--min-normalized-records", "$MinCleanRecords"' in script
-    capture_command_log_index = script.index(
-        'Write-Host ("Capture command: " + $Python + " " + ($CaptureArgs -join " "))'
-    )
-    capture_invocation_index = script.index("$CaptureOutput = & $Python @CaptureArgs 2>&1")
-    assert capture_command_log_index < capture_invocation_index
-    assert "$CaptureOutput | ForEach-Object { Write-Host $_ }" in script
+    assert "function Invoke-DomclickNativeCommand" in script
+    assert '$ErrorActionPreference = "Continue"' in script
+    assert "$Output | ForEach-Object { Write-Host $_ }" in script
     assert "[switch]$DryRun" in script
 
 
@@ -454,6 +508,9 @@ def test_scheduled_batch_script_recovers_partial_bulk_payloads_with_observed_at(
 
     assert "Get-DomclickSnapshotPayloadFiles" in script
     assert "Get-DomclickPartialSnapshotObservedAt" in script
+    assert "Move-DomclickPartialSnapshot" in script
+    assert "Quarantined partial Domclick snapshot" in script
+    assert "-RecoverPartial:$RecoverExistingPartial" in script
     assert '"--allow-missing-manifest"' in script
     assert '"--observed-at"' in script
     assert "Partial Domclick payloads found" in script

@@ -20,6 +20,9 @@ param(
     [double]$CaptureDelaySeconds = 3,
     [double]$CaptureTimeoutSeconds = 90,
     [int]$CaptureVirtualTimeBudgetMs = 10000,
+    [int]$CapturePageRetries = 2,
+    [double]$CaptureRetryDelaySeconds = 5,
+    [string]$CaptureDiagnosticsDir = $env:REALTYSCOPE_CAPTURE_DIAGNOSTICS_DIR,
     [switch]$SkipCapture,
     [switch]$SkipDockerStart,
     [switch]$DryRun
@@ -38,6 +41,29 @@ function ConvertTo-WslPath {
     $Drive = $Matches[1].ToLowerInvariant()
     $Tail = $Matches[2] -replace "\\", "/"
     return "/mnt/$Drive/$Tail"
+}
+
+function Invoke-DomclickNativeCommand {
+    param(
+        [string]$FilePath,
+        [string[]]$Arguments
+    )
+
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $Output = @(& $FilePath @Arguments 2>&1 | ForEach-Object { "$_" })
+        $ExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $PreviousErrorActionPreference
+    }
+
+    if ($Output.Count -gt 0) {
+        $Output | ForEach-Object { Write-Host $_ }
+    }
+
+    return $ExitCode
 }
 
 function Get-DomclickSnapshotPayloadFiles {
@@ -66,8 +92,33 @@ function Get-DomclickPartialSnapshotObservedAt {
     return $EarliestPayload.LastWriteTimeUtc.ToString("o", [System.Globalization.CultureInfo]::InvariantCulture)
 }
 
-function Resolve-DomclickExistingSnapshotArgs {
+function Move-DomclickPartialSnapshot {
     param([string]$SnapshotDir)
+
+    if (-not (Test-Path $SnapshotDir -PathType Container)) {
+        return ""
+    }
+
+    $Parent = Split-Path -Parent $SnapshotDir
+    $Leaf = Split-Path -Leaf $SnapshotDir
+    $Stamp = [datetime]::UtcNow.ToString("yyyyMMdd-HHmmss", [System.Globalization.CultureInfo]::InvariantCulture)
+    $Candidate = Join-Path $Parent "$Leaf-partial-$Stamp"
+    $Index = 1
+    while (Test-Path $Candidate) {
+        $Candidate = Join-Path $Parent "$Leaf-partial-$Stamp-$Index"
+        $Index += 1
+    }
+
+    Move-Item -LiteralPath $SnapshotDir -Destination $Candidate
+    Write-Host "Quarantined partial Domclick snapshot $SnapshotDir -> $Candidate"
+    return $Candidate
+}
+
+function Resolve-DomclickExistingSnapshotArgs {
+    param(
+        [string]$SnapshotDir,
+        [switch]$RecoverPartial
+    )
 
     if (-not (Test-Path $SnapshotDir -PathType Container)) {
         return $null
@@ -80,6 +131,10 @@ function Resolve-DomclickExistingSnapshotArgs {
 
     $PayloadFiles = @(Get-DomclickSnapshotPayloadFiles -SnapshotDir $SnapshotDir)
     if ($PayloadFiles.Count -gt 0) {
+        if (-not $RecoverPartial) {
+            Move-DomclickPartialSnapshot -SnapshotDir $SnapshotDir | Out-Null
+            return $null
+        }
         $ObservedAt = Get-DomclickPartialSnapshotObservedAt -PayloadFiles $PayloadFiles
         $script:DomclickAllowMissingManifest = $true
         $script:DomclickObservedAt = $ObservedAt
@@ -106,7 +161,7 @@ function Resolve-DomclickSourceArgs {
         if (-not (Test-Path $SourcePath -PathType Container)) {
             throw "Configured source path does not exist: $SourcePath"
         }
-        $ExistingSourceArgs = Resolve-DomclickExistingSnapshotArgs -SnapshotDir $SourcePath
+        $ExistingSourceArgs = Resolve-DomclickExistingSnapshotArgs -SnapshotDir $SourcePath -RecoverPartial
         if ($null -ne $ExistingSourceArgs) {
             return $ExistingSourceArgs
         }
@@ -118,11 +173,17 @@ function Resolve-DomclickSourceArgs {
     $BulkDir = Join-Path $RawRoot "$CollectionDate-bulk"
     $UrlFile = Join-Path $RepoRoot "data\raw\domclick-urls.txt"
 
-    $ExistingDayArgs = Resolve-DomclickExistingSnapshotArgs -SnapshotDir $DayDir
+    $RecoverExistingPartial = $SkipCapture -or $DryRun
+
+    $ExistingDayArgs = Resolve-DomclickExistingSnapshotArgs `
+        -SnapshotDir $DayDir `
+        -RecoverPartial:$RecoverExistingPartial
     if ($null -ne $ExistingDayArgs) {
         return $ExistingDayArgs
     }
-    $ExistingBulkArgs = Resolve-DomclickExistingSnapshotArgs -SnapshotDir $BulkDir
+    $ExistingBulkArgs = Resolve-DomclickExistingSnapshotArgs `
+        -SnapshotDir $BulkDir `
+        -RecoverPartial:$RecoverExistingPartial
     if ($null -ne $ExistingBulkArgs) {
         return $ExistingBulkArgs
     }
@@ -146,6 +207,8 @@ function Resolve-DomclickSourceArgs {
             "--delay-seconds", "$CaptureDelaySeconds",
             "--timeout-seconds", "$CaptureTimeoutSeconds",
             "--virtual-time-budget-ms", "$CaptureVirtualTimeBudgetMs",
+            "--page-retries", "$CapturePageRetries",
+            "--retry-delay-seconds", "$CaptureRetryDelaySeconds",
             "--min-records", "$MinCleanRecords",
             "--operator-note", "scheduled batch fallback capture using configured Chrome automation profile",
             "--json"
@@ -162,6 +225,9 @@ function Resolve-DomclickSourceArgs {
         if (-not [string]::IsNullOrWhiteSpace($ChromeRemoteDebuggingPort)) {
             $CaptureArgs += @("--remote-debugging-port", $ChromeRemoteDebuggingPort)
         }
+        if (-not [string]::IsNullOrWhiteSpace($CaptureDiagnosticsDir)) {
+            $CaptureArgs += @("--diagnostics-dir", $CaptureDiagnosticsDir)
+        }
 
         if ($DryRun) {
             $script:DryRunCaptureArgs = $CaptureArgs
@@ -169,19 +235,15 @@ function Resolve-DomclickSourceArgs {
         }
 
         Write-Host ("Capture command: " + $Python + " " + ($CaptureArgs -join " "))
-        $CaptureOutput = & $Python @CaptureArgs 2>&1
-        $CaptureExitCode = $LASTEXITCODE
-        if ($CaptureOutput) {
-            $CaptureOutput | ForEach-Object { Write-Host $_ }
-        }
+        $CaptureExitCode = Invoke-DomclickNativeCommand -FilePath $Python -Arguments $CaptureArgs
         if ($CaptureExitCode -ne 0) {
-            $PartialBulkArgs = Resolve-DomclickExistingSnapshotArgs -SnapshotDir $BulkDir
+            $PartialBulkArgs = Resolve-DomclickExistingSnapshotArgs -SnapshotDir $BulkDir -RecoverPartial
             if ($null -ne $PartialBulkArgs) {
                 return $PartialBulkArgs
             }
             throw "Domclick Chrome capture failed with exit code $CaptureExitCode"
         }
-        $CapturedBulkArgs = Resolve-DomclickExistingSnapshotArgs -SnapshotDir $BulkDir
+        $CapturedBulkArgs = Resolve-DomclickExistingSnapshotArgs -SnapshotDir $BulkDir -RecoverPartial
         if ($null -ne $CapturedBulkArgs) {
             return $CapturedBulkArgs
         }
@@ -273,9 +335,9 @@ try {
         }
     }
 
-    & $Python -m alembic upgrade head
-    if ($LASTEXITCODE -ne 0) {
-        throw "Alembic upgrade failed with exit code $LASTEXITCODE"
+    $AlembicExitCode = Invoke-DomclickNativeCommand -FilePath $Python -Arguments @("-m", "alembic", "upgrade", "head")
+    if ($AlembicExitCode -ne 0) {
+        throw "Alembic upgrade failed with exit code $AlembicExitCode"
     }
 
     $SourceArgs = Resolve-DomclickSourceArgs `
@@ -311,9 +373,9 @@ try {
         )
     }
 
-    & $Python @BatchArgs
-    if ($LASTEXITCODE -ne 0) {
-        throw "Domclick scheduled batch failed with exit code $LASTEXITCODE"
+    $BatchExitCode = Invoke-DomclickNativeCommand -FilePath $Python -Arguments $BatchArgs
+    if ($BatchExitCode -ne 0) {
+        throw "Domclick scheduled batch failed with exit code $BatchExitCode"
     }
 }
 finally {
