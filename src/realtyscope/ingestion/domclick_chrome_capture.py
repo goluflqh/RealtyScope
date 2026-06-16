@@ -16,6 +16,7 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import nullcontext, suppress
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +44,9 @@ DEFAULT_MAX_PAGES = 100
 DEFAULT_DELAY_SECONDS = 3.0
 DEFAULT_TIMEOUT_SECONDS = 90.0
 DEFAULT_VIRTUAL_TIME_BUDGET_MS = 10_000
+DEFAULT_PAGE_RETRIES = 2
+DEFAULT_RETRY_DELAY_SECONDS = 5.0
+MAX_DIAGNOSTIC_HTML_CHARS = 500_000
 DOMCLICK_BLOCKED_MARKERS = (
     "captcha",
     "403 | домклик",
@@ -62,6 +66,21 @@ ENV_CHROME_USER_DATA_DIR = "REALTYSCOPE_CHROME_USER_DATA_DIR"
 ENV_CHROME_PROFILE_DIRECTORY = "REALTYSCOPE_CHROME_PROFILE_DIRECTORY"
 ENV_CHROME_REMOTE_DEBUGGING_PORT = "REALTYSCOPE_CHROME_REMOTE_DEBUGGING_PORT"
 
+STATE_ASSIGNMENT_NAMES = (
+    "__SSR_STATE__",
+    "__INITIAL_STATE__",
+    "__NEXT_DATA__",
+    "__NUXT__",
+    "__APOLLO_STATE__",
+    "__REDUX_STATE__",
+    "__PRELOADED_STATE__",
+)
+STATE_ASSIGNMENT_PATTERN = re.compile(
+    r"(?:window\.|globalThis\.|self\.)?(?P<name>"
+    + "|".join(re.escape(name) for name in STATE_ASSIGNMENT_NAMES)
+    + r")\s*="
+)
+
 
 @dataclass(frozen=True)
 class DomclickChromeCaptureResult:
@@ -69,6 +88,21 @@ class DomclickChromeCaptureResult:
     manifest_path: Path
     files_written: int
     records_seen: int
+
+
+@dataclass(frozen=True)
+class DomclickPayloadCandidate:
+    payload: dict[str, Any] | list[Any]
+    strategy: str
+    records_seen: int
+    normalized_listings: int
+
+
+@dataclass(frozen=True)
+class _ScriptBlock:
+    text: str
+    script_id: str
+    script_type: str
 
 
 @dataclass(frozen=True)
@@ -185,6 +219,9 @@ def capture_domclick_chrome_ssr_snapshots(
     delay_seconds: float = DEFAULT_DELAY_SECONDS,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     virtual_time_budget_ms: int = DEFAULT_VIRTUAL_TIME_BUDGET_MS,
+    page_retries: int = DEFAULT_PAGE_RETRIES,
+    retry_delay_seconds: float = DEFAULT_RETRY_DELAY_SECONDS,
+    diagnostics_dir: Path | None = None,
     capture_runtime: str | None = None,
     chrome_path: Path | None = None,
     chrome_user_data_dir: Path | None = None,
@@ -202,6 +239,10 @@ def capture_domclick_chrome_ssr_snapshots(
         raise ValueError("timeout_seconds must be greater than zero")
     if virtual_time_budget_ms <= 0:
         raise ValueError("virtual_time_budget_ms must be greater than zero")
+    if page_retries < 0:
+        raise ValueError("page_retries must be zero or greater")
+    if retry_delay_seconds < 0:
+        raise ValueError("retry_delay_seconds must be zero or greater")
     if min_records < 0:
         raise ValueError("min_records must be zero or greater")
 
@@ -243,25 +284,40 @@ def capture_domclick_chrome_ssr_snapshots(
     collection_date = collection_date or datetime.now(UTC).date()
     snapshot_dir = output_root / f"{collection_date.isoformat()}-bulk"
     _ensure_fresh_snapshot_dir(snapshot_dir)
-    payloads_dir = snapshot_dir / "payloads"
-    payloads_dir.mkdir(parents=True, exist_ok=True)
 
     entries: list[dict[str, object]] = []
     total_records_seen = 0
     capture_context = devtools_dumper if devtools_dumper is not None else nullcontext()
     with capture_context:
         for index, (offset, url) in enumerate(urls, start=1):
-            page_dom = capture_page_dom(url)
-            _raise_if_blocked_page(page_dom, url)
-            payload = extract_domclick_ssr_state_payload(page_dom)
-            if payload is None:
+            candidate: DomclickPayloadCandidate | None = None
+            for attempt in range(1, page_retries + 2):
+                page_dom = capture_page_dom(url)
+                _raise_if_blocked_page(page_dom, url)
+                candidate = extract_domclick_payload_candidate(page_dom, source_url=url)
+                if candidate is not None:
+                    break
+                _write_capture_diagnostic(
+                    snapshot_dir=snapshot_dir,
+                    diagnostics_dir=diagnostics_dir,
+                    offset=offset,
+                    attempt=attempt,
+                    url=url,
+                    page_dom=page_dom,
+                    reason="missing-parseable-listing-payload",
+                )
+                if attempt <= page_retries and retry_delay_seconds > 0:
+                    sleep(retry_delay_seconds)
+            if candidate is None:
                 raise ValueError(f"Domclick page does not contain parseable SSR state: {url}")
 
+            payload = candidate.payload
             records_seen = _count_records_seen(payload, source_url=url)
             total_records_seen += records_seen
             relative_path = Path("payloads") / f"search-offset-{offset:06d}.json"
             compact_text = canonical_json(payload) + "\n"
             output_path = snapshot_dir / relative_path
+            output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(compact_text, encoding="utf-8")
             content_bytes = compact_text.encode("utf-8")
             entries.append(
@@ -272,6 +328,7 @@ def capture_domclick_chrome_ssr_snapshots(
                     "offset": offset,
                     "fetched_at": _utc_now_iso(),
                     "capture_status": "rendered",
+                    "extraction_strategy": candidate.strategy,
                     "records_seen": records_seen,
                     "content_bytes": len(content_bytes),
                     "content_sha256": hashlib.sha256(content_bytes).hexdigest(),
@@ -299,6 +356,8 @@ def capture_domclick_chrome_ssr_snapshots(
         delay_seconds=delay_seconds,
         timeout_seconds=timeout_seconds,
         virtual_time_budget_ms=virtual_time_budget_ms,
+        page_retries=page_retries,
+        retry_delay_seconds=retry_delay_seconds,
         capture_runtime=runtime_config.capture_runtime,
         chrome_path=resolved_chrome_path,
         chrome_user_data_dir=resolved_user_data_dir,
@@ -668,27 +727,182 @@ def _string_value(value: object) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def extract_domclick_ssr_state_payload(page_text: str) -> dict[str, Any] | list[Any] | None:
-    marker = re.search(r"window\.__SSR_STATE__\s*=", page_text)
-    if marker is None:
-        return None
+class _DomclickScriptBlockCollector(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.blocks: list[_ScriptBlock] = []
+        self._capturing = False
+        self._script_id = ""
+        self._script_type = ""
+        self._chunks: list[str] = []
 
-    object_start = page_text.find("{", marker.end())
-    if object_start < 0:
-        return None
-    object_end = _find_balanced_json_object_end(page_text, object_start)
-    if object_end is None:
-        return None
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() != "script":
+            return
+        attr_map = {name.lower(): value or "" for name, value in attrs}
+        if attr_map.get("src"):
+            return
+        self._capturing = True
+        self._script_id = attr_map.get("id", "")
+        self._script_type = attr_map.get("type", "")
+        self._chunks = []
 
-    object_text = page_text[object_start : object_end + 1]
-    object_text = re.sub(r"(?<=[\[:,])\s*undefined\s*(?=[,}\]])", "null", object_text)
-    for candidate in (object_text, _html_unescape(object_text)):
+    def handle_data(self, data: str) -> None:
+        if self._capturing:
+            self._chunks.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() != "script" or not self._capturing:
+            return
+        text = "".join(self._chunks).strip()
+        if text:
+            self.blocks.append(
+                _ScriptBlock(
+                    text=text,
+                    script_id=self._script_id,
+                    script_type=self._script_type,
+                )
+            )
+        self._capturing = False
+        self._script_id = ""
+        self._script_type = ""
+        self._chunks = []
+
+
+def extract_domclick_ssr_state_payload(
+    page_text: str, *, source_url: str = DOMCLICK_BASE_URL
+) -> dict[str, Any] | list[Any] | None:
+    candidate = extract_domclick_payload_candidate(page_text, source_url=source_url)
+    if candidate is not None:
+        return candidate.payload
+    for payload, _strategy in _iter_domclick_payload_candidates(page_text):
+        if _count_records_seen(payload, source_url=source_url) > 0:
+            return payload
+    return None
+
+
+def extract_domclick_payload_candidate(
+    page_text: str, *, source_url: str
+) -> DomclickPayloadCandidate | None:
+    best: DomclickPayloadCandidate | None = None
+    seen_hashes: set[str] = set()
+    for payload, strategy in _iter_domclick_payload_candidates(page_text):
+        payload_hash = hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
+        if payload_hash in seen_hashes:
+            continue
+        seen_hashes.add(payload_hash)
+        batch = parse_domclick_payload(
+            payload,
+            source_url=source_url,
+            observed_at=datetime.now(UTC),
+            config=DomclickCollectorConfig(max_records=10_000),
+        )
+        if not batch.normalized_listings:
+            continue
+        candidate = DomclickPayloadCandidate(
+            payload=payload,
+            strategy=strategy,
+            records_seen=batch.records_seen,
+            normalized_listings=len(batch.normalized_listings),
+        )
+        if best is None or candidate.normalized_listings > best.normalized_listings:
+            best = candidate
+    return best
+
+
+def _iter_domclick_payload_candidates(
+    page_text: str,
+) -> list[tuple[dict[str, Any] | list[Any], str]]:
+    candidates: list[tuple[dict[str, Any] | list[Any], str]] = []
+    candidates.extend(_extract_state_assignment_payloads(page_text, strategy_prefix="page"))
+
+    script_collector = _DomclickScriptBlockCollector()
+    script_collector.feed(page_text)
+    for block in script_collector.blocks:
+        candidates.extend(_extract_script_payloads(block))
+    return candidates
+
+
+def _extract_script_payloads(
+    block: _ScriptBlock,
+) -> list[tuple[dict[str, Any] | list[Any], str]]:
+    strategy_suffix = block.script_id or block.script_type or "inline-script"
+    candidates: list[tuple[dict[str, Any] | list[Any], str]] = []
+    payload = _load_relaxed_json(block.text)
+    if payload is not None:
+        candidates.append((payload, f"script-json:{strategy_suffix}"))
+    candidates.extend(
+        _extract_state_assignment_payloads(
+            block.text,
+            strategy_prefix=f"script-assignment:{strategy_suffix}",
+        )
+    )
+    return candidates
+
+
+def _extract_state_assignment_payloads(
+    text: str, *, strategy_prefix: str
+) -> list[tuple[dict[str, Any] | list[Any], str]]:
+    candidates: list[tuple[dict[str, Any] | list[Any], str]] = []
+    for marker in STATE_ASSIGNMENT_PATTERN.finditer(text):
+        payload_start = _find_json_literal_start(text, marker.end())
+        if payload_start is None:
+            continue
+        payload_end = _find_balanced_json_literal_end(text, payload_start)
+        if payload_end is None:
+            continue
+        payload = _load_relaxed_json(text[payload_start : payload_end + 1])
+        if payload is not None:
+            candidates.append((payload, f"{strategy_prefix}:{marker.group('name')}"))
+    return candidates
+
+
+def _find_json_literal_start(text: str, start: int) -> int | None:
+    object_start = text.find("{", start)
+    array_start = text.find("[", start)
+    starts = [index for index in (object_start, array_start) if index >= 0]
+    return min(starts) if starts else None
+
+
+def _load_relaxed_json(text: str) -> dict[str, Any] | list[Any] | None:
+    normalized = text.strip().removesuffix(";").strip()
+    normalized = re.sub(r"(?<=[\[:,])\s*undefined\s*(?=[,}\]])", "null", normalized)
+    for candidate in (normalized, _html_unescape(normalized)):
         try:
             payload = json.loads(candidate)
         except json.JSONDecodeError:
             continue
         if isinstance(payload, dict | list):
             return payload
+    return None
+
+
+def _find_balanced_json_literal_end(text: str, start: int) -> int | None:
+    opening = text[start]
+    if opening not in "[{":
+        return None
+    closing_for = {"{": "}", "[": "]"}
+    stack: list[str] = []
+    in_string = False
+    escaped = False
+    for index in range(start, len(text)):
+        char = text[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char in closing_for:
+            stack.append(closing_for[char])
+        elif stack and char == stack[-1]:
+            stack.pop()
+            if not stack:
+                return index
     return None
 
 
@@ -748,6 +962,34 @@ def _raise_if_blocked_page(page_dom: str, url: str) -> None:
         )
 
 
+def _write_capture_diagnostic(
+    *,
+    snapshot_dir: Path,
+    diagnostics_dir: Path | None,
+    offset: int,
+    attempt: int,
+    url: str,
+    page_dom: str,
+    reason: str,
+) -> None:
+    target_dir = diagnostics_dir or snapshot_dir / "diagnostics"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    diagnostic_path = target_dir / f"search-offset-{offset:06d}-attempt-{attempt:02d}.html"
+    truncated = len(page_dom) > MAX_DIAGNOSTIC_HTML_CHARS
+    body = page_dom[:MAX_DIAGNOSTIC_HTML_CHARS]
+    header = (
+        "<!--\n"
+        f"reason: {reason}\n"
+        f"source_url: {url}\n"
+        f"offset: {offset}\n"
+        f"attempt: {attempt}\n"
+        f"captured_at: {_utc_now_iso()}\n"
+        f"truncated: {str(truncated).lower()}\n"
+        "-->\n"
+    )
+    diagnostic_path.write_text(header + body, encoding="utf-8", errors="replace")
+
+
 def _page_has_blocked_marker(page_dom: str) -> bool:
     lowered = page_dom.lower()
     return any(marker in lowered for marker in DOMCLICK_BLOCKED_MARKERS)
@@ -774,6 +1016,8 @@ def _build_manifest(
     delay_seconds: float,
     timeout_seconds: float,
     virtual_time_budget_ms: int,
+    page_retries: int,
+    retry_delay_seconds: float,
     capture_runtime: str,
     chrome_path: Path | None,
     chrome_user_data_dir: Path | None,
@@ -799,6 +1043,8 @@ def _build_manifest(
         "delay_seconds": delay_seconds,
         "timeout_seconds": timeout_seconds,
         "virtual_time_budget_ms": virtual_time_budget_ms,
+        "page_retries": page_retries,
+        "retry_delay_seconds": retry_delay_seconds,
         "capture_runtime": capture_runtime,
         "chrome_path": str(chrome_path) if chrome_path is not None else None,
         "chrome_user_data_dir": (
@@ -922,6 +1168,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--virtual-time-budget-ms", type=int, default=DEFAULT_VIRTUAL_TIME_BUDGET_MS
     )
+    parser.add_argument("--page-retries", type=int, default=DEFAULT_PAGE_RETRIES)
+    parser.add_argument("--retry-delay-seconds", type=float, default=DEFAULT_RETRY_DELAY_SECONDS)
+    parser.add_argument("--diagnostics-dir", type=Path, default=None)
     parser.add_argument("--capture-runtime", default=None)
     parser.add_argument(
         "--chrome-binary", "--chrome-path", dest="chrome_path", type=Path, default=None
@@ -946,6 +1195,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         delay_seconds=args.delay_seconds,
         timeout_seconds=args.timeout_seconds,
         virtual_time_budget_ms=args.virtual_time_budget_ms,
+        page_retries=args.page_retries,
+        retry_delay_seconds=args.retry_delay_seconds,
+        diagnostics_dir=args.diagnostics_dir,
         capture_runtime=args.capture_runtime,
         chrome_path=args.chrome_path,
         chrome_user_data_dir=args.chrome_user_data_dir,
