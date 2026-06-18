@@ -65,6 +65,37 @@ Current evidence checked again on 2026-06-03:
 
 Decision for now: keep the installed schedule at once per day. A second run per day can help trend evidence only if it captures meaningfully fresh data or intentionally records a new observation timestamp without misleading the reviewer. It also increases Domclick access pressure and duplicate-report noise. If adopted later, prefer two explicit daily triggers such as `00:00` and `12:00` Moscow, not an infinite loop, and ask before changing the real scheduled task.
 
+## Next MLOps Workstream: Retrain, Compare, Promote
+
+Current MLOps status: RealtyScope has a reproducible trainer, non-leaky feature version `ml_features_v2_non_leaky`, Docker-backed MLflow evidence, a registered model, and a shared model artifact volume. This proves the baseline MLOps path, but it is not yet a full automated model lifecycle.
+
+Planned branch: `ml/model-promotion-workflow`.
+
+Goal: turn the existing trainer and MLflow evidence into a controlled model lifecycle that can retrain on fresh database rows, compare the candidate model against the active model, promote only when the candidate is clearly better, and keep a rollback path.
+
+Required behavior:
+
+- Train a candidate model from the current PostgreSQL data using `ml_features_v2_non_leaky` and grouped validation by `listing_id`.
+- Log model hyperparameters explicitly to MLflow, including Ridge `alpha`, train/test split strategy, random state, feature version, and model version.
+- Read the active model metadata and metrics from the current selected artifact or MLflow registered model.
+- Compare candidate and active model metrics using MAE, RMSE, MAPE, R2, and improvement versus naive baseline.
+- Keep `baseline_ridge_v2_non_leaky` as the explainable baseline until a stronger candidate proves better under the same non-leaky validation.
+- Evaluate stronger tabular-regression candidates inside this workflow, starting with scikit-learn `HistGradientBoostingRegressor` to avoid extra dependency risk, then XGBoost only if Docker/CI/MLflow packaging remains stable.
+- Treat XGBoost as a candidate model, not an automatic replacement: it must beat the active Ridge baseline on agreed metrics, avoid overfitting, log hyperparameters and artifacts, and remain explainable enough for the course defense.
+- Promote only if the candidate passes clear gates, for example lower MAE and RMSE by an agreed threshold, no worse R2 beyond tolerance, and no data-quality gate failure.
+- Reject and keep the active model when the candidate is worse, inconclusive, trained on too few fresh rows, or missing required MLflow/artifact metadata.
+- Record a promotion decision report with candidate metrics, active metrics, data counts, MLflow run ID, artifact URI, decision, timestamp, and rollback target.
+- Do not overwrite the previous active artifact. Keep the previous MLflow model version or artifact path available for rollback.
+- Keep `/predict` as serving-only: it must load the selected artifact and must not train during API requests.
+
+Acceptance evidence:
+
+- A dry-run command can train and compare without changing the active model.
+- A promote command can update the selected model only after gates pass.
+- A rollback command or documented rollback procedure restores the previous selected model.
+- Tests cover pass, reject, and rollback/selection behavior without calling live Domclick or live OSM.
+- The demo script can explain this as controlled MLOps, not daily blind retraining.
+
 ## Phase 7 Workstreams
 
 Phase 7 should be split into small, independently verifiable slices. Do not batch all UI, data, docs, and ops changes into one commit.
