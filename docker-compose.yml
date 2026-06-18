@@ -1,6 +1,16 @@
 services:
   db:
     image: postgres:16-alpine
+    command:
+      - postgres
+      - -c
+      - temp_file_limit=2GB
+      - -c
+      - log_temp_files=64MB
+      - -c
+      - statement_timeout=300000
+      - -c
+      - idle_in_transaction_session_timeout=120000
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-realtyscope}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-realtyscope}
