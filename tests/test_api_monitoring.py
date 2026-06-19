@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 from services.api.app import main as api_main
@@ -9,8 +10,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from tests.test_api_data_routes import _seed_session
 
+from realtyscope.config import Settings
 from realtyscope.database.base import Base
 from realtyscope.database.models import AppLog
+from realtyscope.ml.model_selection import SelectedModel, save_selected_model
 
 
 class FakePredictionModel:
@@ -45,7 +48,50 @@ def test_model_metadata_endpoint_reports_loaded_model_contract() -> None:
             {"feature": "total_area_m2", "importance": 0.8, "coefficient": 0.8},
             {"feature": "rooms", "importance": 0.2, "coefficient": 0.2},
         ],
+        "selected_model": None,
         "error": None,
+    }
+
+
+def test_model_metadata_endpoint_reports_selected_model_state(tmp_path: Path, monkeypatch) -> None:
+    selection_path = tmp_path / "selected_model.json"
+    active = SelectedModel(
+        model_version="hist_gradient_boosting_v1",
+        artifact_path=tmp_path / "hist_gradient_boosting_v1.joblib",
+        feature_version="ml_features_v2_non_leaky",
+        metrics={"mae": 90.0, "rmse": 120.0, "r2": 0.53},
+        selected_at=datetime(2026, 6, 20, 7, 0, tzinfo=UTC),
+        previous=SelectedModel(
+            model_version="baseline_ridge_v2_non_leaky",
+            artifact_path=tmp_path / "baseline_ridge_v2_non_leaky.joblib",
+            feature_version="ml_features_v2_non_leaky",
+            metrics={"mae": 100.0, "rmse": 140.0, "r2": 0.50},
+            selected_at=datetime(2026, 6, 20, 6, 0, tzinfo=UTC),
+        ),
+    )
+    save_selected_model(selection_path, active)
+    monkeypatch.setattr(
+        api_main,
+        "get_settings",
+        lambda: Settings(ACTIVE_MODEL_SELECTION_PATH=str(selection_path)),
+    )
+    client = _client_with_fake_model()
+    try:
+        response = client.get("/model/metadata")
+    finally:
+        api_main.app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["selected_model"] == {
+        "model_version": "hist_gradient_boosting_v1",
+        "artifact_path": str(tmp_path / "hist_gradient_boosting_v1.joblib"),
+        "feature_version": "ml_features_v2_non_leaky",
+        "metrics_summary": {"mae": 90.0, "rmse": 120.0, "r2": 0.53},
+        "selected_at": "2026-06-20T07:00:00+00:00",
+        "rollback_available": True,
+        "previous_model_version": "baseline_ridge_v2_non_leaky",
+        "previous_artifact_path": str(tmp_path / "baseline_ridge_v2_non_leaky.joblib"),
     }
 
 
@@ -66,6 +112,7 @@ def test_model_metadata_endpoint_reports_unavailable_model() -> None:
     assert payload["model_version"] is None
     assert payload["feature_names"] == []
     assert payload["feature_importance"] == []
+    assert payload["selected_model"] is None
     assert isinstance(payload["error"], str)
 
 
