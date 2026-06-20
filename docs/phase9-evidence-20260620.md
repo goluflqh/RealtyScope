@@ -50,6 +50,37 @@ Integration branch gate, if the user later approves assembling one:
 - Update docs from fresh evidence only.
 - Recheck GitNexus freshness after every non-trivial commit or branch switch before impact analysis.
 
+## Continuation Readiness Audit: 2026-06-20
+
+This continuation audit was performed after docs commit `59f5c21` and still did not push, open PRs, merge, delete branches, change scheduler triggers, or run live Domclick capture.
+
+Branch/worktree checks:
+
+- Main checkout stayed clean at `50097db`, ahead of `origin/main` by 5 mixed commits. It remains unsuitable for publishing Phase 9.
+- Worktree heads matched the recorded split branches: scheduler `e62b068`, teammate import `5db4a44`, PostgreSQL guardrails `f5464c1`, MLOps `ebd89ec`, API/monitoring `7e9c65a`, docs `59f5c21`, and recovered UI `b6922b7`.
+- `git diff --check` exited 0 for scheduler, teammate import, PostgreSQL guardrails, MLOps, API/monitoring, and docs branch comparisons used in the PR order.
+
+Fresh targeted checks:
+
+- Phase 8 scheduler: `ruff check` passed; `ruff format --check` reported 11 files already formatted; `pytest tests/test_domclick_chrome_capture.py tests/test_domclick_scheduled_batch.py -q -p no:cacheprovider` passed 22 tests.
+- Phase 9A teammate import: `ruff check` passed; `ruff format --check` reported 2 files already formatted; `pytest tests/test_teammate_import.py -q -p no:cacheprovider` passed 4 tests.
+- Phase 9B MLOps: `ruff check` passed; `ruff format --check` reported 10 files already formatted; `pytest tests/test_ml_model_compare.py tests/test_ml_model_selection.py tests/test_ml_promotion_cli.py tests/test_ml_training.py -q -p no:cacheprovider` passed 17 tests.
+- Phase 9C API/monitoring: `ruff check` passed; `ruff format --check` reported 13 files already formatted; `pytest tests/test_api_monitoring.py tests/test_api_prediction_contract.py tests/test_config.py tests/test_ml_model_selection.py tests/test_ml_promotion_cli.py -q -p no:cacheprovider` passed 18 tests with the known Starlette/httpx deprecation warning.
+
+Fresh GitNexus freshness and impact evidence:
+
+- Branch-specific GitNexus worktree heads matched their branch heads for scheduler, MLOps, API/monitoring, and recovered UI. The rejected `realtyscope-ui-ultimate-redesign-index` was not used for the recovered UI branch.
+- `detect_changes` rerun on `realtyscope-ops-domclick-scheduler-validated-20260619-index` reported risk `critical`, changed files 9, changed symbols 105, affected processes 26, in Domclick capture/scheduled-batch extraction paths.
+- `detect_changes` rerun on `realtyscope-ml-model-promotion-workflow-index` reported risk `critical`, changed files 7, changed symbols 110, affected processes 18, in MLOps compare/selection/promote/rollback/report-writing paths.
+- `detect_changes` rerun on `realtyscope-api-phase9-selected-model-monitoring-20260620-index` reported risk `critical`, changed files 4, changed symbols 13, affected processes 25, focused on `model_metadata`, `monitoring_status`, and additive `Settings.active_model_selection_path` flows.
+
+Fresh read-only runtime evidence:
+
+- Windows Task Scheduler read-only check still reported `LastTaskResult=0`, `NumberOfMissedRuns=0`, and the next run scheduled for 2026-06-21 00:00 Moscow.
+- The two newest scheduler transcripts, `domclick-scheduled-task-20260619-000001.log` and `domclick-scheduled-task-20260620-000002.log`, both end with `status=success` and `records_seen=2000`.
+- Existing API runtime on `127.0.0.1:8000` returned `/health` ok, `/data?limit=1&offset=0` with real PostgreSQL `total=14755`, `/monitoring/status` with `status=ok`, `listings_total=14755`, `ml_ready_listings=14755`, latest successful ingestion finished `2026-06-19T21:15:54.106449+00:00`, model ready, and active model `baseline_ridge_v2_non_leaky`. The current runtime does not expose Phase 9C `selected_model`; that remains covered by the isolated API branch smoke above.
+- Filtered `/data?limit=3&offset=0&rooms=2&min_price_rub=10000000` returned `total=4676` and 3 rows. Redis key `realtyscope:listings:v1:limit=3:offset=0:min_price_rub=10000000:rooms=2` had `EXISTS=1`, `TTL=58`, and `STRLEN=1499`.
+
 ## Latest Non-UI Pre-PR Audit: 2026-06-20
 
 This audit refreshed evidence for the non-UI branches only. It did not push, open PRs, merge, delete branches, change scheduler triggers, or run live Domclick capture.
