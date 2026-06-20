@@ -82,6 +82,26 @@ Fresh read-only runtime evidence:
 - Existing local API runtime on `127.0.0.1:8000` returned `/health` ok, `/data?limit=3&offset=0` with real PostgreSQL `total=14755`, `/monitoring/status` with `listings_total=14755`, `ml_ready_listings=14755`, latest successful ingestion `2026-06-19T21:15:54.106449+00:00`, model ready, feature count 23, and no recent errors. This is the current runtime service, not a new proof that the Phase 9C branch is running.
 - Filtered `/data?limit=3&offset=0&rooms=2&min_price_rub=10000000` returned `total=4676`; Compose project `realtyscope` had healthy `db` and `redis`; Redis key `realtyscope:listings:v1:limit=3:offset=0:min_price_rub=10000000:rooms=2` had `EXISTS=1`, `TTL=47`, `STRLEN=1499`.
 
+## Phase 9C Isolated Runtime Smoke: 2026-06-20
+
+This smoke ran from worktree `C:\Users\lequa\.config\superpowers\worktrees\RealtyScope\api-phase9-selected-model-monitoring-20260620`, branch `api/phase9-selected-model-monitoring-20260620`, commit `7e9c65a`, on temporary port `127.0.0.1:8011`. It did not modify repository files, production model selection, scheduler triggers, or the existing API on `127.0.0.1:8000`.
+
+Setup:
+
+- Created `%TEMP%\realtyscope-phase9c-selected-model-smoke-fresh.json` with `realtyscope.ml.model_selection.save_selected_model`, so the JSON used the branch contract and UTF-8 without BOM.
+- The selected model was `hist_gradient_boosting_candidate_v1`, feature version `ml_features_v2_non_leaky`, metrics `mae=19876543.21`, `rmse=42000000.0`, `r2=0.56`, with previous model `baseline_ridge_v2_non_leaky` and rollback available.
+- First run proved selected-model loading but returned model `status=unavailable` because the default relative `ACTIVE_MODEL_ARTIFACT_PATH` did not resolve from the API worktree. The API process was stopped before the rerun.
+- Second run set `ACTIVE_MODEL_ARTIFACT_PATH=E:\Магистр\2-курс\python\RealtyScope\data\processed\models\phase5\baseline_ridge_v2_non_leaky.joblib` and kept `ACTIVE_MODEL_SELECTION_PATH` pointed at the temp selected-model JSON.
+
+Evidence from the second run:
+
+- `/health` returned `status=ok` for `realtyscope-api` on port `8011`.
+- `/model/metadata` returned `status=ready`, active `model_version=baseline_ridge_v2_non_leaky`, `feature_version=ml_features_v2_non_leaky`, `feature_count=23`, `error=null`, and `selected_model.model_version=hist_gradient_boosting_candidate_v1` with `rollback_available=true` and `previous_model_version=baseline_ridge_v2_non_leaky`.
+- `/monitoring/status` returned `status=ok`, `data_quality.listings_total=14755`, `ml_ready_listings=14755`, latest successful ingestion finished `2026-06-19T21:15:54.106449+00:00`, and the same ready model plus selected-model payload.
+- `/data?limit=1&offset=0` returned real PostgreSQL `total=14755`.
+- Startup stderr contained scikit-learn `InconsistentVersionWarning` while unpickling the baseline artifact with local scikit-learn 1.6.1 versus artifact 1.8.0, but startup completed and requests returned HTTP 200.
+- The temporary API process was stopped; no process with the temporary PIDs remained, and port `8011` had no listener after shutdown. The API branch remained clean.
+
 ## Verified Workstreams
 
 | Workstream | Branch / commit | Fresh evidence | Remaining action |

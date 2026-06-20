@@ -37,6 +37,8 @@ Before any non-UI branch is pushed or proposed for PR, rerun branch-local checks
 
 Latest non-UI pre-PR audit on 2026-06-20 refreshed the scheduler, teammate import, PostgreSQL guardrails, MLOps, and API branch evidence without pushing or merging. `git diff --check` passed for each branch/base; targeted ruff/format checks passed; targeted pytest passed for scheduler (22), teammate import (4), MLOps (17), and API/monitoring (18, with the known Starlette/httpx deprecation warning). GitNexus indexes for scheduler, MLOps, and API matched their branch heads before `detect_changes`; API route impact for `/model/metadata` and `/monitoring/status` reported no direct consumers and LOW route risk. Runtime evidence still shows Task Scheduler result `0`, next run 2026-06-21 00:00, real PostgreSQL `/data` total `14755`, filtered total `4676`, and Redis cache key `EXISTS=1`.
 
+A separate Phase 9C isolated runtime smoke on port `8011` ran from branch `api/phase9-selected-model-monitoring-20260620` at `7e9c65a`. With a temp selected-model JSON and an absolute `ACTIVE_MODEL_ARTIFACT_PATH`, `/model/metadata` returned model `status=ready`, active `baseline_ridge_v2_non_leaky`, `feature_count=23`, `selected_model.model_version=hist_gradient_boosting_candidate_v1`, rollback available, and `error=null`; `/monitoring/status` returned the same selected-model payload plus real DB counts. The temp API was stopped and port `8011` was clear afterward. Startup still emits scikit-learn `InconsistentVersionWarning` because the artifact was saved with 1.8.0 and local runtime uses 1.6.1.
+
 ## Branch And CI State
 
 | Item | Status | Evidence |
