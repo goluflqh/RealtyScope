@@ -20,20 +20,20 @@ Key local heads:
 | Phase 8 scheduler readiness | `ops/domclick-scheduler-validated-20260619` / `e62b068` | Branch-local ruff/pytest pass; two automatic scheduler runs preserved: 2026-06-19 and 2026-06-20, both result `0`; fresh GitNexus detect-changes run on branch-specific index. |
 | Phase 9A data/backend readiness | `data/teammate-json-import-20260618`, `ops/postgres-guardrails-20260618`, current runtime | Import/guardrail branch checks pass; runtime API has real PostgreSQL `total=14755`; Redis filtered cache key proof passed after API restart with Redis healthy. |
 | Phase 9B MLOps promotion workflow | `ml/model-promotion-workflow` / `ebd89ec` | Dry-run compare, gated promote/reject, rollback/selection behavior, and decision report tests pass; fresh GitNexus detect-changes run. |
-| Phase 9C API/monitoring selected-model metadata | `api/phase9-selected-model-monitoring-20260620` / `7e9c65a` | API/monitoring/config/model-selection tests pass; branch-specific GitNexus index is fresh and detect-changes is recorded. |
+| Phase 9C API/monitoring selected-model metadata | `api/phase9-selected-model-monitoring-20260620` / `7e9c65a` | API/monitoring/config/model-selection tests pass; branch-specific GitNexus index is fresh and detect-changes is recorded; isolated selected-model runtime smoke on `127.0.0.1:8011` passed and was shut down cleanly. |
 | Phase 9D recovered Russian UI | `ui/recovered-real-data-dashboard-20260620` / `b6922b7` | Recovered UI tests pass; Playwright MCP smoke on `127.0.0.1:8504` shows Russian UI, real API data `14 755`, no forbidden mock literals, and 0 console errors. |
 
-Phase 9 integration/PR order is non-UI first and still requires explicit approval before any push, PR, or merge:
+Phase 9 integration/PR order is non-UI first and records sequencing only. Push, PR, or merge can be considered only after the relevant branch has completed its own acceptance checks and the user explicitly approves that action:
 
 1. Phase 8 scheduler: `ops/domclick-scheduler-validated-20260619` / `e62b068`.
 2. Phase 9A data import: `data/teammate-json-import-20260618` / `5db4a44`.
 3. Phase 9A PostgreSQL guardrails: `ops/postgres-guardrails-20260618` / `f5464c1`.
 4. Phase 9B MLOps promotion workflow: `ml/model-promotion-workflow` / `ebd89ec`.
 5. Phase 9C API/monitoring selected-model metadata: `api/phase9-selected-model-monitoring-20260620` / `7e9c65a`, after Phase 9B.
-6. Phase 9E docs/evidence once non-UI code branches are settled.
+6. Phase 9E docs/evidence once non-UI code branches are settled; current docs branch evidence reached `94dc368` before the later hygiene update on the same branch.
 7. Phase 9D recovered Russian UI: `ui/recovered-real-data-dashboard-20260620` / `b6922b7`, deferred unless explicitly reprioritized.
 
-Before any non-UI branch is pushed or proposed for PR, rerun branch-local checks, confirm diff scope, run `git diff --check`, refresh GitNexus index/use `detect_changes` where code impact matters, state CI expectations, and preserve the no-live-capture/no-scheduler-trigger-change rule. Keep `main` clean and do not push mixed local `main`.
+Before any non-UI branch is pushed or proposed for PR, rerun branch-local checks, confirm diff scope, run `git diff --check`, refresh GitNexus index/use `detect_changes` where code impact matters, state CI expectations, and preserve the no-live-capture/no-scheduler-trigger-change rule. Do not push or merge branches with incomplete requirements just because their place in the order is known. Keep `main` clean and do not push mixed local `main`.
 
 Latest non-UI pre-PR audit on 2026-06-20 refreshed the scheduler, teammate import, PostgreSQL guardrails, MLOps, and API branch evidence without pushing or merging. `git diff --check` passed for each branch/base; targeted ruff/format checks passed; targeted pytest passed for scheduler (22), teammate import (4), MLOps (17), and API/monitoring (18, with the known Starlette/httpx deprecation warning). GitNexus indexes for scheduler, MLOps, and API matched their branch heads before `detect_changes`; API route impact for `/model/metadata` and `/monitoring/status` reported no direct consumers and LOW route risk. Runtime evidence still shows Task Scheduler result `0`, next run 2026-06-21 00:00, real PostgreSQL `/data` total `14755`, filtered total `4676`, and Redis cache key `EXISTS=1`.
 

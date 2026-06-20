@@ -33,7 +33,7 @@ If Phase 9 integration is approved later, the minimum final readiness sequence i
 3. Run `git diff --check`, full `ruff check .`, full `ruff format --check .`, and full `pytest -q -p no:cacheprovider` on the integration branch.
 4. Rebuild/smoke Docker Compose, FastAPI, PostgreSQL, Redis, MLflow, and Streamlit from the integration branch.
 5. Re-run the selected-model API smoke, Redis filtered cache proof, read-only scheduler evidence check, and recovered UI browser check if UI is in scope.
-6. Push/open PR only after the branch is clean and the user explicitly approves; wait for GitHub Actions `ci` before any merge.
+6. Push/open PR only after the branch is clean, its workstream requirements are complete, and the user explicitly approves; wait for GitHub Actions `ci` before any merge.
 
 ## 0. What To Say Up Front
 

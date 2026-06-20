@@ -33,7 +33,7 @@ Nếu sau này Phase 9 integration được approve, minimum final readiness seq
 3. Chạy `git diff --check`, full `ruff check .`, full `ruff format --check .`, và full `pytest -q -p no:cacheprovider` trên integration branch.
 4. Rebuild/smoke Docker Compose, FastAPI, PostgreSQL, Redis, MLflow, và Streamlit từ integration branch.
 5. Chạy lại selected-model API smoke, Redis filtered cache proof, read-only scheduler evidence check, và recovered UI browser check nếu UI nằm trong scope.
-6. Chỉ push/mở PR khi branch sạch và user approve rõ ràng; đợi GitHub Actions `ci` trước mọi merge.
+6. Chỉ push/mở PR khi branch sạch, yêu cầu của workstream đã hoàn tất, và user approve rõ ràng; đợi GitHub Actions `ci` trước mọi merge.
 
 ## 0. Nói Gì Trước Khi Demo
 
