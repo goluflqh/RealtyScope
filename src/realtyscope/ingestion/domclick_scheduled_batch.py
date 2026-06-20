@@ -85,6 +85,7 @@ class ScheduledDomclickBatchReport(BaseModel):
     status: str
     started_at: datetime
     finished_at: datetime
+    observed_at: datetime | None = None
     commit_to_database: bool
     min_records: int
     min_normalized_records: int
@@ -113,6 +114,7 @@ def run_domclick_scheduled_batch(
     min_normalized_records: int = 0,
     capture_mode: str = "chrome_assisted_scheduled_batch",
     operator_note: str | None = None,
+    observed_at: datetime | None = None,
     require_manifest: bool = True,
     report_dir: Path | None = DEFAULT_REPORT_DIR,
     fetch_text: Callable[[str], str] | None = None,
@@ -173,11 +175,15 @@ def run_domclick_scheduled_batch(
             )
 
         if commit_to_database:
+            if collection.manifest_path is None and observed_at is None:
+                raise ValueError(
+                    "Partial Domclick recovery without manifest.json requires explicit observed_at"
+                )
             persistence_result = persist_real_source_snapshot(
                 source_type=DOMCLICK_SNAPSHOT_SOURCE_TYPE,
                 source_path=snapshot_dir,
                 database_url=database_url,
-                observed_at=started_at,
+                observed_at=observed_at or started_at,
                 max_records=max_records,
             )
 
@@ -192,6 +198,7 @@ def run_domclick_scheduled_batch(
         status=status,
         started_at=started_at,
         finished_at=_clock_now(clock),
+        observed_at=observed_at or (started_at if persistence_result is not None else None),
         commit_to_database=commit_to_database,
         min_records=min_records,
         min_normalized_records=min_normalized_records,
@@ -404,6 +411,13 @@ def _clock_now(clock: Callable[[], datetime] | None) -> datetime:
     return value
 
 
+def _parse_datetime(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed
+
+
 def _write_report(
     report: ScheduledDomclickBatchReport,
     *,
@@ -480,6 +494,12 @@ def _add_run_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     )
     run_parser.add_argument("--operator-note", default=None, help="Optional manifest note.")
     run_parser.add_argument(
+        "--observed-at",
+        type=_parse_datetime,
+        default=None,
+        help="Explicit observation timestamp for safe partial recovery, ISO 8601.",
+    )
+    run_parser.add_argument(
         "--allow-missing-manifest",
         action="store_true",
         help="Allow pre-existing snapshot dirs without manifest.json.",
@@ -537,6 +557,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         min_normalized_records=args.min_normalized_records,
         capture_mode=args.capture_mode,
         operator_note=args.operator_note,
+        observed_at=args.observed_at,
         require_manifest=not args.allow_missing_manifest,
         report_dir=args.report_dir,
     )

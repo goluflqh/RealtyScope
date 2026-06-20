@@ -123,6 +123,54 @@ Sau đó commit một batch hữu hạn:
 
 Persistence hiện tại vẫn idempotent cho raw payload lặp lại, nhưng observation time được xử lý có chủ ý. Nếu chạy lại cùng dữ liệu, report nên cho thấy raw row được reuse và canonical listing được update; tuy vậy một scheduled run với timestamp mới vẫn có thể tạo row mới trong `listing_observations` cho cùng `source_listing_id`. Nhờ vậy daily run vẫn xây được evidence trend ngay cả khi Domclick trả cùng ranking search và cùng payload hash. Reprocess cùng source listing tại cùng `observed_at` vẫn idempotent và không tạo observation trùng.
 
+## Recovery Cho Partial Capture
+
+Chrome/CDP capture ghi compact payload file ngay sau mỗi offset render thành công, nhưng chỉ ghi `manifest.json` sau khi toàn bộ bounded capture hoàn tất. Nếu một offset phía sau fail, directory có thể còn payload hợp lệ nhưng thiếu manifest. Đây là case recovery partial, không phải capture success bình thường.
+
+Quy tắc recovery:
+
+- Không bịa row cho ngày không có payload parseable. Failed directory 2026-06-04 không có JSON/HTML parseable nên không được recover thành data.
+- Commit recovery thiếu manifest bắt buộc truyền `--observed-at` explicit. Batch command từ chối `--commit --allow-missing-manifest` nếu thiếu giá trị này để tránh lấy nhầm thời điểm manual recovery làm observation time.
+- Với partial Chrome capture của cùng scheduled run bị fail, ưu tiên timestamp `LastWriteTimeUtc` sớm nhất trong payload files. Wrapper dùng timestamp đó khi phát hiện payload thiếu `manifest.json`.
+- Luôn chạy recovery ở chế độ inspect/report không ghi DB trước. Chỉ thêm `--commit` sau khi đã review counts và `observed_at`.
+
+Bằng chứng partial 2026-06-05 trên máy dev:
+
+- Directory: `data/raw/domclick/2026-06-05-bulk/`.
+- Payload files: `56` JSON files, không có `manifest.json`.
+- Timestamp payload sớm nhất: `2026-06-04T21:00:46.0884704Z` (`2026-06-05 00:00:46` Moscow).
+- No-write recovery smoke: `1120` records, `1120` normalized listings, `1120` ML-ready listings, `0` rejected rows, `commit_to_database=false`.
+
+Bằng chứng partial scheduled và manual retry ngày 2026-06-06:
+
+- Windows task thật chạy lúc `2026-06-06 00:00:00` Moscow, result `1`, không có missed runs.
+- Directory `data/raw/domclick/2026-06-06-bulk/` có `38` JSON payload trong `payloads/`, offsets `000000..000740`, và không có `manifest.json`; timestamp payload sớm nhất là `2026-06-05T21:00:39.2157733Z` (`2026-06-06 00:00:39` Moscow).
+- Wrapper đã recover partial source với `--allow-missing-manifest --observed-at 2026-06-05T21:00:39.2157733Z`, sau đó scheduled batch fail an toàn vì `normalized_listings=760` thấp hơn `min_normalized_records=1000`; không ghi database.
+- Root cause: Chrome/CDP capture process thoát trước khi chạy hết bounded offset window `0..1980` và trước khi ghi `manifest.json`. Transcript cũ không giữ stderr của child capture, nên exception Chrome/CDP chính xác của lần đó không còn. Wrapper hiện log capture command ở non-dry-run và redirect stderr của capture vào transcript để các lần early exit sau có lỗi gốc.
+- Manual retry vào `data/raw/domclick-retry-2026-06-06-001/` với cùng bounded offset window tạo được `100` payload files, `2000` records, và `manifest.json`. Inspect-only báo `2000` normalized listings và `0` rejected rows.
+- DB commit explicit của retry dùng `observed_at = 2026-06-05T21:46:30.914168Z` (`2026-06-06 00:46:30` Moscow) lấy từ payload đầu tiên trong manifest retry. Commit tạo ingestion run `5`, insert `2000` observations, tạo `1055` listings, update `945` listings, raw inserted/reused `1271/729`, và `0` rejected rows.
+- Status sau retry báo `5` ingestion runs, `5335` raw listings, `4840` canonical listings, và `0` rejected listings. Data-readiness báo `7109` observations, `1622` listings có nhiều observations, `80` price changes, và coordinate/ML-ready coverage đầy đủ.
+
+Lệnh smoke recovery không ghi DB:
+
+```powershell
+$ObservedAt = "2026-06-04T21:00:46.0884704Z"
+.\.venv\Scripts\python.exe -m realtyscope.ingestion.domclick_scheduled_batch run `
+  --source-path data/raw/domclick/2026-06-05-bulk `
+  --allow-missing-manifest `
+  --observed-at $ObservedAt `
+  --max-records 2000 `
+  --min-records 1 `
+  --min-normalized-records 1000 `
+  --json
+```
+
+Scheduled wrapper dry-run hiển thị cùng recovery flags mà không chạy Docker, Alembic, Chrome, batch ingestion hoặc database commit:
+
+```powershell
+.\scripts\run_domclick_scheduled_batch.ps1 -DryRun -SkipDockerStart -CollectionDate 2026-06-05
+```
+
 ## Status Và Report
 
 Xem trạng thái database:
