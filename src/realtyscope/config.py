@@ -31,6 +31,10 @@ class Settings(BaseSettings):
         default="data/processed/models/phase5/baseline_ridge_v2_non_leaky.joblib",
         alias="ACTIVE_MODEL_ARTIFACT_PATH",
     )
+    active_model_selection_path: str = Field(
+        default="data/processed/models/selected_model.json",
+        alias="ACTIVE_MODEL_SELECTION_PATH",
+    )
 
     @property
     def database_url(self) -> str:
