@@ -6,6 +6,8 @@ RealtyScope — учебный data-service проект уровня grade 5 д
 
 Phase 6 and Phase 7 have been merged into `main`; the phase branches remain preserved as milestone branches. For the current readiness board, requirement checklist, Domclick schedule note, and future polish guidance, see `docs/project-status.md`.
 
+Phase 9 is currently local and split across clean workstream branches. It has branch-local readiness evidence for scheduler validation, data/backend checks, MLOps model promotion workflow, selected-model API/monitoring, recovered Russian UI smoke, and docs/CI/demo gates, but it has not been pushed, opened as a PR, merged, or proven by GitHub Actions CI. Use `docs/phase9-evidence-20260620.md` and the Phase 9 addendum in `docs/demo-script.md` before presenting any Phase 9 work; do not push mixed local `main`.
+
 The repository currently contains a tested course-ready foundation:
 
 - общий Python-пакет `realtyscope`;

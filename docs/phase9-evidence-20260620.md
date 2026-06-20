@@ -125,5 +125,5 @@ Evidence from the second run:
 - No Phase 9 branch has been pushed or merged.
 - No final integrated branch has been assembled.
 - No GitHub Actions CI has run for the Phase 9 local branches.
-- Final docs/README/demo scripts still need an integration-aware update after the user chooses PR/merge strategy.
-- Full-project `pytest`, `ruff check .`, and Docker Compose rebuild should be rerun on the chosen integration branch before any final readiness claim.
+- README and demo scripts now have Phase 9 local split-branch caveats/addenda, but final integrated-branch docs still need a last update after the user chooses and approves a PR/merge strategy.
+- Full-project `pytest`, `ruff check .`, `ruff format --check .`, Docker Compose rebuild, API/runtime smoke, recovered UI check, and GitHub Actions CI should be rerun on the chosen integration branch before any final readiness claim.
