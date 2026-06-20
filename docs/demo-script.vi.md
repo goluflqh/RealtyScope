@@ -6,6 +6,35 @@ Branch: `main` sau khi merge Phase 7
 
 Tài liệu này là đường đi demo ngắn để trình bày RealtyScope mà không cần đọc lại toàn bộ lịch sử project. Giả định repo đã có trên Windows workstation và WSL2 Ubuntu có Docker.
 
+Ghi chú Phase 9: tài liệu này vẫn mô tả đường demo Phase 7 trên `main`. Phase 9 hiện là các local branch sạch, tách riêng theo workstream. Dùng `docs/phase9-evidence-20260620.md` để xem evidence mới nhất: recovered Russian UI smoke trên `127.0.0.1:8504`, MLOps/API selected-model readiness, và các caveat integration/CI còn lại. Không trình bày Phase 9 như đã merge hoặc CI-green cho tới khi có integration branch/PR được approve và verify.
+
+## Phase 9 Local Readiness Addendum
+
+Chỉ dùng phần này khi demo mục tiêu là readiness của Phase 9, không phải đường demo Phase 7 đã merge vào `main`.
+
+Có thể claim từ evidence local hiện tại:
+
+- Phase 8 scheduler readiness được giữ trên `ops/domclick-scheduler-validated-20260619`; hai automatic runs 2026-06-19 và 2026-06-20 đều có Task Scheduler result `0` và 2000 records trong runtime logs/reports.
+- Phase 9A data/backend readiness đã verify trên các branch tách riêng cho teammate import và PostgreSQL guardrails; runtime local hiện có real PostgreSQL `/data` total `14755`, filtered total `4676`, và Redis filtered cache key proof.
+- Phase 9B MLOps readiness đã verify trên `ml/model-promotion-workflow`; có dry-run compare, gated promote/reject, rollback/selection behavior, decision reports, CLI behavior, và tests.
+- Phase 9C API/monitoring readiness đã verify trên `api/phase9-selected-model-monitoring-20260620`; isolated smoke `127.0.0.1:8011` cho thấy `/model/metadata` và `/monitoring/status` trả active model metadata cùng temp selected-model payload có rollback.
+- Phase 9D UI đang deliberate deferred. Nếu phải trình bày, chỉ dùng `ui/recovered-real-data-dashboard-20260620` và evidence Russian UI real-data đã recover. Không dùng branch bị loại `ui/realtyscope-ultimate-redesign` làm target.
+
+Chưa được claim:
+
+- Chưa có Phase 9 branch nào được push, mở PR, merge, hoặc chứng minh bằng GitHub Actions CI.
+- Local `main` đang ahead `origin/main` bởi mixed commits và không được dùng làm đường publish Phase 9.
+- Recovered Russian UI chưa phải final integrated Phase 9 UI cho tới khi được resume từ recovered branch và verify lại với real API/PostgreSQL data.
+
+Nếu sau này Phase 9 integration được approve, minimum final readiness sequence là:
+
+1. Chỉ assemble integration branch sau khi PR order được chọn.
+2. Re-check GitNexus index freshness trước mọi route/shared-symbol impact analysis sau mỗi non-trivial branch switch hoặc commit.
+3. Chạy `git diff --check`, full `ruff check .`, full `ruff format --check .`, và full `pytest -q -p no:cacheprovider` trên integration branch.
+4. Rebuild/smoke Docker Compose, FastAPI, PostgreSQL, Redis, MLflow, và Streamlit từ integration branch.
+5. Chạy lại selected-model API smoke, Redis filtered cache proof, read-only scheduler evidence check, và recovered UI browser check nếu UI nằm trong scope.
+6. Chỉ push/mở PR khi branch sạch, yêu cầu của workstream đã hoàn tất, và user approve rõ ràng; đợi GitHub Actions `ci` trước mọi merge.
+
 ## 0. Nói Gì Trước Khi Demo
 
 RealtyScope là data-service project hướng grade 5 cho bài toán phân tích và dự đoán giá căn hộ Moscow. Hệ thống hiện chứng minh được:

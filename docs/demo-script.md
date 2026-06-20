@@ -6,6 +6,35 @@ Audience: course reviewer, project operator, and future demo sessions.
 
 This script is the short defense path for showing RealtyScope without reloading the full project history. It assumes the repository is already cloned on the Windows workstation and that WSL2 Ubuntu has Docker available.
 
+Phase 9 note: this script still describes the Phase 7 `main` demo path. Phase 9 work is currently local and split across clean branches. Use `docs/phase9-evidence-20260620.md` for the latest branch-local evidence, recovered Russian UI smoke on `127.0.0.1:8504`, selected-model MLOps/API readiness, and remaining integration/CI caveats. Do not present Phase 9 local branches as merged or CI-green until an integration branch/PR is approved and verified.
+
+## Phase 9 Local Readiness Addendum
+
+Use this addendum only when the demo is about Phase 9 readiness rather than the merged Phase 7 `main` path.
+
+What can be claimed from current local evidence:
+
+- Phase 8 scheduler readiness is preserved on `ops/domclick-scheduler-validated-20260619`; the 2026-06-19 and 2026-06-20 automatic runs both finished with Task Scheduler result `0` and 2000 records in the runtime logs/reports.
+- Phase 9A data/backend readiness is verified on split branches for teammate import and PostgreSQL guardrails; the current local runtime has real PostgreSQL `/data` total `14755`, filtered total `4676`, and a Redis filtered cache key proof.
+- Phase 9B MLOps readiness is verified on `ml/model-promotion-workflow`; it covers dry-run compare, gated promote/reject, rollback/selection behavior, decision reports, CLI behavior, and tests.
+- Phase 9C API/monitoring readiness is verified on `api/phase9-selected-model-monitoring-20260620`; an isolated `127.0.0.1:8011` smoke showed `/model/metadata` and `/monitoring/status` returning active model metadata plus a temp selected-model payload with rollback available.
+- Phase 9D UI is intentionally deferred. If shown, use only `ui/recovered-real-data-dashboard-20260620` and the recovered real-data Russian UI evidence. Do not use the rejected `ui/realtyscope-ultimate-redesign` branch as the target.
+
+What must not be claimed yet:
+
+- No Phase 9 branch has been pushed, opened as a PR, merged, or proven by GitHub Actions CI.
+- Local `main` is ahead of `origin/main` by mixed commits and must not be pushed as the Phase 9 publication path.
+- The recovered Russian UI is not the final integrated Phase 9 UI until it is deliberately resumed from the recovered branch and verified again against real API/PostgreSQL data.
+
+If Phase 9 integration is approved later, the minimum final readiness sequence is:
+
+1. Assemble an integration branch only after the PR order is chosen.
+2. Re-check GitNexus index freshness before any route/shared-symbol impact analysis after each non-trivial branch switch or commit.
+3. Run `git diff --check`, full `ruff check .`, full `ruff format --check .`, and full `pytest -q -p no:cacheprovider` on the integration branch.
+4. Rebuild/smoke Docker Compose, FastAPI, PostgreSQL, Redis, MLflow, and Streamlit from the integration branch.
+5. Re-run the selected-model API smoke, Redis filtered cache proof, read-only scheduler evidence check, and recovered UI browser check if UI is in scope.
+6. Push/open PR only after the branch is clean, its workstream requirements are complete, and the user explicitly approves; wait for GitHub Actions `ci` before any merge.
+
 ## 0. What To Say Up Front
 
 RealtyScope is a grade-5-oriented data-service project for Moscow apartment price analysis. The current system demonstrates:
