@@ -7,6 +7,24 @@ Phase 7 merge evidence commit: `05f9b0cac3e77d55b93820be5d2b3db442d5295c`
 
 This document is the operating status board for the final course-readiness work. It consolidates the assignment requirements, implemented phase evidence, current gaps, and the next smaller workstreams so future sessions do not have to reload the full history.
 
+## Phase 9 Addendum: 2026-06-20
+
+Phase 9 is active and remains split across clean local workstreams. The current Phase 9 evidence snapshot is `docs/phase9-evidence-20260620.md`.
+
+Do not treat the Phase 9 local branches as merged or CI-green yet. The verified evidence currently covers branch-local tests, runtime API/PostgreSQL/Redis checks, recovered Russian UI browser smoke, and GitNexus freshness-gated impact checks where relevant. No Phase 9 push, PR, merge, branch deletion, stash drop, scheduler trigger change, or live Domclick capture has been approved or performed in this addendum.
+
+Key local heads:
+
+| Workstream | Branch / commit | Current evidence state |
+| --- | --- | --- |
+| Phase 8 scheduler readiness | `ops/domclick-scheduler-validated-20260619` / `e62b068` | Branch-local ruff/pytest pass; two automatic scheduler runs preserved: 2026-06-19 and 2026-06-20, both result `0`; fresh GitNexus detect-changes run on branch-specific index. |
+| Phase 9A data/backend readiness | `data/teammate-json-import-20260618`, `ops/postgres-guardrails-20260618`, current runtime | Import/guardrail branch checks pass; runtime API has real PostgreSQL `total=14755`; Redis filtered cache key proof passed after API restart with Redis healthy. |
+| Phase 9B MLOps promotion workflow | `ml/model-promotion-workflow` / `ebd89ec` | Dry-run compare, gated promote/reject, rollback/selection behavior, and decision report tests pass; fresh GitNexus detect-changes run. |
+| Phase 9C API/monitoring selected-model metadata | `api/phase9-selected-model-monitoring-20260620` / `7e9c65a` | API/monitoring/config/model-selection tests pass; branch-specific GitNexus index is fresh and detect-changes is recorded. |
+| Phase 9D recovered Russian UI | `ui/recovered-real-data-dashboard-20260620` / `b6922b7` | Recovered UI tests pass; Playwright MCP smoke on `127.0.0.1:8504` shows Russian UI, real API data `14 755`, no forbidden mock literals, and 0 console errors. |
+
+Next Phase 9 decision: choose an integration/PR order. Keep `main` clean and do not push mixed local `main`.
+
 ## Branch And CI State
 
 | Item | Status | Evidence |

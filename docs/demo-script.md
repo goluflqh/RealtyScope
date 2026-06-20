@@ -6,6 +6,8 @@ Audience: course reviewer, project operator, and future demo sessions.
 
 This script is the short defense path for showing RealtyScope without reloading the full project history. It assumes the repository is already cloned on the Windows workstation and that WSL2 Ubuntu has Docker available.
 
+Phase 9 note: this script still describes the Phase 7 `main` demo path. Phase 9 work is currently local and split across clean branches. Use `docs/phase9-evidence-20260620.md` for the latest branch-local evidence, recovered Russian UI smoke on `127.0.0.1:8504`, selected-model MLOps/API readiness, and remaining integration/CI caveats. Do not present Phase 9 local branches as merged or CI-green until an integration branch/PR is approved and verified.
+
 ## 0. What To Say Up Front
 
 RealtyScope is a grade-5-oriented data-service project for Moscow apartment price analysis. The current system demonstrates:

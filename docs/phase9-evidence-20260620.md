@@ -1,0 +1,41 @@
+# RealtyScope Phase 9 Evidence Snapshot
+
+Date: 2026-06-20
+Branch: `docs/phase9-final-readiness-20260620`
+Purpose: record current Phase 9 branch/runtime evidence without merging or pushing any workstream.
+
+This snapshot is intentionally conservative. It records what was verified locally and what still needs integration, CI, push, PR, or merge approval. It does not replace the clean workstream plan in `docs/superpowers/plans/2026-06-20-realtyscope-phase9-clean-workstreams-plan.md`.
+
+## Current Git Policy
+
+- Local `main` is clean but ahead of `origin/main` by 5 mixed commits. Do not push that mixed `main`.
+- Phase 9 work remains split across dedicated branches/worktrees.
+- No branch has been pushed, merged, deleted, or rewritten in this Phase 9 snapshot.
+- No live Domclick capture was run and no scheduler trigger was changed during these checks.
+- GitNexus impact evidence was used only after branch-specific index freshness was verified.
+
+## Verified Workstreams
+
+| Workstream | Branch / commit | Fresh evidence | Remaining action |
+| --- | --- | --- | --- |
+| Phase 8 scheduler readiness | `ops/domclick-scheduler-validated-20260619` at `e62b068` | Branch clean; diff limited to scheduler docs/script/capture/scheduled-batch/tests; `ruff check` passed; `ruff format --check` passed; `pytest tests/test_domclick_chrome_capture.py tests/test_domclick_scheduled_batch.py -q -p no:cacheprovider` passed 22 tests. Windows Task Scheduler read-only check on 2026-06-20: `LastRunTime=2026-06-20 00:00:00`, `LastTaskResult=0`, `NextRunTime=2026-06-21 00:00:00`, `NumberOfMissedRuns=0`. Logs for 2026-06-19 and 2026-06-20 both show automatic batch success with 100 payload files and 2000 records seen. Fresh GitNexus index `realtyscope-ops-domclick-scheduler-validated-20260619-index` matched `e62b068`; `detect_changes` reported affected flows confined to Domclick capture/scheduled-batch extraction paths. | Ready for a reviewed push/PR decision only after explicit approval. |
+| Phase 9A data/backend readiness | Existing split branches plus current runtime | `data/teammate-json-import-20260618` clean; diff limited to teammate import code/tests; `pytest tests/test_teammate_import.py -q -p no:cacheprovider` passed 4 tests. `ops/postgres-guardrails-20260618` clean; diff limited to `docker-compose.yml`; `git diff --check origin/main..HEAD` passed. Runtime API on `127.0.0.1:8000` returned `/health` ok and `/data?limit=3&offset=0` with real PostgreSQL `total=14755`. After starting Redis and restarting only local Uvicorn so FastAPI lifespan could create a Redis client, filtered `/data?limit=3&offset=0&rooms=2&min_price_rub=10000000` returned `total=4676`; Redis key `realtyscope:listings:v1:limit=3:offset=0:min_price_rub=10000000:rooms=2` had `EXISTS=1`, `TTL=49`, `STRLEN=1499`. `/monitoring/status` reported `listings_total=14755`, `ml_ready=14755`, latest successful ingestion finished `2026-06-19T21:15:54.106449+00:00`, model ready, feature count 23, recent errors 0. | Decide whether data/import and guardrail branches need separate PRs. Runtime proof depends on API being started after Redis is healthy. |
+| Phase 9B MLOps promotion workflow | `ml/model-promotion-workflow` at `ebd89ec` | Branch clean; `pytest tests/test_ml_model_compare.py tests/test_ml_model_selection.py tests/test_ml_promotion_cli.py tests/test_ml_training.py -q -p no:cacheprovider` passed 17 tests; `ruff check src/realtyscope/ml ...` passed; `ruff format --check src/realtyscope/ml ...` passed. Fresh GitNexus index `realtyscope-ml-model-promotion-workflow-index` matched `ebd89ec`; `detect_changes` reported affected flows in MLOps CLI/compare/selection/rollback paths, including `main -> _compare_command -> compare_candidate`, `promote_selected_model`, `rollback_selected_model`, and `_write_report`. | Needs push/PR approval and integration decision. It is local MLOps control logic, not automatic production retraining. |
+| Phase 9C API/monitoring selected model metadata | `api/phase9-selected-model-monitoring-20260620` at `7e9c65a` | Branch clean; `pytest tests/test_api_monitoring.py tests/test_api_prediction_contract.py tests/test_config.py tests/test_ml_model_selection.py tests/test_ml_promotion_cli.py -q -p no:cacheprovider` passed 18 tests with one Starlette/httpx deprecation warning; `ruff check` passed; `ruff format --check` passed. GitNexus index `realtyscope-api-phase9-selected-model-monitoring-20260620-index` was up to date at `7e9c65a`; `detect_changes` versus `ebd89ec` reported changed API/model metadata/settings flows for `model_metadata`, `monitoring_status`, and additive `Settings.active_model_selection_path`. | Needs integration decision because it is based on the Phase 9B branch. Runtime smoke for a real `selected_model.json` can be added before PR if desired. |
+| Phase 9D recovered Russian UI baseline | `ui/recovered-real-data-dashboard-20260620` at `b6922b7` | Branch clean; diff limited to Streamlit UI/chart/test files; `pytest tests/test_streamlit_dashboard_charts.py tests/test_streamlit_scaffold.py tests/test_streamlit_api_client.py -q -p no:cacheprovider` passed 25 tests; `ruff check` passed; `ruff format --check` passed. Started recovered Streamlit on `http://127.0.0.1:8504` with `API_BASE_URL=http://127.0.0.1:8000`. Playwright MCP browser check confirmed title `RealtyScope - Оценка квартир`, required Russian and real-data markers present (`Дашборд`, `Оценка квартиры`, `Тепловая карта`, `Сравнение сегментов`, `О данных`, `14 755`, `2026-06-19 21:15`), forbidden mock literals absent (`273 680`, `12.46`, `Хамовники`, `Смотреть все предложения`), API status `API доступен`, model metadata `baseline_ridge_v2_non_leaky` / `ml_features_v2_non_leaky`, 0 console errors, and 12 non-blocking Streamlit/Vega/DeckGL warnings. | Continue UI polish from this recovered branch only. The rejected `ui/realtyscope-ultimate-redesign` branch remains out of scope. |
+
+## Current Runtime Notes
+
+- API smoke process: local Uvicorn on `127.0.0.1:8000`.
+- Recovered Streamlit smoke process: `127.0.0.1:8504`.
+- Compose project `realtyscope` had PostgreSQL and Redis healthy after Redis was started for the cache proof.
+- Redis proof failed before API restart because the previous API process had started before Redis and FastAPI creates the Redis client in lifespan. Restarting API after Redis was healthy made the cache proof pass.
+- Streamlit stderr showed a non-blocking `use_container_width` deprecation warning and a browser disconnect `ConnectionResetError` after the browser tab was closed.
+
+## Not Yet Complete
+
+- No Phase 9 branch has been pushed or merged.
+- No final integrated branch has been assembled.
+- No GitHub Actions CI has run for the Phase 9 local branches.
+- Final docs/README/demo scripts still need an integration-aware update after the user chooses PR/merge strategy.
+- Full-project `pytest`, `ruff check .`, and Docker Compose rebuild should be rerun on the chosen integration branch before any final readiness claim.
