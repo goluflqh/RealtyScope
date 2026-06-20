@@ -197,6 +197,41 @@ Integration status after this audit:
 - UI remains deliberately outside this non-UI integration branch.
 - No live Domclick capture or scheduler trigger change was performed.
 
+## Final Pre-Push Verification: 2026-06-20
+
+After docs refresh commit `ebd4390`, the integration branch was verified again before any push/PR step:
+
+- Worktree: `C:\Users\lequa\.config\superpowers\worktrees\RealtyScope\phase9-non-ui-readiness-20260620`.
+- Branch: `integration/phase9-non-ui-readiness-20260620`.
+- Head under test: `ebd43907d54a2b9681bf2db4153c2537912b9b1c`.
+- `git diff --check origin/main..HEAD` exited 0.
+- `python -m ruff check .` exited 0.
+- `python -m ruff format --check .` exited 0 and reported 77 files already formatted.
+- `python -m pytest -q -p no:cacheprovider` exited 0 with the known Starlette/httpx deprecation warning.
+- Docker Compose config check through WSL exited 0.
+- GitNexus integration index was refreshed after the docs commit: indexed commit `ebd4390`, current commit `ebd4390`, 2543 nodes, 5063 edges, 68 clusters, 180 flows.
+- GitNexus MCP `detect_changes` versus `origin/main` reported risk `critical`, 29 changed files, 249 changed symbols, and 74 affected processes. The affected flows remained the expected scheduler capture/batch, teammate import, MLOps compare/selection/promote/rollback/report-writing, and API model metadata/monitoring/settings paths.
+- Windows Task Scheduler read-only check still reported `LastTaskResult=0`, `NumberOfMissedRuns=0`, and next run `2026-06-21 00:00` Moscow.
+
+Final selected-model API smoke on temporary port `127.0.0.1:8012`:
+
+- The first smoke script attempt did not create the selected-model JSON because of a PowerShell `python -c` quoting issue, so it intentionally was not accepted as selected-model evidence.
+- The corrected smoke wrote a temporary UTF-8 no-BOM selected-model JSON and asserted that both API payloads contained `hist_gradient_boosting_candidate_v1`.
+- `/health` returned ok.
+- `/model/metadata` returned `status=ready`, active `model_version=baseline_ridge_v2_non_leaky`, `feature_count=23`, `selected_model.model_version=hist_gradient_boosting_candidate_v1`, `rollback_available=true`, and `previous_model_version=baseline_ridge_v2_non_leaky`.
+- `/monitoring/status` returned ok and the same selected-model payload.
+- `/data?limit=1&offset=0` returned real PostgreSQL `total=14755`.
+- Filtered `/data?limit=4&offset=0&rooms=2&min_price_rub=10000000` returned `total=4676` and 4 rows.
+- Redis key `realtyscope:listings:v1:limit=4:offset=0:min_price_rub=10000000:rooms=2` had `EXISTS=1`, `TTL=59`, and `STRLEN=2119`.
+- The temporary API process was stopped and port `8012` was clear after shutdown.
+- Startup stderr still included the known scikit-learn `InconsistentVersionWarning` for artifact version 1.8.0 versus local runtime 1.6.1.
+
+Remaining before merge:
+
+- Commit this final evidence note and rerun final gates on the resulting HEAD.
+- Push/open PR only from the clean integration branch.
+- Wait for GitHub Actions CI before any merge decision.
+
 ## Verified Workstreams
 
 | Workstream | Branch / commit | Fresh evidence | Remaining action |
@@ -237,7 +272,7 @@ This matrix audits the active goal against current evidence. It is intentionally
 ## Not Yet Complete
 
 - Controlled approval has been given for integration/push/PR, but no Phase 9 branch has been pushed or merged yet.
-- A non-UI integration branch has been assembled locally and verified before this docs refresh, but the docs refresh still needs final gates and a commit.
+- A non-UI integration branch has been assembled locally and verified through the final pre-push checks recorded above.
 - No GitHub Actions CI has run for the Phase 9 integration branch yet.
 - README and demo scripts now have Phase 9 local split-branch caveats/addenda, but final integrated-branch docs still need a last update after the user chooses and approves a PR/merge strategy.
 - Full-project `pytest`, `ruff check .`, `ruff format --check .`, Docker Compose rebuild, API/runtime smoke, recovered UI check, and GitHub Actions CI should be rerun on the chosen integration branch before any final readiness claim.
