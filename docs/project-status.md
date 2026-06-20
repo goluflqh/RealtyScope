@@ -25,6 +25,8 @@ Key local heads:
 
 Phase 9 integration/PR order is non-UI first and records sequencing only. Push, PR, or merge can be considered only after the relevant branch has completed its own acceptance checks and the user explicitly approves that action:
 
+User has now approved controlled integration, push, and PR work after local gates pass. The approval remains gated: do not reset/repoint `main`, delete branches/stashes, rewrite history, change scheduler triggers, run live Domclick capture, or merge unchecked work.
+
 1. Phase 8 scheduler: `ops/domclick-scheduler-validated-20260619` / `e62b068`.
 2. Phase 9A data import: `data/teammate-json-import-20260618` / `5db4a44`.
 3. Phase 9A PostgreSQL guardrails: `ops/postgres-guardrails-20260618` / `f5464c1`.
@@ -40,6 +42,8 @@ Latest non-UI pre-PR audit on 2026-06-20 refreshed the scheduler, teammate impor
 A separate Phase 9C isolated runtime smoke on port `8011` ran from branch `api/phase9-selected-model-monitoring-20260620` at `7e9c65a`. With a temp selected-model JSON and an absolute `ACTIVE_MODEL_ARTIFACT_PATH`, `/model/metadata` returned model `status=ready`, active `baseline_ridge_v2_non_leaky`, `feature_count=23`, `selected_model.model_version=hist_gradient_boosting_candidate_v1`, rollback available, and `error=null`; `/monitoring/status` returned the same selected-model payload plus real DB counts. The temp API was stopped and port `8011` was clear afterward. Startup still emits scikit-learn `InconsistentVersionWarning` because the artifact was saved with 1.8.0 and local runtime uses 1.6.1.
 
 Continuation readiness audit after docs commit `59f5c21` reran branch cleanliness/diff checks, targeted ruff/format/pytest for scheduler, teammate import, MLOps, and API/monitoring, GitNexus freshness plus `detect_changes` for scheduler/MLOps/API, and read-only runtime checks for Task Scheduler, API/PostgreSQL, and Redis. All audited worktrees remained clean. The existing API runtime still runs the current baseline model and does not expose the Phase 9C `selected_model`; selected-model runtime evidence remains the isolated API-branch smoke above.
+
+Completion audit summary: local split-branch readiness is strong for Phase 8, 9A, 9B, 9C, 9D baseline, and 9E docs, but Phase 9 is not complete until a clean integration branch is assembled, full local gates pass, the integration branch is pushed, GitHub Actions CI is green, and final docs reflect that integrated evidence.
 
 ## Branch And CI State
 

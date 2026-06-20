@@ -20,6 +20,8 @@ This snapshot records an integration/PR order only. It does not authorize pushin
 
 Non-UI workstreams must be completed, freshly verified, and professionally reviewable before any push/PR/merge proposal. Push or merge is allowed to be discussed only after the relevant branch has completed its own acceptance checks, the integration order still makes sense, and the user explicitly approves that action. The recovered UI branch can remain deferred until the data/backend/MLOps/API/docs path is correct and approved.
 
+User update after this snapshot: controlled integration, push, and PR work is approved when the local branch is clean and the relevant acceptance checks pass. This approval does not authorize deleting branches/stashes, rewriting history, resetting/repointing `main`, changing scheduler triggers, running live Domclick capture, or merging broken/unchecked work.
+
 Recommended PR order after explicit approval:
 
 1. `ops/domclick-scheduler-validated-20260619` at `e62b068` for Phase 8 scheduler publication/readiness.
@@ -153,10 +155,28 @@ Evidence from the second run:
 - Redis proof failed before API restart because the previous API process had started before Redis and FastAPI creates the Redis client in lifespan. Restarting API after Redis was healthy made the cache proof pass.
 - Streamlit stderr showed a non-blocking `use_container_width` deprecation warning and a browser disconnect `ConnectionResetError` after the browser tab was closed.
 
+## Phase 9 Completion Audit Matrix
+
+This matrix audits the active goal against current evidence. It is intentionally stricter than local branch readiness: an item is complete only when the evidence covers the requested scope, not merely when a related branch exists.
+
+| Requirement | Current evidence | Audit status | Next controlled action |
+| --- | --- | --- | --- |
+| Written Phase 9 plan with concrete acceptance checks | `docs/superpowers/plans/2026-06-20-realtyscope-phase9-clean-workstreams-plan.md` and `.vi.md` exist on the docs workstream and define acceptance checks per phase. | Proved locally. | Carry plan into integration branch. |
+| Separate clean workstreams | Scheduler, data import, PostgreSQL guardrails, MLOps, API, docs, and recovered UI branches/worktrees are separate and clean in the latest audits. | Proved locally. | Preserve branch separation during integration and PR description. |
+| Phase 8 scheduler success preserved as two consecutive automatic passes | 2026-06-19 and 2026-06-20 scheduled-task evidence: `LastTaskResult=0`, logs end with `status=success`, `records_seen=2000`. | Proved locally. | Re-run read-only scheduler evidence on integration branch before PR. |
+| Phase 9A data/backend readiness | Teammate import and PostgreSQL guardrail branches pass focused checks; current API/PostgreSQL/Redis runtime evidence shows `/data total=14755`, filtered total `4676`, Redis `EXISTS=1`. | Proved locally for split branches/runtime. | Merge into integration branch and rerun API/Redis smoke. |
+| Phase 9B MLOps retrain/compare/promote workflow | `ml/model-promotion-workflow` at `ebd89ec` has dry-run compare, gated promote/reject, rollback/selection behavior, reports, and tests passing. | Proved locally. | Merge before API branch, rerun focused and full tests. |
+| Phase 9C API/monitoring gaps | API branch at `7e9c65a` exposes selected-model state in `/model/metadata` and `/monitoring/status`; isolated port `8011` smoke passed. Current baseline runtime on `8000` does not expose `selected_model`. | Proved locally on API branch; not integrated. | Merge after MLOps and rerun selected-model smoke from integration branch. |
+| Phase 9D recovered Russian UI | Recovered UI branch at `b6922b7` restarts against real API/PostgreSQL and browser smoke shows Russian UI, real `14 755`, no known mock literals, 0 console errors. | Baseline proved locally; final redesign/polish deferred. | Keep out of non-UI integration unless explicitly included later; continue only from recovered branch. |
+| Phase 9E docs/CI/demo readiness | Docs branch records evidence, integration/PR order, demo caveats, and this audit. | Proved locally as docs evidence; final integrated docs pending. | Merge docs into integration branch after non-UI code and refresh from final checks. |
+| GitNexus freshness before impact analysis | Branch-specific indexes were fresh for scheduler, MLOps, API, and recovered UI before `detect_changes`. | Proved locally for split branches. | Create/refresh an integration-branch GitNexus index if tooling is available; otherwise state unavailable and rely on tests/runtime evidence. |
+| Push/PR only from clean verified branches with CI expectations | Controlled push/PR approval has now been given, but no integration branch or PR exists yet. | Incomplete. | Assemble integration branch, run gates, push/open PR only if clean. |
+| Final integration/CI evidence | No Phase 9 integration branch, remote CI run, PR, or merge exists yet. | Incomplete. | Create integration branch and run local/remote CI flow. |
+
 ## Not Yet Complete
 
-- No Phase 9 branch has been pushed or merged.
+- Controlled approval has been given for integration/push/PR, but no Phase 9 branch has been pushed or merged yet.
 - No final integrated branch has been assembled.
-- No GitHub Actions CI has run for the Phase 9 local branches.
+- No GitHub Actions CI has run for the Phase 9 integration branch yet.
 - README and demo scripts now have Phase 9 local split-branch caveats/addenda, but final integrated-branch docs still need a last update after the user chooses and approves a PR/merge strategy.
 - Full-project `pytest`, `ruff check .`, `ruff format --check .`, Docker Compose rebuild, API/runtime smoke, recovered UI check, and GitHub Actions CI should be rerun on the chosen integration branch before any final readiness claim.
