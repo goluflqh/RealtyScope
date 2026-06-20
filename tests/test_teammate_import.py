@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from realtyscope.ingestion.teammate_import import import_teammate_csv
+from realtyscope.ingestion.teammate_import import import_teammate_csv, import_teammate_json
 
 
 def test_import_teammate_csv_accepts_valid_rows(tmp_path: Path) -> None:
@@ -55,3 +55,52 @@ def test_import_teammate_csv_rejects_missing_required_fields(tmp_path: Path) -> 
     assert len(batch.normalized_listings) == 0
     assert len(batch.rejected_listings) == 1
     assert "price_rub" in batch.rejected_listings[0].reason
+
+
+def test_import_teammate_json_accepts_contract_rows(tmp_path: Path) -> None:
+    json_path = tmp_path / "teammate.json"
+    json_path.write_text(
+        """
+        [
+          {
+            "source_name": "cian",
+            "source_listing_id": "330398493",
+            "source_url": "https://www.cian.ru/sale/flat/330398493/",
+            "observed_at": "2026-05-14T09:37:52.268794+00:00",
+            "city": "Moscow",
+            "address_text": "Test address",
+            "latitude": 55.75,
+            "longitude": 37.62,
+            "price_rub": 12000000,
+            "total_area_m2": 48.5,
+            "rooms": 2,
+            "floor": 4,
+            "floors_total": 12,
+            "building_year": 2010,
+            "property_type": "apartment",
+            "description": "Sunny flat"
+          },
+          {
+            "source_name": "cian",
+            "source_listing_id": "bad-1",
+            "observed_at": "2026-05-14T09:37:52.268794+00:00",
+            "city": null,
+            "price_rub": 9000000,
+            "total_area_m2": 40.0,
+            "rooms": 1,
+            "property_type": "apartment"
+          }
+        ]
+        """,
+        encoding="utf-8",
+    )
+
+    batch = import_teammate_json(json_path)
+
+    assert batch.records_seen == 2
+    assert len(batch.raw_listings) == 1
+    assert len(batch.normalized_listings) == 1
+    assert len(batch.rejected_listings) == 1
+    assert batch.normalized_listings[0].source_listing_id == "330398493"
+    assert batch.normalized_listings[0].has_coordinates is True
+    assert "city" in batch.rejected_listings[0].reason
