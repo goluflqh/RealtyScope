@@ -49,6 +49,39 @@ Integration branch gate, if the user later approves assembling one:
 - Update docs from fresh evidence only.
 - Recheck GitNexus freshness after every non-trivial commit or branch switch before impact analysis.
 
+## Latest Non-UI Pre-PR Audit: 2026-06-20
+
+This audit refreshed evidence for the non-UI branches only. It did not push, open PRs, merge, delete branches, change scheduler triggers, or run live Domclick capture.
+
+Branch shape and whitespace checks:
+
+- `ops/domclick-scheduler-validated-20260619` remained clean/ahead 3; diff scope stayed limited to scheduler docs/script/capture/scheduled-batch/tests; `git diff --check origin/main..HEAD` exited 0.
+- `data/teammate-json-import-20260618` remained clean/ahead 1; diff scope stayed limited to `teammate_import.py` and `tests/test_teammate_import.py`; `git diff --check origin/main..HEAD` exited 0.
+- `ops/postgres-guardrails-20260618` remained clean/ahead 1; diff scope stayed limited to `docker-compose.yml`; `git diff --check origin/main..HEAD` exited 0; `wsl docker compose -f /mnt/c/Users/lequa/.config/superpowers/worktrees/RealtyScope/postgres-guardrails-20260618/docker-compose.yml config --quiet` exited 0.
+- `ml/model-promotion-workflow` remained clean/ahead 4; diff scope stayed limited to MLOps docs/code/tests; `git diff --check origin/main..HEAD` exited 0.
+- `api/phase9-selected-model-monitoring-20260620` remained clean; diff vs `ebd89ec` stayed limited to API metadata/settings/tests; `git diff --check ebd89ec..HEAD` exited 0.
+
+Fresh local checks:
+
+- Phase 8 scheduler: `python -m ruff check src/realtyscope/ingestion tests/test_domclick_chrome_capture.py tests/test_domclick_scheduled_batch.py` passed; `python -m ruff format --check src/realtyscope/ingestion tests/test_domclick_chrome_capture.py tests/test_domclick_scheduled_batch.py` reported 11 files already formatted; `python -m pytest tests/test_domclick_chrome_capture.py tests/test_domclick_scheduled_batch.py -q -p no:cacheprovider` passed 22 tests.
+- Phase 9A teammate import: `python -m ruff check src/realtyscope/ingestion/teammate_import.py tests/test_teammate_import.py` passed; `python -m ruff format --check src/realtyscope/ingestion/teammate_import.py tests/test_teammate_import.py` reported 2 files already formatted; `python -m pytest tests/test_teammate_import.py -q -p no:cacheprovider` passed 4 tests.
+- Phase 9B MLOps: `python -m ruff check src/realtyscope/ml tests/test_ml_model_compare.py tests/test_ml_model_selection.py tests/test_ml_promotion_cli.py tests/test_ml_training.py` passed; `python -m ruff format --check src/realtyscope/ml tests/test_ml_model_compare.py tests/test_ml_model_selection.py tests/test_ml_promotion_cli.py tests/test_ml_training.py` reported 10 files already formatted; `python -m pytest tests/test_ml_model_compare.py tests/test_ml_model_selection.py tests/test_ml_promotion_cli.py tests/test_ml_training.py -q -p no:cacheprovider` passed 17 tests.
+- Phase 9C API/monitoring: `python -m ruff check services/api/app/main.py src/realtyscope/config.py src/realtyscope/ml tests/test_api_monitoring.py tests/test_api_prediction_contract.py tests/test_config.py tests/test_ml_model_selection.py tests/test_ml_promotion_cli.py` passed; `python -m ruff format --check services/api/app/main.py src/realtyscope/config.py src/realtyscope/ml tests/test_api_monitoring.py tests/test_api_prediction_contract.py tests/test_config.py tests/test_ml_model_selection.py tests/test_ml_promotion_cli.py` reported 13 files already formatted; `python -m pytest tests/test_api_monitoring.py tests/test_api_prediction_contract.py tests/test_config.py tests/test_ml_model_selection.py tests/test_ml_promotion_cli.py -q -p no:cacheprovider` passed 18 tests with the known Starlette/httpx deprecation warning.
+
+Fresh GitNexus impact evidence after explicit index freshness checks:
+
+- `realtyscope-ops-domclick-scheduler-validated-20260619-index` matched branch head `e62b068697ba965ecfb6ae8976fb04ae6359bc96`; `detect_changes` reported risk `critical`, changed files 9, changed symbols 105, affected processes 26, with affected flows in Domclick capture/scheduled-batch extraction paths.
+- `realtyscope-ml-model-promotion-workflow-index` matched branch head `ebd89ec2870160c71c64cd7db4ef12eec8777482`; `detect_changes` reported risk `critical`, changed files 7, changed symbols 110, affected processes 18, with affected flows in MLOps CLI compare, selection, promote, rollback, and report-writing paths.
+- `realtyscope-api-phase9-selected-model-monitoring-20260620-index` matched branch head `7e9c65acec820f9bd1c778c05f6767e7802b3c06`; `detect_changes` reported risk `critical`, changed files 4, changed symbols 13, affected processes 25, focused on model metadata, monitoring status, and additive `Settings.active_model_selection_path` flows.
+- For `/model/metadata` and `/monitoring/status`, `route_map` found no direct consumers, `api_impact` reported `directConsumers=0` and route risk `LOW`, and `shape_check` reported no routes with both response shapes and consumers.
+
+Fresh read-only runtime evidence:
+
+- Windows Task Scheduler read-only check: `LastRunTime=2026-06-20 00:00:00`, `LastTaskResult=0`, `NextRunTime=2026-06-21 00:00:00`, `NumberOfMissedRuns=0`.
+- Scheduler runtime artifacts are in the main checkout runtime data directory, not the scheduler worktree. `data/processed/runtime_logs/domclick-scheduled-task-20260619-000001.log` and `domclick-scheduled-task-20260620-000002.log` exist under the main checkout and show automatic batch success with `records_seen=2000`; the 2026-06-20 report `data/processed/domclick_reports/domclick-20260619T211550-280768Z.json` records `status=success`, `normalized_count=2000`, `raw_count=2000`, and `records_seen=2000`.
+- Existing local API runtime on `127.0.0.1:8000` returned `/health` ok, `/data?limit=3&offset=0` with real PostgreSQL `total=14755`, `/monitoring/status` with `listings_total=14755`, `ml_ready_listings=14755`, latest successful ingestion `2026-06-19T21:15:54.106449+00:00`, model ready, feature count 23, and no recent errors. This is the current runtime service, not a new proof that the Phase 9C branch is running.
+- Filtered `/data?limit=3&offset=0&rooms=2&min_price_rub=10000000` returned `total=4676`; Compose project `realtyscope` had healthy `db` and `redis`; Redis key `realtyscope:listings:v1:limit=3:offset=0:min_price_rub=10000000:rooms=2` had `EXISTS=1`, `TTL=47`, `STRLEN=1499`.
+
 ## Verified Workstreams
 
 | Workstream | Branch / commit | Fresh evidence | Remaining action |
