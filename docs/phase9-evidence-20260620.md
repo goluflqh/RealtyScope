@@ -1,16 +1,16 @@
 # RealtyScope Phase 9 Evidence Snapshot
 
 Date: 2026-06-20
-Branch: `docs/phase9-final-readiness-20260620`
-Purpose: record current Phase 9 branch/runtime evidence without merging or pushing any workstream.
+Branch: `integration/phase9-non-ui-readiness-20260620`
+Purpose: record current Phase 9 branch/runtime evidence and the controlled non-UI integration branch without touching mixed local `main`.
 
-This snapshot is intentionally conservative. It records what was verified locally and what still needs integration, CI, push, PR, or merge approval. It does not replace the clean workstream plan in `docs/superpowers/plans/2026-06-20-realtyscope-phase9-clean-workstreams-plan.md`.
+This snapshot is intentionally conservative. It records what was verified locally and what still needs remote CI, PR review, or merge approval. It does not replace the clean workstream plan in `docs/superpowers/plans/2026-06-20-realtyscope-phase9-clean-workstreams-plan.md`.
 
 ## Current Git Policy
 
 - Local `main` is clean but ahead of `origin/main` by 5 mixed commits. Do not push that mixed `main`.
-- Phase 9 work remains split across dedicated branches/worktrees.
-- No branch has been pushed, merged, deleted, or rewritten in this Phase 9 snapshot.
+- Phase 9 source work remains split across dedicated branches/worktrees; the non-UI source branches have also been assembled into `integration/phase9-non-ui-readiness-20260620` for review.
+- No branch has been merged into `main`, deleted, or rewritten in this Phase 9 snapshot.
 - No live Domclick capture was run and no scheduler trigger was changed during these checks.
 - GitNexus impact evidence was used only after branch-specific index freshness was verified.
 
@@ -136,6 +136,67 @@ Evidence from the second run:
 - Startup stderr contained scikit-learn `InconsistentVersionWarning` while unpickling the baseline artifact with local scikit-learn 1.6.1 versus artifact 1.8.0, but startup completed and requests returned HTTP 200.
 - The temporary API process was stopped; no process with the temporary PIDs remained, and port `8011` had no listener after shutdown. The API branch remained clean.
 
+## Non-UI Integration Branch Audit: 2026-06-20
+
+Controlled integration branch: `integration/phase9-non-ui-readiness-20260620`.
+Worktree: `C:\Users\lequa\.config\superpowers\worktrees\RealtyScope\phase9-non-ui-readiness-20260620`.
+Integration head before this docs refresh: `0f7bac0a30a696bd86333d0e95bb80cf8fc3741e`.
+Base: `origin/main` at `ee1ae254eecef1b62b3824d860f24c88b1e6ca98`.
+
+Merged non-UI workstreams in order:
+
+1. `ops/domclick-scheduler-validated-20260619` at `e62b068`.
+2. `data/teammate-json-import-20260618` at `5db4a44`.
+3. `ops/postgres-guardrails-20260618` at `f5464c1`.
+4. `ml/model-promotion-workflow` at `ebd89ec`.
+5. `api/phase9-selected-model-monitoring-20260620` at `7e9c65a`.
+6. `docs/phase9-final-readiness-20260620` at `23fa1d3`.
+
+Integration branch shape:
+
+- The merge sequence completed without conflicts.
+- Diff versus `origin/main` before this docs refresh: 29 files changed, 2560 insertions, 75 deletions.
+- No Streamlit/UI files were included; Phase 9D remains deferred to `ui/recovered-real-data-dashboard-20260620`.
+- `main` stayed clean and was not pushed.
+
+Fresh integration checks before this docs refresh:
+
+- `git diff --check origin/main..HEAD` exited 0.
+- `python -m ruff check .` exited 0.
+- `python -m ruff format --check .` exited 0 and reported 77 files already formatted.
+- `python -m pytest -q -p no:cacheprovider` exited 0 with the known Starlette/httpx deprecation warning.
+- `wsl -d Ubuntu -- bash -lc "cd /mnt/c/Users/lequa/.config/superpowers/worktrees/RealtyScope/phase9-non-ui-readiness-20260620 && docker compose -p realtyscope config --quiet"` exited 0.
+
+Integration GitNexus evidence:
+
+- Branch-specific GitNexus worktree: `C:\Users\lequa\gitnexus-worktrees\realtyscope-integration-phase9-non-ui-readiness-20260620-index`.
+- `gitnexus status` matched indexed commit `0f7bac0` to current commit `0f7bac0`.
+- The index contained 2533 nodes, 5053 edges, 70 clusters, and 180 flows.
+- MCP repo `realtyscope-integration-phase9-non-ui-readiness-20260620-index` was available at last commit `0f7bac0a30a696bd86333d0e95bb80cf8fc3741e`.
+- `detect_changes` versus `origin/main` reported risk `critical`, 29 changed files, 249 changed symbols, and 74 affected processes. Affected flows covered scheduler capture/batch, teammate import, MLOps compare/selection/promote/rollback/report-writing, and API model metadata/monitoring/settings.
+
+Integration runtime smoke on temporary port `127.0.0.1:8012`:
+
+- The API was started with `PYTHONPATH` pointing at the integration `src` directory, `ACTIVE_MODEL_ARTIFACT_PATH` pointing at the existing baseline artifact, and `ACTIVE_MODEL_SELECTION_PATH` pointing at a temporary selected-model JSON.
+- `/health` returned ok.
+- `/model/metadata` returned `status=ready`, active `model_version=baseline_ridge_v2_non_leaky`, `feature_count=23`, `selected_model.model_version=hist_gradient_boosting_candidate_v1`, `rollback_available=true`, and `previous_model_version=baseline_ridge_v2_non_leaky`.
+- `/monitoring/status` returned ok and the same selected-model payload.
+- `/data?limit=1&offset=0` returned real PostgreSQL `total=14755`.
+- Startup stderr included the known scikit-learn `InconsistentVersionWarning` because the artifact was saved with scikit-learn 1.8.0 and the local runtime used 1.6.1; requests still returned HTTP 200.
+- The temporary API process was stopped and port `8012` was clear after shutdown.
+
+Integration Redis/cache and scheduler evidence:
+
+- Filtered integration API request `/data?limit=4&offset=0&rooms=2&min_price_rub=10000000` returned `total=4676` and 4 rows.
+- Redis key `realtyscope:listings:v1:limit=4:offset=0:min_price_rub=10000000:rooms=2` had `EXISTS=1`, `TTL=59`, and `STRLEN=2119`.
+- Windows Task Scheduler read-only check reported `LastTaskResult=0`, `NumberOfMissedRuns=0`, and `NextRunTime=2026-06-21 00:00` Moscow.
+
+Integration status after this audit:
+
+- The non-UI integration branch is locally assembled and locally verified, but it still needs this docs refresh committed, final gates rerun, branch push, PR creation, and GitHub Actions CI evidence before any merge decision.
+- UI remains deliberately outside this non-UI integration branch.
+- No live Domclick capture or scheduler trigger change was performed.
+
 ## Verified Workstreams
 
 | Workstream | Branch / commit | Fresh evidence | Remaining action |
@@ -170,13 +231,13 @@ This matrix audits the active goal against current evidence. It is intentionally
 | Phase 9D recovered Russian UI | Recovered UI branch at `b6922b7` restarts against real API/PostgreSQL and browser smoke shows Russian UI, real `14 755`, no known mock literals, 0 console errors. | Baseline proved locally; final redesign/polish deferred. | Keep out of non-UI integration unless explicitly included later; continue only from recovered branch. |
 | Phase 9E docs/CI/demo readiness | Docs branch records evidence, integration/PR order, demo caveats, and this audit. | Proved locally as docs evidence; final integrated docs pending. | Merge docs into integration branch after non-UI code and refresh from final checks. |
 | GitNexus freshness before impact analysis | Branch-specific indexes were fresh for scheduler, MLOps, API, and recovered UI before `detect_changes`. | Proved locally for split branches. | Create/refresh an integration-branch GitNexus index if tooling is available; otherwise state unavailable and rely on tests/runtime evidence. |
-| Push/PR only from clean verified branches with CI expectations | Controlled push/PR approval has now been given, but no integration branch or PR exists yet. | Incomplete. | Assemble integration branch, run gates, push/open PR only if clean. |
-| Final integration/CI evidence | No Phase 9 integration branch, remote CI run, PR, or merge exists yet. | Incomplete. | Create integration branch and run local/remote CI flow. |
+| Push/PR only from clean verified branches with CI expectations | Controlled push/PR approval has now been given. The non-UI integration branch exists locally at `0f7bac0` and passed local gates before this docs refresh. | Partly proved locally; remote step pending. | Commit this docs refresh, rerun final gates, push/open PR only if clean. |
+| Final integration/CI evidence | Non-UI integration branch exists locally and has pre-doc-refresh local verification. No GitHub Actions CI run, PR, or merge exists yet for this branch. | Incomplete. | Push the verified integration branch, open PR, and wait for CI evidence before any merge. |
 
 ## Not Yet Complete
 
 - Controlled approval has been given for integration/push/PR, but no Phase 9 branch has been pushed or merged yet.
-- No final integrated branch has been assembled.
+- A non-UI integration branch has been assembled locally and verified before this docs refresh, but the docs refresh still needs final gates and a commit.
 - No GitHub Actions CI has run for the Phase 9 integration branch yet.
 - README and demo scripts now have Phase 9 local split-branch caveats/addenda, but final integrated-branch docs still need a last update after the user chooses and approves a PR/merge strategy.
 - Full-project `pytest`, `ruff check .`, `ruff format --check .`, Docker Compose rebuild, API/runtime smoke, recovered UI check, and GitHub Actions CI should be rerun on the chosen integration branch before any final readiness claim.

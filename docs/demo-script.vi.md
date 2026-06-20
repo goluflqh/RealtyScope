@@ -6,7 +6,7 @@ Branch: `main` sau khi merge Phase 7
 
 Tài liệu này là đường đi demo ngắn để trình bày RealtyScope mà không cần đọc lại toàn bộ lịch sử project. Giả định repo đã có trên Windows workstation và WSL2 Ubuntu có Docker.
 
-Ghi chú Phase 9: tài liệu này vẫn mô tả đường demo Phase 7 trên `main`. Phase 9 hiện là các local branch sạch, tách riêng theo workstream. Dùng `docs/phase9-evidence-20260620.md` để xem evidence mới nhất: recovered Russian UI smoke trên `127.0.0.1:8504`, MLOps/API selected-model readiness, và các caveat integration/CI còn lại. Không trình bày Phase 9 như đã merge hoặc CI-green cho tới khi có integration branch/PR được approve và verify.
+Ghi chú Phase 9: tài liệu này vẫn mô tả đường demo Phase 7 trên `main`. Phase 9 vẫn giữ source workstream sạch riêng, và các phần non-UI đã được assemble local vào `integration/phase9-non-ui-readiness-20260620`. Dùng `docs/phase9-evidence-20260620.md` để xem evidence integration mới nhất: recovered Russian UI smoke trên `127.0.0.1:8504`, MLOps/API selected-model readiness, và các caveat PR/CI còn lại. Không trình bày Phase 9 như đã merge hoặc CI-green cho tới khi integration PR được GitHub Actions verify.
 
 ## Phase 9 Local Readiness Addendum
 
@@ -22,18 +22,18 @@ Có thể claim từ evidence local hiện tại:
 
 Chưa được claim:
 
-- Chưa có Phase 9 branch nào được push, mở PR, merge, hoặc chứng minh bằng GitHub Actions CI.
+- Non-UI Phase 9 integration branch đã tồn tại local và qua local gates trước docs refresh, nhưng chưa được push, mở PR, merge, hoặc chứng minh bằng GitHub Actions CI.
 - Local `main` đang ahead `origin/main` bởi mixed commits và không được dùng làm đường publish Phase 9.
 - Recovered Russian UI chưa phải final integrated Phase 9 UI cho tới khi được resume từ recovered branch và verify lại với real API/PostgreSQL data.
 
-Nếu sau này Phase 9 integration được approve, minimum final readiness sequence là:
+Với Phase 9 integration, minimum final readiness sequence là:
 
-1. Chỉ assemble integration branch sau khi PR order được chọn.
+1. Giữ non-UI integration branch tách khỏi mixed local `main`.
 2. Re-check GitNexus index freshness trước mọi route/shared-symbol impact analysis sau mỗi non-trivial branch switch hoặc commit.
-3. Chạy `git diff --check`, full `ruff check .`, full `ruff format --check .`, và full `pytest -q -p no:cacheprovider` trên integration branch.
-4. Rebuild/smoke Docker Compose, FastAPI, PostgreSQL, Redis, MLflow, và Streamlit từ integration branch.
-5. Chạy lại selected-model API smoke, Redis filtered cache proof, read-only scheduler evidence check, và recovered UI browser check nếu UI nằm trong scope.
-6. Chỉ push/mở PR khi branch sạch, yêu cầu của workstream đã hoàn tất, và user approve rõ ràng; đợi GitHub Actions `ci` trước mọi merge.
+3. Chạy `git diff --check`, full `ruff check .`, full `ruff format --check .`, và full `pytest -q -p no:cacheprovider` trên integration branch sau docs refresh cuối.
+4. Rebuild/smoke Docker Compose config, FastAPI, PostgreSQL, Redis, và MLflow từ integration branch. Streamlit/UI vẫn deferred trừ khi được include rõ.
+5. Chạy lại selected-model API smoke, Redis filtered cache proof, và read-only scheduler evidence check.
+6. Chỉ push/mở PR khi branch sạch và yêu cầu của workstream đã hoàn tất; đợi GitHub Actions `ci` trước mọi merge.
 
 ## 0. Nói Gì Trước Khi Demo
 

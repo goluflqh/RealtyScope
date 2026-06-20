@@ -9,9 +9,9 @@ This document is the operating status board for the final course-readiness work.
 
 ## Phase 9 Addendum: 2026-06-20
 
-Phase 9 is active and remains split across clean local workstreams. The current Phase 9 evidence snapshot is `docs/phase9-evidence-20260620.md`.
+Phase 9 is active and remains split across clean local source workstreams. The non-UI source workstreams have also been assembled locally into `integration/phase9-non-ui-readiness-20260620` for controlled review. The current Phase 9 evidence snapshot is `docs/phase9-evidence-20260620.md`.
 
-Do not treat the Phase 9 local branches as merged or CI-green yet. The verified evidence currently covers branch-local tests, runtime API/PostgreSQL/Redis checks, recovered Russian UI browser smoke, and GitNexus freshness-gated impact checks where relevant. No Phase 9 push, PR, merge, branch deletion, stash drop, scheduler trigger change, or live Domclick capture has been approved or performed in this addendum.
+Do not treat the Phase 9 local branches as merged or CI-green yet. The verified evidence currently covers branch-local tests, integration-branch local gates, runtime API/PostgreSQL/Redis checks, recovered Russian UI browser smoke, and GitNexus freshness-gated impact checks where relevant. Controlled integration, push, and PR work is approved after gates pass, but no Phase 9 merge, branch deletion, stash drop, scheduler trigger change, or live Domclick capture has been approved or performed in this addendum.
 
 Key local heads:
 
@@ -21,6 +21,7 @@ Key local heads:
 | Phase 9A data/backend readiness | `data/teammate-json-import-20260618`, `ops/postgres-guardrails-20260618`, current runtime | Import/guardrail branch checks pass; runtime API has real PostgreSQL `total=14755`; Redis filtered cache key proof passed after API restart with Redis healthy. |
 | Phase 9B MLOps promotion workflow | `ml/model-promotion-workflow` / `ebd89ec` | Dry-run compare, gated promote/reject, rollback/selection behavior, and decision report tests pass; fresh GitNexus detect-changes run. |
 | Phase 9C API/monitoring selected-model metadata | `api/phase9-selected-model-monitoring-20260620` / `7e9c65a` | API/monitoring/config/model-selection tests pass; branch-specific GitNexus index is fresh and detect-changes is recorded; isolated selected-model runtime smoke on `127.0.0.1:8011` passed and was shut down cleanly. |
+| Phase 9 non-UI integration | `integration/phase9-non-ui-readiness-20260620` / `0f7bac0` before docs refresh | Scheduler, data import, PostgreSQL guardrails, MLOps, API/monitoring, and docs branches merged locally without conflicts; full ruff/format/pytest passed; Docker Compose config passed; GitNexus integration index matched `0f7bac0`; isolated selected-model API smoke on `127.0.0.1:8012` passed; Redis filtered cache proof and read-only scheduler check passed. |
 | Phase 9D recovered Russian UI | `ui/recovered-real-data-dashboard-20260620` / `b6922b7` | Recovered UI tests pass; Playwright MCP smoke on `127.0.0.1:8504` shows Russian UI, real API data `14 755`, no forbidden mock literals, and 0 console errors. |
 
 Phase 9 integration/PR order is non-UI first and records sequencing only. Push, PR, or merge can be considered only after the relevant branch has completed its own acceptance checks and the user explicitly approves that action:
@@ -43,7 +44,7 @@ A separate Phase 9C isolated runtime smoke on port `8011` ran from branch `api/p
 
 Continuation readiness audit after docs commit `59f5c21` reran branch cleanliness/diff checks, targeted ruff/format/pytest for scheduler, teammate import, MLOps, and API/monitoring, GitNexus freshness plus `detect_changes` for scheduler/MLOps/API, and read-only runtime checks for Task Scheduler, API/PostgreSQL, and Redis. All audited worktrees remained clean. The existing API runtime still runs the current baseline model and does not expose the Phase 9C `selected_model`; selected-model runtime evidence remains the isolated API-branch smoke above.
 
-Completion audit summary: local split-branch readiness is strong for Phase 8, 9A, 9B, 9C, 9D baseline, and 9E docs, but Phase 9 is not complete until a clean integration branch is assembled, full local gates pass, the integration branch is pushed, GitHub Actions CI is green, and final docs reflect that integrated evidence.
+Completion audit summary: local split-branch readiness is strong for Phase 8, 9A, 9B, 9C, 9D baseline, and 9E docs. A clean non-UI integration branch has been assembled and locally verified before the docs refresh, but Phase 9 is not complete until final gates pass after the docs refresh, the integration branch is pushed, GitHub Actions CI is green, and final docs reflect that CI/PR evidence.
 
 ## Branch And CI State
 
