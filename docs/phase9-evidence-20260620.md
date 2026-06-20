@@ -2,15 +2,15 @@
 
 Date: 2026-06-20
 Branch: `integration/phase9-non-ui-readiness-20260620`
-Purpose: record current Phase 9 branch/runtime evidence and the controlled non-UI integration branch without touching mixed local `main`.
+Purpose: record current Phase 9 branch/runtime evidence, the controlled non-UI integration branch, PR `#1`, and post-merge CI without touching mixed local `main`.
 
-This snapshot is intentionally conservative. It records what was verified locally and what still needs remote CI, PR review, or merge approval. It does not replace the clean workstream plan in `docs/superpowers/plans/2026-06-20-realtyscope-phase9-clean-workstreams-plan.md`.
+This snapshot is intentionally conservative. It records what was verified locally, what was merged through PR `#1`, and what remains deferred. It does not replace the clean workstream plan in `docs/superpowers/plans/2026-06-20-realtyscope-phase9-clean-workstreams-plan.md`.
 
 ## Current Git Policy
 
-- Local `main` is clean but ahead of `origin/main` by 5 mixed commits. Do not push that mixed `main`.
-- Phase 9 source work remains split across dedicated branches/worktrees; the non-UI source branches have also been assembled into `integration/phase9-non-ui-readiness-20260620` for review.
-- No branch has been merged into `main`, deleted, or rewritten in this Phase 9 snapshot.
+- Local `main` is clean but diverged from `origin/main` after the remote squash merge: ahead by 5 older mixed local commits and behind by the Phase 9 non-UI merge commit. Do not push that mixed `main`.
+- Phase 9 source work remains traceable through dedicated branches/worktrees; the non-UI source branches were assembled into `integration/phase9-non-ui-readiness-20260620` for review.
+- PR `#1` merged the non-UI integration branch into `main` as squash commit `5a2ae2a3b684216309015f9e3ab329cafd75ff9d`; no branch was deleted or rewritten.
 - No live Domclick capture was run and no scheduler trigger was changed during these checks.
 - GitNexus impact evidence was used only after branch-specific index freshness was verified.
 
@@ -232,6 +232,19 @@ Remaining before merge:
 - Push/open PR only from the clean integration branch.
 - Wait for GitHub Actions CI before any merge decision.
 
+## Post-Merge CI Evidence: 2026-06-20
+
+- PR: `https://github.com/goluflqh/RealtyScope/pull/1`.
+- PR state: merged on 2026-06-20 at `2026-06-20T01:47:09Z`.
+- Merge method: squash, because repository settings rejected merge commits.
+- Merge commit on `main`: `5a2ae2a3b684216309015f9e3ab329cafd75ff9d` (`Phase 9 non-UI readiness integration`).
+- PR head under verification: `89857b674bd81f8d16cfd8abb8f4256ed5598927`.
+- PR checks before merge: `ci / lint-test` passed for runs `27856483265` and `27856494295`.
+- Post-merge `main` CI: run `27856530977`, job `lint-test`, conclusion `success`, head SHA `5a2ae2a3b684216309015f9e3ab329cafd75ff9d`.
+- The source branch `integration/phase9-non-ui-readiness-20260620` was kept; it was not deleted.
+- Local mixed `main` was not pushed, reset, or repointed.
+- No live Domclick capture or scheduler trigger change was performed.
+
 ## Verified Workstreams
 
 | Workstream | Branch / commit | Fresh evidence | Remaining action |
@@ -266,13 +279,11 @@ This matrix audits the active goal against current evidence. It is intentionally
 | Phase 9D recovered Russian UI | Recovered UI branch at `b6922b7` restarts against real API/PostgreSQL and browser smoke shows Russian UI, real `14 755`, no known mock literals, 0 console errors. | Baseline proved locally; final redesign/polish deferred. | Keep out of non-UI integration unless explicitly included later; continue only from recovered branch. |
 | Phase 9E docs/CI/demo readiness | Docs branch records evidence, integration/PR order, demo caveats, and this audit. | Proved locally as docs evidence; final integrated docs pending. | Merge docs into integration branch after non-UI code and refresh from final checks. |
 | GitNexus freshness before impact analysis | Branch-specific indexes were fresh for scheduler, MLOps, API, and recovered UI before `detect_changes`. | Proved locally for split branches. | Create/refresh an integration-branch GitNexus index if tooling is available; otherwise state unavailable and rely on tests/runtime evidence. |
-| Push/PR only from clean verified branches with CI expectations | Controlled push/PR approval has now been given. The non-UI integration branch exists locally at `0f7bac0` and passed local gates before this docs refresh. | Partly proved locally; remote step pending. | Commit this docs refresh, rerun final gates, push/open PR only if clean. |
-| Final integration/CI evidence | Non-UI integration branch exists locally and has pre-doc-refresh local verification. No GitHub Actions CI run, PR, or merge exists yet for this branch. | Incomplete. | Push the verified integration branch, open PR, and wait for CI evidence before any merge. |
+| Push/PR only from clean verified branches with CI expectations | Controlled approval was used after final local gates. The non-UI integration branch was pushed, opened as PR `#1`, and merged only after PR CI passed. | Proved for non-UI integration. | Keep branch history for traceability; do not delete branches unless explicitly approved. |
+| Final integration/CI evidence | PR `#1` and post-merge `main` CI run `27856530977` passed for merge commit `5a2ae2a`. | Proved for non-UI integration. | Continue UI from the recovered branch when reprioritized. |
 
 ## Not Yet Complete
 
-- Controlled approval has been given for integration/push/PR, but no Phase 9 branch has been pushed or merged yet.
-- A non-UI integration branch has been assembled locally and verified through the final pre-push checks recorded above.
-- No GitHub Actions CI has run for the Phase 9 integration branch yet.
-- README and demo scripts now have Phase 9 local split-branch caveats/addenda, but final integrated-branch docs still need a last update after the user chooses and approves a PR/merge strategy.
-- Full-project `pytest`, `ruff check .`, `ruff format --check .`, Docker Compose rebuild, API/runtime smoke, recovered UI check, and GitHub Actions CI should be rerun on the chosen integration branch before any final readiness claim.
+- Phase 9D final Russian UI redesign/polish remains deferred to `ui/recovered-real-data-dashboard-20260620`.
+- Local mixed `main` remains unsuitable as a publication path; use `origin/main` / clean worktrees for follow-up work.
+- Do not delete source branches/stashes, change scheduler triggers, or run live Domclick capture without explicit approval.
