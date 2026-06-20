@@ -6,7 +6,7 @@ Audience: course reviewer, project operator, and future demo sessions.
 
 This script is the short defense path for showing RealtyScope without reloading the full project history. It assumes the repository is already cloned on the Windows workstation and that WSL2 Ubuntu has Docker available.
 
-Phase 9 note: this script still describes the Phase 7 `main` demo path. Phase 9 source work remains split across clean branches, and the non-UI workstreams have been assembled locally into `integration/phase9-non-ui-readiness-20260620`. Use `docs/phase9-evidence-20260620.md` for the latest integration evidence, recovered Russian UI smoke on `127.0.0.1:8504`, selected-model MLOps/API readiness, and remaining PR/CI caveats. Do not present Phase 9 as merged or CI-green until the integration PR is verified by GitHub Actions.
+Phase 9 note: this script still describes the Phase 7 `main` demo path, but Phase 9 non-UI readiness is now merged into `main` through PR `#1` and squash commit `5a2ae2a`, with post-merge GitHub Actions `ci` run `27856530977` passing. Use `docs/phase9-evidence-20260620.md` for the latest integration evidence, recovered Russian UI smoke on `127.0.0.1:8504`, selected-model MLOps/API readiness, and remaining UI caveats.
 
 ## Phase 9 Local Readiness Addendum
 
@@ -22,13 +22,13 @@ What can be claimed from current local evidence:
 
 What must not be claimed yet:
 
-- The non-UI Phase 9 integration branch exists locally and passed pre-doc-refresh local gates, but it has not yet been pushed, opened as a PR, merged, or proven by GitHub Actions CI.
+- Phase 9 non-UI integration has been pushed, opened as PR `#1`, merged into `main` at `5a2ae2a`, and proven by post-merge GitHub Actions `ci` run `27856530977`.
 - Local `main` is ahead of `origin/main` by mixed commits and must not be pushed as the Phase 9 publication path.
 - The recovered Russian UI is not the final integrated Phase 9 UI until it is deliberately resumed from the recovered branch and verified again against real API/PostgreSQL data.
 
-For Phase 9 integration, the minimum final readiness sequence is:
+For future Phase 9 follow-up work, the minimum readiness sequence is:
 
-1. Keep the non-UI integration branch separate from mixed local `main`.
+1. Start from `origin/main` or a dedicated clean worktree, not mixed local `main`.
 2. Re-check GitNexus index freshness before any route/shared-symbol impact analysis after each non-trivial branch switch or commit.
 3. Run `git diff --check`, full `ruff check .`, full `ruff format --check .`, and full `pytest -q -p no:cacheprovider` on the integration branch after the final docs refresh.
 4. Rebuild/smoke Docker Compose config, FastAPI, PostgreSQL, Redis, and MLflow from the integration branch. Streamlit/UI remains deferred unless explicitly included.

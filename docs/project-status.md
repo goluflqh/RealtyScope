@@ -9,9 +9,9 @@ This document is the operating status board for the final course-readiness work.
 
 ## Phase 9 Addendum: 2026-06-20
 
-Phase 9 is active and remains split across clean local source workstreams. The non-UI source workstreams have also been assembled locally into `integration/phase9-non-ui-readiness-20260620` for controlled review. The current Phase 9 evidence snapshot is `docs/phase9-evidence-20260620.md`.
+Phase 9 non-UI readiness is integrated into `main` through PR `#1` and squash merge commit `5a2ae2a3b684216309015f9e3ab329cafd75ff9d`. The current Phase 9 evidence snapshot is `docs/phase9-evidence-20260620.md`.
 
-Do not treat the Phase 9 local branches as merged or CI-green yet. The verified evidence currently covers branch-local tests, integration-branch local gates, runtime API/PostgreSQL/Redis checks, recovered Russian UI browser smoke, and GitNexus freshness-gated impact checks where relevant. Controlled integration, push, and PR work is approved after gates pass, but no Phase 9 merge, branch deletion, stash drop, scheduler trigger change, or live Domclick capture has been approved or performed in this addendum.
+The verified non-UI evidence covers branch-local tests, integration-branch local gates, runtime API/PostgreSQL/Redis checks, GitNexus freshness-gated impact checks, PR `#1`, and GitHub Actions `ci` run `27856530977` on `main`, which passed after the merge. The recovered Russian UI browser smoke remains valid as a baseline, but final UI polish is intentionally deferred to `ui/recovered-real-data-dashboard-20260620`. No branch deletion, stash drop, scheduler trigger change, or live Domclick capture was performed.
 
 Key local heads:
 
@@ -21,10 +21,10 @@ Key local heads:
 | Phase 9A data/backend readiness | `data/teammate-json-import-20260618`, `ops/postgres-guardrails-20260618`, current runtime | Import/guardrail branch checks pass; runtime API has real PostgreSQL `total=14755`; Redis filtered cache key proof passed after API restart with Redis healthy. |
 | Phase 9B MLOps promotion workflow | `ml/model-promotion-workflow` / `ebd89ec` | Dry-run compare, gated promote/reject, rollback/selection behavior, and decision report tests pass; fresh GitNexus detect-changes run. |
 | Phase 9C API/monitoring selected-model metadata | `api/phase9-selected-model-monitoring-20260620` / `7e9c65a` | API/monitoring/config/model-selection tests pass; branch-specific GitNexus index is fresh and detect-changes is recorded; isolated selected-model runtime smoke on `127.0.0.1:8011` passed and was shut down cleanly. |
-| Phase 9 non-UI integration | `integration/phase9-non-ui-readiness-20260620` / `0f7bac0` before docs refresh | Scheduler, data import, PostgreSQL guardrails, MLOps, API/monitoring, and docs branches merged locally without conflicts; full ruff/format/pytest passed; Docker Compose config passed; GitNexus integration index matched `0f7bac0`; isolated selected-model API smoke on `127.0.0.1:8012` passed; Redis filtered cache proof and read-only scheduler check passed. |
+| Phase 9 non-UI integration | PR `#1`, squash merge `5a2ae2a` | Scheduler, data import, PostgreSQL guardrails, MLOps, API/monitoring, and docs branches merged locally without conflicts, pushed as `integration/phase9-non-ui-readiness-20260620`, and merged into `main`; full local ruff/format/pytest passed; Docker Compose config passed; GitNexus integration index matched final branch head `89857b6`; selected-model API smoke on `127.0.0.1:8012` passed; Redis filtered cache proof and read-only scheduler check passed; PR and post-merge `main` CI passed. |
 | Phase 9D recovered Russian UI | `ui/recovered-real-data-dashboard-20260620` / `b6922b7` | Recovered UI tests pass; Playwright MCP smoke on `127.0.0.1:8504` shows Russian UI, real API data `14 755`, no forbidden mock literals, and 0 console errors. |
 
-Phase 9 integration/PR order is non-UI first and records sequencing only. Push, PR, or merge can be considered only after the relevant branch has completed its own acceptance checks and the user explicitly approves that action:
+Phase 9 integration/PR order was executed non-UI first:
 
 User has now approved controlled integration, push, and PR work after local gates pass. The approval remains gated: do not reset/repoint `main`, delete branches/stashes, rewrite history, change scheduler triggers, run live Domclick capture, or merge unchecked work.
 
@@ -36,7 +36,7 @@ User has now approved controlled integration, push, and PR work after local gate
 6. Phase 9E docs/evidence once non-UI code branches are settled; current docs branch evidence includes the readiness-gate hygiene commit `59f5c21`.
 7. Phase 9D recovered Russian UI: `ui/recovered-real-data-dashboard-20260620` / `b6922b7`, deferred unless explicitly reprioritized.
 
-Before any non-UI branch is pushed or proposed for PR, rerun branch-local checks, confirm diff scope, run `git diff --check`, refresh GitNexus index/use `detect_changes` where code impact matters, state CI expectations, and preserve the no-live-capture/no-scheduler-trigger-change rule. Do not push or merge branches with incomplete requirements just because their place in the order is known. Keep `main` clean and do not push mixed local `main`.
+For any follow-up Phase 9 branch, rerun branch-local checks, confirm diff scope, run `git diff --check`, refresh GitNexus index/use `detect_changes` where code impact matters, state CI expectations, and preserve the no-live-capture/no-scheduler-trigger-change rule. Do not push mixed local `main`.
 
 Latest non-UI pre-PR audit on 2026-06-20 refreshed the scheduler, teammate import, PostgreSQL guardrails, MLOps, and API branch evidence without pushing or merging. `git diff --check` passed for each branch/base; targeted ruff/format checks passed; targeted pytest passed for scheduler (22), teammate import (4), MLOps (17), and API/monitoring (18, with the known Starlette/httpx deprecation warning). GitNexus indexes for scheduler, MLOps, and API matched their branch heads before `detect_changes`; API route impact for `/model/metadata` and `/monitoring/status` reported no direct consumers and LOW route risk. Runtime evidence still shows Task Scheduler result `0`, next run 2026-06-21 00:00, real PostgreSQL `/data` total `14755`, filtered total `4676`, and Redis cache key `EXISTS=1`.
 
@@ -44,7 +44,7 @@ A separate Phase 9C isolated runtime smoke on port `8011` ran from branch `api/p
 
 Continuation readiness audit after docs commit `59f5c21` reran branch cleanliness/diff checks, targeted ruff/format/pytest for scheduler, teammate import, MLOps, and API/monitoring, GitNexus freshness plus `detect_changes` for scheduler/MLOps/API, and read-only runtime checks for Task Scheduler, API/PostgreSQL, and Redis. All audited worktrees remained clean. The existing API runtime still runs the current baseline model and does not expose the Phase 9C `selected_model`; selected-model runtime evidence remains the isolated API-branch smoke above.
 
-Completion audit summary: local split-branch readiness is strong for Phase 8, 9A, 9B, 9C, 9D baseline, and 9E docs. A clean non-UI integration branch has been assembled and locally verified before the docs refresh, but Phase 9 is not complete until final gates pass after the docs refresh, the integration branch is pushed, GitHub Actions CI is green, and final docs reflect that CI/PR evidence.
+Completion audit summary: Phase 8, 9A, 9B, 9C, and 9E non-UI readiness are integrated into `main` and CI-green. Phase 9D recovered Russian UI baseline is verified locally but final UI redesign/polish remains deferred.
 
 ## Branch And CI State
 
@@ -52,7 +52,8 @@ Completion audit summary: local split-branch readiness is strong for Phase 8, 9A
 | --- | --- | --- |
 | Phase 6 branch | Preserved as milestone | `phase6-mlflow-redis-readiness` remains on local and remote at `30bce998...`. |
 | Phase 7 branch | Preserved as milestone | `phase7-course-readiness-polish` remains on local and remote at `05f9b0c...`; it was fast-forward merged into `main`. |
-| GitHub Actions on `main` | Passing after Phase 7 merge | `ci` run `26907933692`, SHA `05f9b0c...`, conclusion `success`. |
+| GitHub Actions on `main` | Passing after Phase 9 non-UI merge | `ci` run `27856530977`, SHA `5a2ae2a...`, conclusion `success`. Earlier Phase 7 `main` CI run `26907933692` also passed at `05f9b0c...`. |
+| Phase 9 non-UI PR | Merged and CI-green | PR `#1` merged on 2026-06-20 at `5a2ae2a...`; PR checks and post-merge `main` CI passed. |
 | GitHub Actions on Phase 7 | Passing before merge | Latest Phase 7 `ci` evidence is run `26907391574`, SHA `05f9b0c...`, conclusion `success`; earlier Phase 7 runs for `6cb103b`, `66bb5be`, `a5e2583`, and `83ad3e1` also passed. |
 | Local verification after merge | Passing | On `main`, `git diff --check`, `ruff check .`, `ruff format --check .`, and full pytest `137 passed` with `-p no:cacheprovider` passed after the Phase 7 merge. |
 | Latest runtime/UI evidence commit | Merged to `main` and CI-green | `05f9b0c docs: record final runtime evidence` records Docker/API/Redis/MLflow/Browser evidence after the tabbed Streamlit, filters, charts, and map slices. |

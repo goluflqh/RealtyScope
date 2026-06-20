@@ -6,7 +6,7 @@ RealtyScope — учебный data-service проект уровня grade 5 д
 
 Phase 6 and Phase 7 have been merged into `main`; the phase branches remain preserved as milestone branches. For the current readiness board, requirement checklist, Domclick schedule note, and future polish guidance, see `docs/project-status.md`.
 
-Phase 9 source work remains split across clean workstream branches, and the non-UI workstreams have been assembled locally into `integration/phase9-non-ui-readiness-20260620` for controlled review. Local evidence covers scheduler validation, data/backend checks, MLOps model promotion workflow, selected-model API/monitoring, recovered Russian UI smoke, and docs/CI/demo gates, but the integration branch still needs final post-doc-refresh gates, push/PR, and GitHub Actions CI before any merge. Use `docs/phase9-evidence-20260620.md` and the Phase 9 addendum in `docs/demo-script.md` before presenting any Phase 9 work; do not push mixed local `main`.
+Phase 9 non-UI readiness has been integrated into `main` through PR `#1` and squash merge commit `5a2ae2a`, with GitHub Actions `ci` run `27856530977` passing after merge. The merged scope covers scheduler validation, data/backend checks, MLOps model promotion workflow, selected-model API/monitoring, and docs/CI/demo gates. The recovered Russian UI remains a separate deferred workstream at `ui/recovered-real-data-dashboard-20260620`; do not use the rejected `ui/realtyscope-ultimate-redesign` branch as the target.
 
 The repository currently contains a tested course-ready foundation:
 
