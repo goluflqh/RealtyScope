@@ -13,6 +13,7 @@ def test_settings_have_safe_defaults() -> None:
         settings.active_model_artifact_path
         == "data/processed/models/phase5/baseline_ridge_v2_non_leaky.joblib"
     )
+    assert settings.active_model_selection_path == "data/processed/models/selected_model.json"
 
 
 def test_database_url_uses_localhost_by_default() -> None:

@@ -7,6 +7,45 @@ Phase 7 merge evidence commit: `05f9b0cac3e77d55b93820be5d2b3db442d5295c`
 
 This document is the operating status board for the final course-readiness work. It consolidates the assignment requirements, implemented phase evidence, current gaps, and the next smaller workstreams so future sessions do not have to reload the full history.
 
+## Phase 9 Addendum: 2026-06-20
+
+Phase 9 is active and remains split across clean local source workstreams. The non-UI source workstreams have also been assembled locally into `integration/phase9-non-ui-readiness-20260620` for controlled review. The current Phase 9 evidence snapshot is `docs/phase9-evidence-20260620.md`.
+
+Do not treat the Phase 9 local branches as merged or CI-green yet. The verified evidence currently covers branch-local tests, integration-branch local gates, runtime API/PostgreSQL/Redis checks, recovered Russian UI browser smoke, and GitNexus freshness-gated impact checks where relevant. Controlled integration, push, and PR work is approved after gates pass, but no Phase 9 merge, branch deletion, stash drop, scheduler trigger change, or live Domclick capture has been approved or performed in this addendum.
+
+Key local heads:
+
+| Workstream | Branch / commit | Current evidence state |
+| --- | --- | --- |
+| Phase 8 scheduler readiness | `ops/domclick-scheduler-validated-20260619` / `e62b068` | Branch-local ruff/pytest pass; two automatic scheduler runs preserved: 2026-06-19 and 2026-06-20, both result `0`; fresh GitNexus detect-changes run on branch-specific index. |
+| Phase 9A data/backend readiness | `data/teammate-json-import-20260618`, `ops/postgres-guardrails-20260618`, current runtime | Import/guardrail branch checks pass; runtime API has real PostgreSQL `total=14755`; Redis filtered cache key proof passed after API restart with Redis healthy. |
+| Phase 9B MLOps promotion workflow | `ml/model-promotion-workflow` / `ebd89ec` | Dry-run compare, gated promote/reject, rollback/selection behavior, and decision report tests pass; fresh GitNexus detect-changes run. |
+| Phase 9C API/monitoring selected-model metadata | `api/phase9-selected-model-monitoring-20260620` / `7e9c65a` | API/monitoring/config/model-selection tests pass; branch-specific GitNexus index is fresh and detect-changes is recorded; isolated selected-model runtime smoke on `127.0.0.1:8011` passed and was shut down cleanly. |
+| Phase 9 non-UI integration | `integration/phase9-non-ui-readiness-20260620` / `0f7bac0` before docs refresh | Scheduler, data import, PostgreSQL guardrails, MLOps, API/monitoring, and docs branches merged locally without conflicts; full ruff/format/pytest passed; Docker Compose config passed; GitNexus integration index matched `0f7bac0`; isolated selected-model API smoke on `127.0.0.1:8012` passed; Redis filtered cache proof and read-only scheduler check passed. |
+| Phase 9D recovered Russian UI | `ui/recovered-real-data-dashboard-20260620` / `b6922b7` | Recovered UI tests pass; Playwright MCP smoke on `127.0.0.1:8504` shows Russian UI, real API data `14 755`, no forbidden mock literals, and 0 console errors. |
+
+Phase 9 integration/PR order is non-UI first and records sequencing only. Push, PR, or merge can be considered only after the relevant branch has completed its own acceptance checks and the user explicitly approves that action:
+
+User has now approved controlled integration, push, and PR work after local gates pass. The approval remains gated: do not reset/repoint `main`, delete branches/stashes, rewrite history, change scheduler triggers, run live Domclick capture, or merge unchecked work.
+
+1. Phase 8 scheduler: `ops/domclick-scheduler-validated-20260619` / `e62b068`.
+2. Phase 9A data import: `data/teammate-json-import-20260618` / `5db4a44`.
+3. Phase 9A PostgreSQL guardrails: `ops/postgres-guardrails-20260618` / `f5464c1`.
+4. Phase 9B MLOps promotion workflow: `ml/model-promotion-workflow` / `ebd89ec`.
+5. Phase 9C API/monitoring selected-model metadata: `api/phase9-selected-model-monitoring-20260620` / `7e9c65a`, after Phase 9B.
+6. Phase 9E docs/evidence once non-UI code branches are settled; current docs branch evidence includes the readiness-gate hygiene commit `59f5c21`.
+7. Phase 9D recovered Russian UI: `ui/recovered-real-data-dashboard-20260620` / `b6922b7`, deferred unless explicitly reprioritized.
+
+Before any non-UI branch is pushed or proposed for PR, rerun branch-local checks, confirm diff scope, run `git diff --check`, refresh GitNexus index/use `detect_changes` where code impact matters, state CI expectations, and preserve the no-live-capture/no-scheduler-trigger-change rule. Do not push or merge branches with incomplete requirements just because their place in the order is known. Keep `main` clean and do not push mixed local `main`.
+
+Latest non-UI pre-PR audit on 2026-06-20 refreshed the scheduler, teammate import, PostgreSQL guardrails, MLOps, and API branch evidence without pushing or merging. `git diff --check` passed for each branch/base; targeted ruff/format checks passed; targeted pytest passed for scheduler (22), teammate import (4), MLOps (17), and API/monitoring (18, with the known Starlette/httpx deprecation warning). GitNexus indexes for scheduler, MLOps, and API matched their branch heads before `detect_changes`; API route impact for `/model/metadata` and `/monitoring/status` reported no direct consumers and LOW route risk. Runtime evidence still shows Task Scheduler result `0`, next run 2026-06-21 00:00, real PostgreSQL `/data` total `14755`, filtered total `4676`, and Redis cache key `EXISTS=1`.
+
+A separate Phase 9C isolated runtime smoke on port `8011` ran from branch `api/phase9-selected-model-monitoring-20260620` at `7e9c65a`. With a temp selected-model JSON and an absolute `ACTIVE_MODEL_ARTIFACT_PATH`, `/model/metadata` returned model `status=ready`, active `baseline_ridge_v2_non_leaky`, `feature_count=23`, `selected_model.model_version=hist_gradient_boosting_candidate_v1`, rollback available, and `error=null`; `/monitoring/status` returned the same selected-model payload plus real DB counts. The temp API was stopped and port `8011` was clear afterward. Startup still emits scikit-learn `InconsistentVersionWarning` because the artifact was saved with 1.8.0 and local runtime uses 1.6.1.
+
+Continuation readiness audit after docs commit `59f5c21` reran branch cleanliness/diff checks, targeted ruff/format/pytest for scheduler, teammate import, MLOps, and API/monitoring, GitNexus freshness plus `detect_changes` for scheduler/MLOps/API, and read-only runtime checks for Task Scheduler, API/PostgreSQL, and Redis. All audited worktrees remained clean. The existing API runtime still runs the current baseline model and does not expose the Phase 9C `selected_model`; selected-model runtime evidence remains the isolated API-branch smoke above.
+
+Completion audit summary: local split-branch readiness is strong for Phase 8, 9A, 9B, 9C, 9D baseline, and 9E docs. A clean non-UI integration branch has been assembled and locally verified before the docs refresh, but Phase 9 is not complete until final gates pass after the docs refresh, the integration branch is pushed, GitHub Actions CI is green, and final docs reflect that CI/PR evidence.
+
 ## Branch And CI State
 
 | Item | Status | Evidence |
@@ -64,6 +103,37 @@ Current evidence checked again on 2026-06-03:
 - Next run: `04.06.2026 0:00:00`.
 
 Decision for now: keep the installed schedule at once per day. A second run per day can help trend evidence only if it captures meaningfully fresh data or intentionally records a new observation timestamp without misleading the reviewer. It also increases Domclick access pressure and duplicate-report noise. If adopted later, prefer two explicit daily triggers such as `00:00` and `12:00` Moscow, not an infinite loop, and ask before changing the real scheduled task.
+
+## Next MLOps Workstream: Retrain, Compare, Promote
+
+Current MLOps status: RealtyScope has a reproducible trainer, non-leaky feature version `ml_features_v2_non_leaky`, Docker-backed MLflow evidence, a registered model, and a shared model artifact volume. This proves the baseline MLOps path, but it is not yet a full automated model lifecycle.
+
+Planned branch: `ml/model-promotion-workflow`.
+
+Goal: turn the existing trainer and MLflow evidence into a controlled model lifecycle that can retrain on fresh database rows, compare the candidate model against the active model, promote only when the candidate is clearly better, and keep a rollback path.
+
+Required behavior:
+
+- Train a candidate model from the current PostgreSQL data using `ml_features_v2_non_leaky` and grouped validation by `listing_id`.
+- Log model hyperparameters explicitly to MLflow, including Ridge `alpha`, train/test split strategy, random state, feature version, and model version.
+- Read the active model metadata and metrics from the current selected artifact or MLflow registered model.
+- Compare candidate and active model metrics using MAE, RMSE, MAPE, R2, and improvement versus naive baseline.
+- Keep `baseline_ridge_v2_non_leaky` as the explainable baseline until a stronger candidate proves better under the same non-leaky validation.
+- Evaluate stronger tabular-regression candidates inside this workflow, starting with scikit-learn `HistGradientBoostingRegressor` to avoid extra dependency risk, then XGBoost only if Docker/CI/MLflow packaging remains stable.
+- Treat XGBoost as a candidate model, not an automatic replacement: it must beat the active Ridge baseline on agreed metrics, avoid overfitting, log hyperparameters and artifacts, and remain explainable enough for the course defense.
+- Promote only if the candidate passes clear gates, for example lower MAE and RMSE by an agreed threshold, no worse R2 beyond tolerance, and no data-quality gate failure.
+- Reject and keep the active model when the candidate is worse, inconclusive, trained on too few fresh rows, or missing required MLflow/artifact metadata.
+- Record a promotion decision report with candidate metrics, active metrics, data counts, MLflow run ID, artifact URI, decision, timestamp, and rollback target.
+- Do not overwrite the previous active artifact. Keep the previous MLflow model version or artifact path available for rollback.
+- Keep `/predict` as serving-only: it must load the selected artifact and must not train during API requests.
+
+Acceptance evidence:
+
+- A dry-run command can train and compare without changing the active model.
+- A promote command can update the selected model only after gates pass.
+- A rollback command or documented rollback procedure restores the previous selected model.
+- Tests cover pass, reject, and rollback/selection behavior without calling live Domclick or live OSM.
+- The demo script can explain this as controlled MLOps, not daily blind retraining.
 
 ## Phase 7 Workstreams
 
