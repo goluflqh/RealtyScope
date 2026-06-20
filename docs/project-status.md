@@ -23,7 +23,17 @@ Key local heads:
 | Phase 9C API/monitoring selected-model metadata | `api/phase9-selected-model-monitoring-20260620` / `7e9c65a` | API/monitoring/config/model-selection tests pass; branch-specific GitNexus index is fresh and detect-changes is recorded. |
 | Phase 9D recovered Russian UI | `ui/recovered-real-data-dashboard-20260620` / `b6922b7` | Recovered UI tests pass; Playwright MCP smoke on `127.0.0.1:8504` shows Russian UI, real API data `14 755`, no forbidden mock literals, and 0 console errors. |
 
-Next Phase 9 decision: choose an integration/PR order. Keep `main` clean and do not push mixed local `main`.
+Phase 9 integration/PR order is non-UI first and still requires explicit approval before any push, PR, or merge:
+
+1. Phase 8 scheduler: `ops/domclick-scheduler-validated-20260619` / `e62b068`.
+2. Phase 9A data import: `data/teammate-json-import-20260618` / `5db4a44`.
+3. Phase 9A PostgreSQL guardrails: `ops/postgres-guardrails-20260618` / `f5464c1`.
+4. Phase 9B MLOps promotion workflow: `ml/model-promotion-workflow` / `ebd89ec`.
+5. Phase 9C API/monitoring selected-model metadata: `api/phase9-selected-model-monitoring-20260620` / `7e9c65a`, after Phase 9B.
+6. Phase 9E docs/evidence once non-UI code branches are settled.
+7. Phase 9D recovered Russian UI: `ui/recovered-real-data-dashboard-20260620` / `b6922b7`, deferred unless explicitly reprioritized.
+
+Before any non-UI branch is pushed or proposed for PR, rerun branch-local checks, confirm diff scope, run `git diff --check`, refresh GitNexus index/use `detect_changes` where code impact matters, state CI expectations, and preserve the no-live-capture/no-scheduler-trigger-change rule. Keep `main` clean and do not push mixed local `main`.
 
 ## Branch And CI State
 

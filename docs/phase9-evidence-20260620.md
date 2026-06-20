@@ -14,6 +14,41 @@ This snapshot is intentionally conservative. It records what was verified locall
 - No live Domclick capture was run and no scheduler trigger was changed during these checks.
 - GitNexus impact evidence was used only after branch-specific index freshness was verified.
 
+## Phase 9 Integration / PR Governance Gate
+
+This snapshot records an order of operations only. It does not authorize pushing, opening PRs, merging, deleting branches, dropping stashes, repointing `main`, running live Domclick capture, or changing scheduler triggers.
+
+Non-UI workstreams must be completed, freshly verified, and professionally reviewable before any push/PR/merge proposal. The recovered UI branch can remain deferred until the data/backend/MLOps/API/docs path is correct and approved.
+
+Recommended PR order after explicit approval:
+
+1. `ops/domclick-scheduler-validated-20260619` at `e62b068` for Phase 8 scheduler publication/readiness.
+2. `data/teammate-json-import-20260618` at `5db4a44` for teammate JSON import readiness.
+3. `ops/postgres-guardrails-20260618` at `f5464c1` for PostgreSQL storage/volume guardrails.
+4. `ml/model-promotion-workflow` at `ebd89ec` for Phase 9B MLOps dry-run compare, gated promote/reject, rollback/selection behavior, CLI, and tests.
+5. `api/phase9-selected-model-monitoring-20260620` at `7e9c65a` for Phase 9C selected-model metadata in API/monitoring. This must follow Phase 9B because it depends on the model-selection code.
+6. `docs/phase9-final-readiness-20260620` for final evidence/status/demo-readiness docs after the non-UI code branches are settled.
+7. `ui/recovered-real-data-dashboard-20260620` at `b6922b7`, deferred until non-UI work is integrated or explicitly prioritized. Continue UI only from this recovered real-data branch, not from `ui/realtyscope-ultimate-redesign`.
+
+Pre-push/PR gate for each non-UI branch:
+
+- Branch is clean, on the intended worktree, and diff scope matches the workstream.
+- Targeted tests and formatting/lint checks are rerun fresh from that branch.
+- `git diff --check` is clean against the intended base.
+- For non-trivial code, branch-specific GitNexus index freshness is rechecked against `git rev-parse HEAD`, then `detect_changes` is summarized.
+- API route or response-shape changes also require `api_impact`, `route_map`, and/or `shape_check` as applicable after index freshness is confirmed.
+- CI expectations are written before PR; GitHub Actions must be green before any merge.
+- No fake/sample UI data is used as production evidence.
+- No mixed local `main` is pushed.
+
+Integration branch gate, if the user later approves assembling one:
+
+- Build it only after the PR order is chosen.
+- Rerun full `ruff check .`, `ruff format --check .`, and `pytest -q -p no:cacheprovider`.
+- Rerun Docker/API/PostgreSQL/Redis runtime smoke, selected-model API smoke, and read-only scheduler evidence check.
+- Update docs from fresh evidence only.
+- Recheck GitNexus freshness after every non-trivial commit or branch switch before impact analysis.
+
 ## Verified Workstreams
 
 | Workstream | Branch / commit | Fresh evidence | Remaining action |
