@@ -174,6 +174,28 @@ def test_model_artifact_selector_prefers_best_validation_metric(tmp_path: Path) 
     ]
 
 
+def test_model_artifact_selector_skips_unreadable_or_unrelated_joblibs(tmp_path: Path) -> None:
+    joblib.dump(object(), tmp_path / "00-bare-estimator.joblib")
+    (tmp_path / "01-corrupt.joblib").write_text("not a joblib", encoding="utf-8")
+    selected_artifact = _write_model_artifact(
+        tmp_path / "02-selected.joblib",
+        model_version="selected_price_model_v1_non_leaky",
+        r2=0.62,
+        mae=21_000_000.0,
+    )
+
+    selection = api_main._select_model_artifact(
+        explicit_path=tmp_path / "missing.joblib",
+        search_dir=tmp_path,
+        selection_mode="best_metric",
+    )
+
+    assert selection.path == selected_artifact
+    assert [candidate["model_version"] for candidate in selection.candidates] == [
+        "selected_price_model_v1_non_leaky"
+    ]
+
+
 def test_model_metadata_reports_selected_training_candidate(tmp_path: Path) -> None:
     artifact_path = _write_model_artifact(
         tmp_path / "selected_price_model_v1_non_leaky.joblib",

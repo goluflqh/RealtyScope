@@ -624,6 +624,32 @@ def test_persist_osm_features_from_geojson_file_uses_local_extract(
     assert second.schools_count_1000m == 0
 
 
+def test_persist_osm_features_from_pretty_feature_collection(
+    tmp_path: Path,
+) -> None:
+    database_url = _seed_coordinate_ready_database(tmp_path)
+    geojson_file = _write_pretty_geojson_feature_collection(tmp_path)
+    engine = create_engine(database_url)
+
+    with Session(engine) as session:
+        result = persist_osm_features_from_geojson_file(
+            session,
+            geojson_file,
+            limit=2,
+        )
+        session.commit()
+
+    assert result.rows_inserted == 2
+    assert result.live_osm_called is False
+
+    with Session(engine) as session:
+        first = session.query(OsmFeature).filter_by(listing_id=1).one()
+
+    assert first.transport_count_1000m == 1
+    assert first.schools_count_1000m == 1
+    assert first.source_summary["source_features_indexed"] == 2
+
+
 def test_osm_enrichment_cli_persists_local_geojson_extract(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -709,6 +735,27 @@ def _write_geojson_extract(tmp_path: Path) -> Path:
         "]}\n",
     ]
     geojson_file.write_text("".join(lines), encoding="utf-8")
+    return geojson_file
+
+
+def _write_pretty_geojson_feature_collection(tmp_path: Path) -> Path:
+    geojson_file = tmp_path / "moscow-pretty.geojson"
+    payload = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [37.611, 55.751]},
+                "properties": {"public_transport": "station"},
+            },
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [37.612, 55.7505]},
+                "properties": {"amenity": "school"},
+            },
+        ],
+    }
+    geojson_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return geojson_file
 
 

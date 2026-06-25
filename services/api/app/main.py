@@ -1,5 +1,5 @@
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -325,12 +325,14 @@ def _model_artifact_paths(*, explicit_path: Path, search_dir: Path) -> list[Path
 def _safe_model_artifact_candidate(path: Path) -> dict[str, Any] | None:
     try:
         return _model_artifact_candidate(path)
-    except (OSError, KeyError, TypeError, ValueError):
+    except Exception:
         return None
 
 
 def _model_artifact_candidate(path: Path) -> dict[str, Any]:
     artifact = joblib.load(path)
+    if not isinstance(artifact, Mapping):
+        raise TypeError(f"Model artifact is not a mapping: {path}")
     metrics = artifact.get("metrics") or {}
     if not isinstance(metrics, dict):
         metrics = {}

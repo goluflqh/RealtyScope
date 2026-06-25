@@ -8,7 +8,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -779,16 +779,44 @@ def _open_geojson_text(path: Path) -> TextIO:
     return path.open("r", encoding="utf-8", errors="replace")
 
 
-def _iter_geojson_features(handle: TextIO) -> Sequence[Mapping[str, Any]]:
-    for line in handle:
+def _iter_geojson_features(handle: TextIO) -> Iterator[Mapping[str, Any]]:
+    text = handle.read()
+    if not text.strip():
+        return
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        yield from _iter_line_delimited_geojson_features(text)
+        return
+    yield from _iter_geojson_payload_features(payload)
+
+
+def _iter_line_delimited_geojson_features(text: str) -> Iterator[Mapping[str, Any]]:
+    for line in text.splitlines():
         stripped = line.strip()
         if '"Feature"' not in stripped:
             continue
         if stripped.endswith(","):
             stripped = stripped[:-1]
         payload = json.loads(stripped)
-        if isinstance(payload, Mapping):
+        yield from _iter_geojson_payload_features(payload)
+
+
+def _iter_geojson_payload_features(payload: Any) -> Iterator[Mapping[str, Any]]:
+    if isinstance(payload, Mapping):
+        payload_type = payload.get("type")
+        if payload_type == "Feature":
             yield payload
+            return
+        if payload_type == "FeatureCollection":
+            features = payload.get("features")
+            if isinstance(features, Sequence) and not isinstance(features, str):
+                for feature in features:
+                    yield from _iter_geojson_payload_features(feature)
+            return
+    if isinstance(payload, Sequence) and not isinstance(payload, str):
+        for feature in payload:
+            yield from _iter_geojson_payload_features(feature)
 
 
 def _geojson_feature_to_osm_element(feature: Mapping[str, Any]) -> dict[str, Any] | None:
