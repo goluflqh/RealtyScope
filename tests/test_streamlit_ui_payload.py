@@ -141,9 +141,7 @@ def test_osm_coverage_payload_keeps_backend_coverage_evidence() -> None:
     assert payload["liveRows"] == 18
     assert payload["localExtractRows"] == 5
     assert payload["coordinateDerivedRows"] == 6
-    assert (
-        payload["coverageSource"] == "local_extract+live_overpass+coordinate_exact_match"
-    )
+    assert payload["coverageSource"] == "local_extract+live_overpass+coordinate_exact_match"
 
 
 def test_local_model_payload_ignores_unloadable_fallback_artifact(monkeypatch, tmp_path) -> None:
@@ -214,9 +212,7 @@ def test_build_payload_keeps_local_model_fallback_with_api_model_metadata(monkey
                 "feature_count": 23,
                 "feature_names": ["rooms", "total_area_m2"],
                 "metrics_summary": {"rows_total": 8_366, "r2": 0.6231827045433119},
-                "feature_importance": [
-                    {"feature": "total_area_m2", "importance": 56_840_154.31}
-                ],
+                "feature_importance": [{"feature": "total_area_m2", "importance": 56_840_154.31}],
             },
             errors=[],
         ),
@@ -293,8 +289,7 @@ def test_build_payload_uses_full_analytics_rows_for_districts(monkeypatch) -> No
     assert all("transport_count_500m" in row for row in payload["districtComparison"])
     assert len(payload["districtClusters"]) == 3
     assert all(
-        row["feature_source"] == "districtComparison+osm"
-        for row in payload["districtClusters"]
+        row["feature_source"] == "districtComparison+osm" for row in payload["districtClusters"]
     )
 
 

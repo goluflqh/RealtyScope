@@ -212,9 +212,7 @@ def test_train_cli_reads_feature_rows_and_writes_artifact(tmp_path: Path, capsys
     assert Path(payload["artifact_path"]).exists()
 
 
-def test_train_cli_defaults_to_selected_non_leaky_model(
-    tmp_path: Path, capsys
-) -> None:
+def test_train_cli_defaults_to_selected_non_leaky_model(tmp_path: Path, capsys) -> None:
     database_url = _seed_training_database(tmp_path)
     output_dir = tmp_path / "models"
 

@@ -167,11 +167,11 @@ def _build_payload(*, data: DashboardData, monitoring: MonitoringData) -> dict[s
     room_summary = room_summary_frame(chart_frame)
     price_bands = price_band_frame(chart_frame)
     stats_source = snapshot["stats"] if snapshot else data.stats or {}
-    stats = _stats_with_listing_fallback(
-        stats_source, listings=listings, chart_frame=chart_frame
-    )
+    stats = _stats_with_listing_fallback(stats_source, listings=listings, chart_frame=chart_frame)
     stats.update(_map_quality_stats(chart_frame))
-    monitoring_status = monitoring.status or snapshot.get("monitoring", {}) if snapshot else monitoring.status or {}
+    monitoring_status = (
+        monitoring.status or snapshot.get("monitoring", {}) if snapshot else monitoring.status or {}
+    )
     model_metadata = _model_metadata_for_ui(
         monitoring.model_metadata or monitoring_status.get("model") or {}
     )
@@ -184,7 +184,9 @@ def _build_payload(*, data: DashboardData, monitoring: MonitoringData) -> dict[s
     errors = _sanitized_errors(api_errors, has_snapshot=bool(snapshot))
     source = snapshot["source"] if snapshot else _api_source()
     source_rows = _source_rows(stats=stats, source=source, snapshot=bool(snapshot))
-    primary_source_label = " + ".join(row["name"] for row in source_rows) if source_rows else "Источник не подтвержден"
+    primary_source_label = (
+        " + ".join(row["name"] for row in source_rows) if source_rows else "Источник не подтвержден"
+    )
     source = {**source, "label": primary_source_label}
     district_rows = _district_comparison_rows(analytics_frame)
     district_readiness = _district_readiness_for_comparison_rows(
@@ -414,7 +416,9 @@ def _local_snapshot_data_for_key(cache_key: str) -> dict[str, Any] | None:
     stats["source_counts"] = _source_counts(listings)
     stats["sources_total"] = len(stats["source_counts"])
     stats["loaded_snapshot_listings"] = len(listings)
-    latest_cian = max((row.get("observed_at") for row in cian_rows if row.get("observed_at")), default=None)
+    latest_cian = max(
+        (row.get("observed_at") for row in cian_rows if row.get("observed_at")), default=None
+    )
     if latest_cian and not stats.get("latest_successful_ingestion_run"):
         stats["latest_successful_ingestion_run"] = {
             "source_name": "cian",
@@ -436,7 +440,9 @@ def _local_snapshot_data_for_key(cache_key: str) -> dict[str, Any] | None:
             "label": "Локальные данные",
             "status": "Локально",
             "detail": "Снимки Домклик и импорт ЦИАН",
-            "snapshotPath": str(domclick_result["latest_snapshot"]) if domclick_result["latest_snapshot"] else None,
+            "snapshotPath": str(domclick_result["latest_snapshot"])
+            if domclick_result["latest_snapshot"]
+            else None,
             "sourceMeta": source_meta,
         },
     }
@@ -470,7 +476,9 @@ def _source_observation_detail(
 ) -> str:
     parts: list[str] = []
     if snapshot_count is not None:
-        parts.append(f"{_format_int_for_label(snapshot_count)} {_ru_plural(snapshot_count, 'снимок', 'снимка', 'снимков')}")
+        parts.append(
+            f"{_format_int_for_label(snapshot_count)} {_ru_plural(snapshot_count, 'снимок', 'снимка', 'снимков')}"
+        )
     if collection_date_count:
         parts.append(
             f"{_format_int_for_label(collection_date_count)} "
@@ -525,9 +533,7 @@ def _all_domclick_snapshot_rows(cache_key: str) -> dict[str, Any]:
         folder_date_match = re.search(r"(20\d{2}-\d{2}-\d{2})", snapshot_dir.name)
         folder_date = folder_date_match.group(1) if folder_date_match else None
         try:
-            batch = load_domclick_snapshot_directory(
-                snapshot_dir, max_records=LOCAL_SNAPSHOT_LIMIT
-            )
+            batch = load_domclick_snapshot_directory(snapshot_dir, max_records=LOCAL_SNAPSHOT_LIMIT)
         except (OSError, ValueError, MemoryError):
             continue
         parsed_dirs += 1
@@ -658,9 +664,7 @@ def _domclick_snapshot_dirs() -> list[Path]:
             for path in root.iterdir()
             if path.is_dir()
             and (
-                (path / "payloads").is_dir()
-                or any(path.glob("*.json"))
-                or any(path.glob("*.html"))
+                (path / "payloads").is_dir() or any(path.glob("*.json")) or any(path.glob("*.html"))
             )
         )
     if not candidates:
@@ -906,7 +910,9 @@ def _listing_rows(chart_frame: pd.DataFrame) -> list[dict[str, Any]]:
         "latitude",
         "longitude",
     ]
-    return chart_frame[[column for column in columns if column in chart_frame]].to_dict(orient="records")
+    return chart_frame[[column for column in columns if column in chart_frame]].to_dict(
+        orient="records"
+    )
 
 
 def _deal_rows(chart_frame: pd.DataFrame) -> list[dict[str, Any]]:
@@ -931,8 +937,8 @@ def _deal_rows(chart_frame: pd.DataFrame) -> list[dict[str, Any]]:
     percentile_bonus = ((1 - required["segment_percentile"]) * 50).clip(lower=0)
     robust_bonus = (-required["robust_z"]).clip(lower=0) * 10
     required["deal_score"] = (
-        discount_depth + percentile_bonus + robust_bonus
-    ).clip(lower=0, upper=100).round(1)
+        (discount_depth + percentile_bonus + robust_bonus).clip(lower=0, upper=100).round(1)
+    )
     required = required[
         (required["discount_pct"] < 0) & (required["segment_sample_size"] >= 3)
     ].sort_values(["deal_score", "discount_pct"], ascending=[False, True])
@@ -954,7 +960,11 @@ def _deal_rows(chart_frame: pd.DataFrame) -> list[dict[str, Any]]:
         "source_label",
         "source_url",
     ]
-    return required[[column for column in columns if column in required]].head(60).to_dict(orient="records")
+    return (
+        required[[column for column in columns if column in required]]
+        .head(60)
+        .to_dict(orient="records")
+    )
 
 
 def _comparable_rows(
@@ -980,11 +990,7 @@ def _comparable_rows(
     rows["rooms"] = pd.to_numeric(rows["rooms"], errors="coerce")
     rows["total_area_m2"] = pd.to_numeric(rows["total_area_m2"], errors="coerce")
     rows = rows.dropna(subset=["price_per_m2", "price_rub", "rooms", "total_area_m2"])
-    rows = rows[
-        (rows["price_per_m2"] > 0)
-        & (rows["price_rub"] > 0)
-        & (rows["total_area_m2"] > 0)
-    ]
+    rows = rows[(rows["price_per_m2"] > 0) & (rows["price_rub"] > 0) & (rows["total_area_m2"] > 0)]
     if rows.empty:
         return []
 
@@ -1005,9 +1011,9 @@ def _comparable_rows(
     rows["price_per_m2_delta_pct"] = (
         (rows["price_per_m2"] - float(target_price_m2)) / float(target_price_m2) * 100
     ).round(4)
-    rows["comparison_score"] = (
-        rows["area_delta_m2"] + rows["price_per_m2_delta_pct"].abs()
-    ).round(4)
+    rows["comparison_score"] = (rows["area_delta_m2"] + rows["price_per_m2_delta_pct"].abs()).round(
+        4
+    )
     rows = rows.sort_values(
         ["comparison_score", "area_delta_m2", "price_per_m2_delta_pct"],
         ascending=[True, True, True],
@@ -1028,7 +1034,9 @@ def _comparable_rows(
         "price_per_m2_delta_pct",
         "comparison_score",
     ]
-    return rows[[column for column in columns if column in rows]].head(limit).to_dict(orient="records")
+    return (
+        rows[[column for column in columns if column in rows]].head(limit).to_dict(orient="records")
+    )
 
 
 def _district_readiness_payload(chart_frame: pd.DataFrame) -> dict[str, Any]:
@@ -1229,8 +1237,8 @@ def _district_comparison_rows(
     required_columns = {"price_rub", "price_per_m2"}
     if not required_columns.issubset(chart_frame.columns):
         return []
-    district_values, district_sources, active_field, _detected_fields = (
-        _district_assignment_series(chart_frame)
+    district_values, district_sources, active_field, _detected_fields = _district_assignment_series(
+        chart_frame
     )
     if district_values.empty or active_field is None:
         return []
@@ -1352,9 +1360,7 @@ def _district_cluster_rows(
         cluster_median_price_per_m2=("median_price_per_m2", "median"),
         cluster_median_listings=("listings", "median"),
     )
-    sorted_cluster_ids = (
-        cluster_summary.sort_values("cluster_median_price_per_m2").index.to_list()
-    )
+    sorted_cluster_ids = cluster_summary.sort_values("cluster_median_price_per_m2").index.to_list()
     label_by_cluster: dict[int, str] = {}
     for rank, cluster_id in enumerate(sorted_cluster_ids):
         if rank == 0:
@@ -1373,9 +1379,9 @@ def _district_cluster_rows(
     ]:
         frame[column] = frame["cluster_id"].map(cluster_summary[column])
     extraction_sources = frame.get("extraction_source", pd.Series(dtype="object")).fillna("")
-    has_boundary_source = extraction_sources.astype(str).str.contains(
-        "admin_boundary_geojson", regex=False
-    ).any()
+    has_boundary_source = (
+        extraction_sources.astype(str).str.contains("admin_boundary_geojson", regex=False).any()
+    )
     source_parts = ["districtComparison"]
     if has_boundary_source:
         source_parts.append("boundary")
@@ -1429,9 +1435,7 @@ def _exposure_readiness_payload(
             snapshot_count += int(meta.get("snapshot_count") or 0)
             available_snapshot_dir_count += int(meta.get("available_snapshot_dir_count") or 0)
             raw_stable_listing_ids += int(meta.get("stable_listing_ids") or 0)
-            raw_history_listing_count += int(
-                meta.get("listings_with_observation_history") or 0
-            )
+            raw_history_listing_count += int(meta.get("listings_with_observation_history") or 0)
             raw_max_observation_dates_per_listing = max(
                 raw_max_observation_dates_per_listing,
                 int(meta.get("max_observation_dates_per_listing") or 0),
@@ -1494,21 +1498,13 @@ def _exposure_readiness_payload(
             int(base["inferred_lifecycle_target_rows"]),
             int(stats.get("inferred_lifecycle_target_rows") or 0),
         )
-        base["inferred_lifecycle_can_forecast"] = bool(
-            stats.get("inferred_lifecycle_can_forecast")
-        )
+        base["inferred_lifecycle_can_forecast"] = bool(stats.get("inferred_lifecycle_can_forecast"))
         if stats.get("inferred_lifecycle_min_gap_days") is not None:
-            base["inferred_lifecycle_min_gap_days"] = stats.get(
-                "inferred_lifecycle_min_gap_days"
-            )
+            base["inferred_lifecycle_min_gap_days"] = stats.get("inferred_lifecycle_min_gap_days")
         if stats.get("inferred_lifecycle_median_days") is not None:
-            base["inferred_lifecycle_median_days"] = stats.get(
-                "inferred_lifecycle_median_days"
-            )
+            base["inferred_lifecycle_median_days"] = stats.get("inferred_lifecycle_median_days")
         if stats.get("inferred_lifecycle_max_days") is not None:
-            base["inferred_lifecycle_max_days"] = stats.get(
-                "inferred_lifecycle_max_days"
-            )
+            base["inferred_lifecycle_max_days"] = stats.get("inferred_lifecycle_max_days")
         base["observed_exposure_target_rows"] = max(
             int(base["observed_exposure_target_rows"]),
             int(stats.get("observed_exposure_target_rows") or 0),
@@ -1516,9 +1512,7 @@ def _exposure_readiness_payload(
         base["observed_exposure_min_target_rows"] = int(
             stats.get("observed_exposure_min_target_rows") or min_target_rows
         )
-        base["observed_exposure_can_forecast"] = bool(
-            stats.get("observed_exposure_can_forecast")
-        )
+        base["observed_exposure_can_forecast"] = bool(stats.get("observed_exposure_can_forecast"))
         if stats.get("observed_exposure_median_days") is not None:
             base["median_exposure_days"] = stats.get("observed_exposure_median_days")
         if stats.get("observed_exposure_max_days") is not None:
@@ -1621,9 +1615,9 @@ def _exposure_readiness_payload(
         int(base["max_observation_dates_per_listing"]),
         int(lifecycle["observation_dates"].max()),
     )
-    lifecycle["exposure_days"] = (
-        lifecycle["last_seen"] - lifecycle["first_seen"]
-    ).dt.days.clip(lower=0)
+    lifecycle["exposure_days"] = (lifecycle["last_seen"] - lifecycle["first_seen"]).dt.days.clip(
+        lower=0
+    )
     targets = lifecycle[(lifecycle["has_terminal"]) & (lifecycle["exposure_days"] > 0)]
     target_count = int(len(targets))
     base["lifecycle_target_rows"] = max(int(base["lifecycle_target_rows"]), target_count)
@@ -1685,17 +1679,11 @@ def _merge_exposure_forecast_payload(
             "inferred_lifecycle_median_days"
         )
         if exposure_forecast.get("target_source") == "observation_gap_inferred_lifecycle":
-            base["median_exposure_days"] = exposure_forecast.get(
-                "inferred_lifecycle_median_days"
-            )
+            base["median_exposure_days"] = exposure_forecast.get("inferred_lifecycle_median_days")
     if exposure_forecast.get("inferred_lifecycle_max_days") is not None:
-        base["inferred_lifecycle_max_days"] = exposure_forecast.get(
-            "inferred_lifecycle_max_days"
-        )
+        base["inferred_lifecycle_max_days"] = exposure_forecast.get("inferred_lifecycle_max_days")
         if exposure_forecast.get("target_source") == "observation_gap_inferred_lifecycle":
-            base["max_exposure_days"] = exposure_forecast.get(
-                "inferred_lifecycle_max_days"
-            )
+            base["max_exposure_days"] = exposure_forecast.get("inferred_lifecycle_max_days")
     if exposure_forecast.get("observed_exposure_target_rows") is not None:
         base["observed_exposure_target_rows"] = int(
             exposure_forecast.get("observed_exposure_target_rows") or 0
@@ -1709,13 +1697,9 @@ def _merge_exposure_forecast_payload(
             exposure_forecast.get("observed_exposure_can_forecast")
         )
     if exposure_forecast.get("median_observed_exposure_days") is not None:
-        base["median_exposure_days"] = exposure_forecast.get(
-            "median_observed_exposure_days"
-        )
+        base["median_exposure_days"] = exposure_forecast.get("median_observed_exposure_days")
     if exposure_forecast.get("max_observed_exposure_days") is not None:
-        base["observed_exposure_max_days"] = exposure_forecast.get(
-            "max_observed_exposure_days"
-        )
+        base["observed_exposure_max_days"] = exposure_forecast.get("max_observed_exposure_days")
         base["max_exposure_days"] = exposure_forecast.get("max_observed_exposure_days")
     segments = exposure_forecast.get("forecast_segments")
     if isinstance(segments, list):
@@ -1730,9 +1714,7 @@ def _merge_exposure_forecast_payload(
         base["forecast_model_version"] = exposure_forecast.get("forecast_model_version")
 
 
-def _set_exposure_readiness_status(
-    base: dict[str, Any], *, min_target_rows: int
-) -> None:
+def _set_exposure_readiness_status(base: dict[str, Any], *, min_target_rows: int) -> None:
     target_rows = int(base.get("lifecycle_target_rows") or 0)
     inferred_target_rows = int(base.get("inferred_lifecycle_target_rows") or 0)
     observed_target_rows = int(base.get("observed_exposure_target_rows") or 0)
@@ -1756,7 +1738,10 @@ def _set_exposure_readiness_status(
             "срезов источника; это прогноз исчезновения из наблюдений, а не подтвержденная "
             "продажа или снятие."
         )
-    elif bool(base.get("observed_exposure_can_forecast")) and observed_target_rows >= observed_min_rows:
+    elif (
+        bool(base.get("observed_exposure_can_forecast"))
+        and observed_target_rows >= observed_min_rows
+    ):
         base["status"] = "partial"
         base["status_label"] = "есть нижняя граница экспозиции"
         base["can_forecast"] = False
@@ -1910,13 +1895,11 @@ def _service_status_rows(
         rows = [row for row in backend_rows if isinstance(row, dict)]
     else:
         latest_report = stats.get("latest_collection_report") or {}
-        latest_run = stats.get("latest_successful_ingestion_run") or stats.get(
-            "latest_ingestion_run"
-        ) or {}
+        latest_run = (
+            stats.get("latest_successful_ingestion_run") or stats.get("latest_ingestion_run") or {}
+        )
         ingestion_status = (
-            latest_report.get("status")
-            if isinstance(latest_report, dict)
-            else None
+            latest_report.get("status") if isinstance(latest_report, dict) else None
         ) or (latest_run.get("status") if isinstance(latest_run, dict) else None)
         rows = [
             {
@@ -1937,9 +1920,7 @@ def _service_status_rows(
                 "key": "database",
                 "label": "PostgreSQL",
                 "status": "unknown" if mode == "snapshot" else "warning",
-                "status_label": "Не проверено"
-                if mode == "snapshot"
-                else "Нет подтверждения",
+                "status_label": "Не проверено" if mode == "snapshot" else "Нет подтверждения",
                 "detail": "Живое подключение БД не проверено в snapshot-режиме"
                 if mode == "snapshot"
                 else "Нет ответа от API статистики",
@@ -1950,9 +1931,7 @@ def _service_status_rows(
                 "key": "cache",
                 "label": "Redis-кэш",
                 "status": "unknown" if mode == "snapshot" else "warning",
-                "status_label": "Не проверено"
-                if mode == "snapshot"
-                else "Нет подтверждения",
+                "status_label": "Не проверено" if mode == "snapshot" else "Нет подтверждения",
                 "detail": "Живой Redis не проверено в snapshot-режиме"
                 if mode == "snapshot"
                 else "Нет ответа от API мониторинга",
@@ -1992,9 +1971,7 @@ def _service_status_rows(
                 "key": "vitrine",
                 "label": "Витрина интерфейса",
                 "status": "ok" if stats.get("listings_total") else "warning",
-                "status_label": "Подготовлена"
-                if stats.get("listings_total")
-                else "Нет данных",
+                "status_label": "Подготовлена" if stats.get("listings_total") else "Нет данных",
                 "detail": "Локальный подготовленный payload"
                 if mode == "snapshot"
                 else "Данные получены через API",
@@ -2028,7 +2005,9 @@ def _map_point_rows(chart_frame: pd.DataFrame) -> list[dict[str, Any]]:
     return points[columns].to_dict(orient="records")
 
 
-def _source_rows(*, stats: dict[str, Any], source: dict[str, Any], snapshot: bool) -> list[dict[str, Any]]:
+def _source_rows(
+    *, stats: dict[str, Any], source: dict[str, Any], snapshot: bool
+) -> list[dict[str, Any]]:
     source_counts = stats.get("source_counts")
     if isinstance(source_counts, dict) and source_counts:
         meta = source.get("sourceMeta") if isinstance(source, dict) else {}
@@ -2052,8 +2031,12 @@ def _source_rows(*, stats: dict[str, Any], source: dict[str, Any], snapshot: boo
         return rows
     listings_total = stats.get("listings_total")
     connected_status = "Загружено" if snapshot else "Подключено"
-    latest_run = stats.get("latest_successful_ingestion_run") or stats.get("latest_ingestion_run") or {}
-    raw_source_name = str(latest_run.get("source_name") or "").lower() if isinstance(latest_run, dict) else ""
+    latest_run = (
+        stats.get("latest_successful_ingestion_run") or stats.get("latest_ingestion_run") or {}
+    )
+    raw_source_name = (
+        str(latest_run.get("source_name") or "").lower() if isinstance(latest_run, dict) else ""
+    )
     source_name = _known_listing_source_name(raw_source_name, snapshot=snapshot)
     if source_name is None:
         return []
@@ -2120,7 +2103,13 @@ def _local_model_payload() -> dict[str, Any] | None:
     coefficients = getattr(regressor, "coef_", None)
     intercept = getattr(regressor, "intercept_", None)
     feature_names = artifact.get("feature_names") or []
-    if means is None or scales is None or coefficients is None or intercept is None or not feature_names:
+    if (
+        means is None
+        or scales is None
+        or coefficients is None
+        or intercept is None
+        or not feature_names
+    ):
         return None
     return {
         "featureNames": list(feature_names),
@@ -2201,12 +2190,8 @@ def _sanitized_errors(errors: list[str], *, has_snapshot: bool = False) -> list[
     if not errors:
         return []
     if has_snapshot:
-        return [
-            "Сервис RealtyScope недоступен. Показаны локальные реальные данные Домклик и ЦИАН."
-        ]
-    return [
-        "Сервис данных не отвечает. Запустите сервис RealtyScope и обновите страницу."
-    ]
+        return ["Сервис RealtyScope недоступен. Показаны локальные реальные данные Домклик и ЦИАН."]
+    return ["Сервис данных не отвечает. Запустите сервис RealtyScope и обновите страницу."]
 
 
 def _clean_json(value: Any) -> Any:

@@ -154,9 +154,7 @@ def _fetch_analytics_listings(
     if max_listings == 0:
         return []
     target_total = (
-        min(listings_total, max_listings)
-        if isinstance(listings_total, int)
-        else max_listings
+        min(listings_total, max_listings) if isinstance(listings_total, int) else max_listings
     )
     rows: list[dict[str, Any]] = []
     for page_offset in range(0, target_total, page_limit):

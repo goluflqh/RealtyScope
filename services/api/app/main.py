@@ -602,9 +602,7 @@ def _service_status_rows(
             "key": "model",
             "label": "Модель",
             "status": "ok" if model_payload.get("status") == "ready" else "warning",
-            "status_label": "Готова"
-            if model_payload.get("status") == "ready"
-            else "Недоступна",
+            "status_label": "Готова" if model_payload.get("status") == "ready" else "Недоступна",
             "detail": model_payload.get("model_version") or "Активная модель не загружена",
             "count": model_payload.get("feature_count"),
             "icon": "model_training",
@@ -775,9 +773,7 @@ def _observed_exposure_stats(session: Session) -> dict[str, Any]:
         {
             "rooms": rooms,
             "target_rows": len(segment_durations),
-            "median_observed_exposure_days": _rounded_number_payload(
-                _median(segment_durations)
-            ),
+            "median_observed_exposure_days": _rounded_number_payload(_median(segment_durations)),
             "target_source": "observed_history_lower_bound",
         }
         for rooms, segment_durations in sorted(durations_by_rooms.items())
@@ -850,17 +846,14 @@ def _inferred_lifecycle_exposure_stats(session: Session) -> dict[str, Any]:
         {
             "rooms": rooms,
             "target_rows": len(segment_durations),
-            "median_inferred_exposure_days": _rounded_number_payload(
-                _median(segment_durations)
-            ),
+            "median_inferred_exposure_days": _rounded_number_payload(_median(segment_durations)),
             "target_source": "observation_gap_inferred_lifecycle",
         }
         for rooms, segment_durations in sorted(durations_by_rooms.items())
     ]
     return {
         "inferred_lifecycle_target_rows": target_rows,
-        "inferred_lifecycle_can_forecast": target_rows
-        >= MIN_OBSERVED_EXPOSURE_TARGET_ROWS,
+        "inferred_lifecycle_can_forecast": target_rows >= MIN_OBSERVED_EXPOSURE_TARGET_ROWS,
         "inferred_lifecycle_min_gap_days": INFERRED_LIFECYCLE_MIN_GAP_DAYS,
         "inferred_lifecycle_median_days": _rounded_number_payload(_median(durations))
         if durations
@@ -874,9 +867,7 @@ def _inferred_lifecycle_exposure_stats(session: Session) -> dict[str, Any]:
 def _exposure_forecast_stats_payload(session: Session) -> dict[str, Any]:
     observation_stats = _observation_lifecycle_stats(session)
     terminal_target_rows = int(observation_stats.get("lifecycle_target_rows") or 0)
-    inferred_target_rows = int(
-        observation_stats.get("inferred_lifecycle_target_rows") or 0
-    )
+    inferred_target_rows = int(observation_stats.get("inferred_lifecycle_target_rows") or 0)
     observed_target_rows = int(observation_stats.get("observed_exposure_target_rows") or 0)
     min_target_rows = int(
         observation_stats.get("observed_exposure_min_target_rows")
@@ -940,9 +931,7 @@ def _exposure_forecast_stats_payload(session: Session) -> dict[str, Any]:
     if target_source == "observation_gap_inferred_lifecycle":
         method = "gap_inferred_lifecycle_median_v1"
         forecast_model_version = "inferred_lifecycle_gap_median_v1"
-        forecast_segments = (
-            observation_stats.get("inferred_lifecycle_forecast_segments") or []
-        )
+        forecast_segments = observation_stats.get("inferred_lifecycle_forecast_segments") or []
     else:
         method = "segment_median_observed_exposure"
         forecast_model_version = "observed_exposure_segment_median_v1"
@@ -958,23 +947,15 @@ def _exposure_forecast_stats_payload(session: Session) -> dict[str, Any]:
         "terminal_lifecycle_can_forecast": terminal_target_rows >= min_target_rows,
         "inferred_lifecycle_target_rows": inferred_target_rows,
         "inferred_lifecycle_can_forecast": inferred_target_rows >= min_target_rows,
-        "inferred_lifecycle_min_gap_days": observation_stats.get(
-            "inferred_lifecycle_min_gap_days"
-        ),
-        "inferred_lifecycle_median_days": observation_stats.get(
-            "inferred_lifecycle_median_days"
-        ),
-        "inferred_lifecycle_max_days": observation_stats.get(
-            "inferred_lifecycle_max_days"
-        ),
+        "inferred_lifecycle_min_gap_days": observation_stats.get("inferred_lifecycle_min_gap_days"),
+        "inferred_lifecycle_median_days": observation_stats.get("inferred_lifecycle_median_days"),
+        "inferred_lifecycle_max_days": observation_stats.get("inferred_lifecycle_max_days"),
         "observed_exposure_target_rows": observed_target_rows,
         "observed_exposure_min_target_rows": min_target_rows,
         "observed_exposure_can_forecast": bool(
             observation_stats.get("observed_exposure_can_forecast")
         ),
-        "median_observed_exposure_days": observation_stats.get(
-            "observed_exposure_median_days"
-        ),
+        "median_observed_exposure_days": observation_stats.get("observed_exposure_median_days"),
         "max_observed_exposure_days": observation_stats.get("observed_exposure_max_days"),
         "forecast_segments": forecast_segments if isinstance(forecast_segments, list) else [],
         "observation_date_count": observation_stats.get("observation_date_count"),
@@ -993,9 +974,12 @@ def _exposure_forecast_stats_payload(session: Session) -> dict[str, Any]:
 
 def _osm_feature_stats(session: Session, *, listings_total: int) -> dict[str, Any]:
     rows_total = _count(session, OsmFeature)
-    featured_listings = session.scalar(
-        select(func.count(func.distinct(OsmFeature.listing_id))).select_from(OsmFeature)
-    ) or 0
+    featured_listings = (
+        session.scalar(
+            select(func.count(func.distinct(OsmFeature.listing_id))).select_from(OsmFeature)
+        )
+        or 0
+    )
     feature_version = session.scalar(
         select(OsmFeature.feature_version)
         .group_by(OsmFeature.feature_version)
@@ -1017,15 +1001,12 @@ def _osm_feature_stats(session: Session, *, listings_total: int) -> dict[str, An
         if isinstance(summary, dict) and summary.get("live_osm_called") is True
     )
     local_extract_rows = sum(
-        1
-        for summary in source_summaries
-        if _is_direct_local_osm_extract_summary(summary)
+        1 for summary in source_summaries if _is_direct_local_osm_extract_summary(summary)
     )
     coordinate_derived_rows = sum(
         1
         for summary in source_summaries
-        if isinstance(summary, dict)
-        and summary.get("derivation") == "coordinate_exact_match"
+        if isinstance(summary, dict) and summary.get("derivation") == "coordinate_exact_match"
     )
     coverage_source = _osm_coverage_source(
         rows_total=rows_total,
@@ -1132,9 +1113,7 @@ def _observation_trend_stats_payload(session: Session, *, limit: int) -> dict[st
                 "observation_count": len(bucket["price_rub"]),
                 "listing_count": len(bucket["listing_keys"]),
                 "median_price_rub": _rounded_number_payload(_median(bucket["price_rub"])),
-                "median_price_per_m2": _rounded_number_payload(
-                    _median(bucket["price_per_m2"])
-                ),
+                "median_price_per_m2": _rounded_number_payload(_median(bucket["price_per_m2"])),
             }
         )
 
@@ -1192,10 +1171,13 @@ def _trend_forecast_payload(trend_rows: list[dict[str, Any]]) -> dict[str, Any]:
             "caveat": "Даты наблюдений не дают временной оси для прогноза тренда.",
         }
 
-    slope = sum(
-        (x_value - x_mean) * (y_value - y_mean)
-        for x_value, y_value in zip(x_values, y_values, strict=True)
-    ) / denominator
+    slope = (
+        sum(
+            (x_value - x_mean) * (y_value - y_mean)
+            for x_value, y_value in zip(x_values, y_values, strict=True)
+        )
+        / denominator
+    )
     intercept = y_mean - slope * x_mean
     last_date = prepared[-1][0]
     forecast_rows = []
@@ -1268,9 +1250,7 @@ def predict_price(
         input_features_echo=request.features,
         feature_names=list(active_model.feature_names),
         selected_candidate=getattr(active_model, "selected_candidate", None),
-        feature_importance=[
-            dict(item) for item in getattr(active_model, "feature_importance", [])
-        ],
+        feature_importance=[dict(item) for item in getattr(active_model, "feature_importance", [])],
         caveat=BASELINE_PREDICTION_CAVEAT,
     )
 
@@ -1458,10 +1438,7 @@ def _source_metadata_by_listing_id(
             latest_observation,
             (latest_observation.c.listing_id == ListingSourceLink.listing_id)
             & (latest_observation.c.source_id == ListingSourceLink.source_id)
-            & (
-                latest_observation.c.source_listing_id
-                == ListingSourceLink.source_listing_id
-            ),
+            & (latest_observation.c.source_listing_id == ListingSourceLink.source_listing_id),
         )
         .where(ListingSourceLink.listing_id.in_(listing_ids))
         .order_by(ListingSourceLink.listing_id, Source.name, ListingSourceLink.id)
