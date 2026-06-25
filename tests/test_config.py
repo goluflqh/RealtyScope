@@ -15,6 +15,7 @@ def test_settings_have_safe_defaults() -> None:
     )
     assert settings.model_artifact_dir == "data/processed/models"
     assert settings.model_selection_mode == "best_metric"
+    assert settings.active_model_selection_path == "data/processed/models/selected_model.json"
 
 
 def test_database_url_uses_localhost_by_default() -> None:

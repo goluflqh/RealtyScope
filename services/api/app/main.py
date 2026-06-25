@@ -27,6 +27,7 @@ from realtyscope.database.models import (
     Source,
 )
 from realtyscope.database.session import create_database_engine, create_session_factory
+from realtyscope.ml.model_selection import SelectedModel, load_selected_model
 from services.api.app.schemas import PredictionRequest, PredictionResponse
 
 BASELINE_PREDICTION_CAVEAT = (
@@ -1585,6 +1586,7 @@ def _latest_run_payload(row: tuple[IngestionRun, str] | None) -> dict[str, Any] 
 
 def _model_metadata_payload(model: ArtifactPredictionModel | None) -> dict[str, Any]:
     settings = get_settings()
+    selected_model = _load_selected_model_payload(settings.active_model_selection_path)
     if model is None:
         return {
             "status": "unavailable",
@@ -1601,6 +1603,7 @@ def _model_metadata_payload(model: ArtifactPredictionModel | None) -> dict[str, 
             "feature_count": 0,
             "metrics_summary": {},
             "feature_importance": [],
+            "selected_model": selected_model,
             "error": "Prediction model unavailable",
         }
 
@@ -1622,7 +1625,37 @@ def _model_metadata_payload(model: ArtifactPredictionModel | None) -> dict[str, 
         "feature_count": len(model.feature_names),
         "metrics_summary": model.metrics,
         "feature_importance": [dict(item) for item in feature_importance],
+        "selected_model": selected_model,
         "error": None,
+    }
+
+
+def _load_selected_model_payload(selection_path: str) -> dict[str, Any] | None:
+    try:
+        selected_model = load_selected_model(Path(selection_path))
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if selected_model is None:
+        return None
+    return _selected_model_metadata_payload(selected_model)
+
+
+def _selected_model_metadata_payload(selected_model: SelectedModel) -> dict[str, Any]:
+    return {
+        "model_version": selected_model.model_version,
+        "artifact_path": str(selected_model.artifact_path),
+        "feature_version": selected_model.feature_version,
+        "metrics_summary": dict(selected_model.metrics),
+        "selected_at": _datetime_payload(selected_model.selected_at),
+        "rollback_available": selected_model.previous is not None,
+        "previous_model_version": (
+            selected_model.previous.model_version if selected_model.previous is not None else None
+        ),
+        "previous_artifact_path": (
+            str(selected_model.previous.artifact_path)
+            if selected_model.previous is not None
+            else None
+        ),
     }
 
 

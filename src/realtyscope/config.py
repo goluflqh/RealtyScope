@@ -36,6 +36,10 @@ class Settings(BaseSettings):
         alias="MODEL_ARTIFACT_DIR",
     )
     model_selection_mode: str = Field(default="best_metric", alias="MODEL_SELECTION_MODE")
+    active_model_selection_path: str = Field(
+        default="data/processed/models/selected_model.json",
+        alias="ACTIVE_MODEL_SELECTION_PATH",
+    )
 
     @property
     def database_url(self) -> str:
