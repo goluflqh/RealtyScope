@@ -28,9 +28,14 @@ class Settings(BaseSettings):
     )
     active_model_name: str = Field(default="realtyscope-price-model", alias="ACTIVE_MODEL_NAME")
     active_model_artifact_path: str = Field(
-        default="data/processed/models/phase5/baseline_ridge_v2_non_leaky.joblib",
+        default="data/processed/models/phase5/selected_price_model_v1_non_leaky.joblib",
         alias="ACTIVE_MODEL_ARTIFACT_PATH",
     )
+    model_artifact_dir: str = Field(
+        default="data/processed/models",
+        alias="MODEL_ARTIFACT_DIR",
+    )
+    model_selection_mode: str = Field(default="best_metric", alias="MODEL_SELECTION_MODE")
 
     @property
     def database_url(self) -> str:

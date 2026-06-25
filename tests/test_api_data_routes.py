@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from realtyscope.database.base import Base
+from realtyscope.database.models import Listing, OsmFeature
 from realtyscope.database.persistence import persist_ingestion_batch
 from realtyscope.ingestion.contracts import (
     IngestionBatch,
@@ -233,6 +234,11 @@ def test_listings_endpoint_reads_persisted_database_rows(tmp_path) -> None:
                 "has_coordinates": True,
                 "is_ml_ready": True,
                 "cleaning_status": "ml_ready",
+                "source_name": "domclick",
+                "source_label": "Домклик",
+                "source_listing_id": "api-1",
+                "source_url": "https://domclick.ru/card/sale__flat__api-1/",
+                "observed_at": "2026-05-31T12:00:00+00:00",
             }
         ],
         "limit": 10,
@@ -305,7 +311,7 @@ def test_filtered_data_endpoint_uses_filter_specific_redis_cache_key(tmp_path) -
     assert len(fake_cache.setex_calls) == 1
     cache_key, _, cached_json = fake_cache.setex_calls[0]
     assert cache_key == (
-        "realtyscope:listings:v1:limit=10:offset=0:min_price_rub=15000000:rooms=2:search=api"
+        "realtyscope:listings:v2:limit=10:offset=0:min_price_rub=15000000:rooms=2:search=api"
     )
     assert json.loads(cached_json) == response.json()
 
@@ -367,8 +373,42 @@ def test_data_quality_stats_endpoint_reads_database_counts(tmp_path) -> None:
         "ingestion_runs_total": 1,
         "raw_listings_total": 1,
         "listings_total": 1,
+        "source_counts": {"domclick": 1},
         "ml_ready_listings": 1,
         "rejected_listings_total": 1,
+        "observations_total": 1,
+        "observation_date_count": 1,
+        "first_observed_date": "2026-05-31",
+        "last_observed_date": "2026-05-31",
+        "observation_status_counts": {"observed": 1},
+        "inactive_observations_total": 0,
+        "listings_with_observation_history": 0,
+        "max_observation_dates_per_listing": 1,
+        "listing_price_change_count": 0,
+        "lifecycle_target_rows": 0,
+        "observed_exposure_target_rows": 0,
+        "observed_exposure_can_forecast": False,
+        "observed_exposure_median_days": None,
+        "observed_exposure_max_days": None,
+        "observed_exposure_min_target_rows": 100,
+        "observed_exposure_target_source": "observed_history_lower_bound",
+        "observed_exposure_forecast_segments": [],
+        "inferred_lifecycle_target_rows": 0,
+        "inferred_lifecycle_can_forecast": False,
+        "inferred_lifecycle_min_gap_days": 3,
+        "inferred_lifecycle_median_days": None,
+        "inferred_lifecycle_max_days": None,
+        "inferred_lifecycle_target_source": "observation_gap_inferred_lifecycle",
+        "inferred_lifecycle_forecast_segments": [],
+        "osm_features_total": 0,
+        "osm_featured_listings": 0,
+        "osm_coverage_pct": 0.0,
+        "osm_feature_version": None,
+        "osm_attribution": None,
+        "osm_live_rows": 0,
+        "osm_local_extract_rows": 0,
+        "osm_coordinate_derived_rows": 0,
+        "osm_infrastructure_coverage_source": "missing",
         "latest_ingestion_run": {
             "id": 1,
             "source_name": "domclick",
@@ -400,3 +440,190 @@ def test_data_quality_stats_endpoint_reads_database_counts(tmp_path) -> None:
     }
     assert isinstance(payload["latest_ingestion_run"]["finished_at"], str)
     assert isinstance(payload["latest_successful_ingestion_run"]["finished_at"], str)
+
+
+def test_data_quality_stats_endpoint_reports_osm_feature_coverage(tmp_path) -> None:
+    client = _client_with_seeded_database(tmp_path)
+    override = api_main.app.dependency_overrides[api_main.get_database_session]
+    with next(override()) as session:
+        listing = session.query(Listing).one()
+        session.add(
+            OsmFeature(
+                listing_id=listing.id,
+                latitude=55.751,
+                longitude=37.618,
+                feature_version="osm_local_v1",
+                transport_count_500m=2,
+                transport_count_1000m=5,
+                nearest_transport_m=120.0,
+                schools_count_1000m=3,
+                parks_count_1000m=1,
+                shops_count_1000m=8,
+                healthcare_count_1000m=2,
+                source_summary={
+                    "attribution": "OpenStreetMap contributors",
+                    "live_osm_called": True,
+                },
+            )
+        )
+        session.commit()
+
+    try:
+        response = client.get("/stats/data-quality")
+    finally:
+        api_main.app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["osm_features_total"] == 1
+    assert payload["osm_featured_listings"] == 1
+    assert payload["osm_coverage_pct"] == 100.0
+    assert payload["osm_feature_version"] == "osm_local_v1"
+    assert payload["osm_attribution"] == "OpenStreetMap contributors"
+    assert payload["osm_live_rows"] == 1
+    assert payload["osm_local_extract_rows"] == 0
+    assert payload["osm_coordinate_derived_rows"] == 0
+    assert payload["osm_infrastructure_coverage_source"] == "live_overpass"
+
+
+def test_data_quality_stats_endpoint_reports_local_extract_osm_source(tmp_path) -> None:
+    client = _client_with_seeded_database(tmp_path)
+    override = api_main.app.dependency_overrides[api_main.get_database_session]
+    with next(override()) as session:
+        listing = session.query(Listing).one()
+        for feature_version, source_summary in [
+            (
+                "osm_local_extract_v1",
+                {
+                    "source": "bbbike_geojson_extract",
+                    "source_file": "Moscow.osm.geojson.xz",
+                    "attribution": "OpenStreetMap contributors",
+                    "live_osm_called": False,
+                },
+            ),
+            (
+                "osm_live_v1",
+                {
+                    "attribution": "OpenStreetMap contributors",
+                    "live_osm_called": True,
+                },
+            ),
+            (
+                "osm_coordinate_copy_v1",
+                {
+                    "attribution": "OpenStreetMap contributors",
+                    "derivation": "coordinate_exact_match",
+                    "derived_from_listing_id": listing.id,
+                    "live_osm_called": False,
+                },
+            ),
+        ]:
+            session.add(
+                OsmFeature(
+                    listing_id=listing.id,
+                    latitude=55.751,
+                    longitude=37.618,
+                    feature_version=feature_version,
+                    transport_count_500m=2,
+                    transport_count_1000m=5,
+                    nearest_transport_m=120.0,
+                    schools_count_1000m=3,
+                    parks_count_1000m=1,
+                    shops_count_1000m=8,
+                    healthcare_count_1000m=2,
+                    source_summary=source_summary,
+                )
+            )
+        session.commit()
+
+    try:
+        response = client.get("/stats/data-quality")
+    finally:
+        api_main.app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["osm_features_total"] == 3
+    assert payload["osm_featured_listings"] == 1
+    assert payload["osm_coverage_pct"] == 100.0
+    assert payload["osm_live_rows"] == 1
+    assert payload["osm_local_extract_rows"] == 1
+    assert payload["osm_coordinate_derived_rows"] == 1
+    assert (
+        payload["osm_infrastructure_coverage_source"]
+        == "local_extract+live_overpass+coordinate_exact_match"
+    )
+
+
+def test_data_endpoint_includes_persisted_osm_features_when_available(tmp_path) -> None:
+    client = _client_with_seeded_database(tmp_path)
+    override = api_main.app.dependency_overrides[api_main.get_database_session]
+    with next(override()) as session:
+        listing = session.query(Listing).one()
+        session.add(
+            OsmFeature(
+                listing_id=listing.id,
+                latitude=55.751,
+                longitude=37.618,
+                feature_version="osm_local_v1",
+                transport_count_500m=2,
+                transport_count_1000m=5,
+                nearest_transport_m=120.0,
+                schools_count_1000m=3,
+                parks_count_1000m=1,
+                shops_count_1000m=8,
+                healthcare_count_1000m=2,
+                source_summary={
+                    "attribution": "OpenStreetMap contributors",
+                    "live_osm_called": True,
+                },
+            )
+        )
+        session.commit()
+
+    try:
+        response = client.get("/data", params={"limit": 1})
+    finally:
+        api_main.app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    row = response.json()["items"][0]
+    assert row["osm_feature_version"] == "osm_local_v1"
+    assert row["osm_attribution"] == "OpenStreetMap contributors"
+    assert row["transport_count_500m"] == 2
+    assert row["transport_count_1000m"] == 5
+    assert row["nearest_transport_m"] == 120.0
+    assert row["schools_count_1000m"] == 3
+    assert row["parks_count_1000m"] == 1
+    assert row["shops_count_1000m"] == 8
+    assert row["healthcare_count_1000m"] == 2
+
+
+def test_observation_trend_endpoint_reads_daily_observation_prices(tmp_path) -> None:
+    client = _client_with_seeded_database(tmp_path)
+    try:
+        response = client.get("/stats/observation-trend", params={"limit": 10})
+    finally:
+        api_main.app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "partial",
+        "can_forecast": False,
+        "metric": "median_price_per_m2",
+        "forecast_method": None,
+        "forecast_horizon_days": 0,
+        "history_points": 1,
+        "trend_slope_per_day": None,
+        "forecast_rows": [],
+        "caveat": "Недостаточно дат наблюдений для проверяемого прогноза тренда.",
+        "rows": [
+            {
+                "observed_date": "2026-05-31",
+                "observation_count": 1,
+                "listing_count": 1,
+                "median_price_rub": 18_000_000,
+                "median_price_per_m2": 297_520.66,
+            }
+        ],
+    }

@@ -11,8 +11,10 @@ def test_settings_have_safe_defaults() -> None:
     assert settings.mlflow_tracking_uri == "http://localhost:5000"
     assert (
         settings.active_model_artifact_path
-        == "data/processed/models/phase5/baseline_ridge_v2_non_leaky.joblib"
+        == "data/processed/models/phase5/selected_price_model_v1_non_leaky.joblib"
     )
+    assert settings.model_artifact_dir == "data/processed/models"
+    assert settings.model_selection_mode == "best_metric"
 
 
 def test_database_url_uses_localhost_by_default() -> None:

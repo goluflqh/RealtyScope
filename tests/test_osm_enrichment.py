@@ -12,7 +12,13 @@ from sqlalchemy.orm import Session
 
 from realtyscope.database.base import Base
 from realtyscope.database.models import Listing, OsmFeature
-from realtyscope.enrichment.osm import compute_osm_features, main, persist_osm_features
+from realtyscope.enrichment.osm import (
+    compute_osm_features,
+    main,
+    persist_osm_features,
+    persist_osm_features_for_matching_coordinates,
+    persist_osm_features_from_geojson_file,
+)
 
 
 def test_compute_osm_features_counts_infrastructure_within_radius() -> None:
@@ -192,6 +198,149 @@ def test_persist_osm_features_records_fetch_errors_without_aborting_successes(
         assert session.query(OsmFeature).count() == 1
 
 
+def test_live_osm_persistence_fetches_only_missing_distinct_coordinates(
+    tmp_path: Path,
+) -> None:
+    database_url = _seed_coordinate_ready_database(tmp_path)
+    engine = create_engine(database_url)
+
+    with Session(engine) as session:
+        listing_with_feature = session.get(Listing, 1)
+        assert listing_with_feature is not None
+        listing_to_duplicate = session.get(Listing, 2)
+        assert listing_to_duplicate is not None
+        session.add(
+            OsmFeature(
+                listing_id=listing_with_feature.id,
+                latitude=listing_with_feature.latitude,
+                longitude=listing_with_feature.longitude,
+                feature_version="osm_local_v1",
+                transport_count_500m=1,
+                transport_count_1000m=2,
+                nearest_transport_m=120.0,
+                schools_count_1000m=1,
+                parks_count_1000m=1,
+                shops_count_1000m=1,
+                healthcare_count_1000m=1,
+                source_summary={
+                    "attribution": "OpenStreetMap contributors",
+                    "live_osm_called": True,
+                },
+            )
+        )
+        session.add(
+            Listing(
+                city="Moscow",
+                latitude=listing_to_duplicate.latitude,
+                longitude=listing_to_duplicate.longitude,
+                price_rub=16_000_000,
+                total_area_m2=57.0,
+                rooms=2,
+                property_type="apartment",
+                has_coordinates=True,
+                is_ml_ready=True,
+                cleaning_status="clean",
+            )
+        )
+        session.commit()
+
+    called_listing_ids: list[int] = []
+
+    def fetch_elements(listing: Listing) -> list[dict[str, object]]:
+        called_listing_ids.append(int(listing.id))
+        return [
+            {
+                "type": "node",
+                "lat": float(listing.latitude or 0) + 0.001,
+                "lon": float(listing.longitude or 0) + 0.001,
+                "tags": {"public_transport": "station"},
+            }
+        ]
+
+    with Session(engine) as session:
+        result = persist_osm_features(
+            session,
+            fetch_elements=fetch_elements,
+            limit=10,
+        )
+        session.commit()
+
+    assert called_listing_ids == [2]
+    assert result.rows_available == 1
+    assert result.rows_selected == 1
+    assert result.rows_inserted == 1
+    assert result.rows_updated == 0
+    assert result.selected_listing_ids == (2,)
+
+    with Session(engine) as session:
+        assert session.query(OsmFeature).count() == 2
+        assert session.query(OsmFeature).filter_by(listing_id=3).count() == 0
+
+
+def test_persist_osm_features_for_matching_coordinates_derives_exact_coordinate_rows(
+    tmp_path: Path,
+) -> None:
+    database_url = _seed_coordinate_ready_database(tmp_path)
+    engine = create_engine(database_url)
+
+    with Session(engine) as session:
+        listing = session.get(Listing, 1)
+        assert listing is not None
+        session.add(
+            OsmFeature(
+                listing_id=listing.id,
+                latitude=listing.latitude,
+                longitude=listing.longitude,
+                feature_version="osm_local_v1",
+                transport_count_500m=2,
+                transport_count_1000m=3,
+                nearest_transport_m=180.0,
+                schools_count_1000m=1,
+                parks_count_1000m=4,
+                shops_count_1000m=5,
+                healthcare_count_1000m=1,
+                source_summary={
+                    "attribution": "OpenStreetMap contributors",
+                    "live_osm_called": True,
+                    "elements_seen": 12,
+                },
+            )
+        )
+        same_point = Listing(
+            city="Moscow",
+            latitude=listing.latitude,
+            longitude=listing.longitude,
+            price_rub=13_000_000,
+            total_area_m2=50.0,
+            rooms=2,
+            property_type="apartment",
+            has_coordinates=True,
+            is_ml_ready=True,
+            cleaning_status="clean",
+        )
+        session.add(same_point)
+        session.commit()
+
+    with Session(engine) as session:
+        result = persist_osm_features_for_matching_coordinates(session)
+        session.commit()
+
+    assert result.rows_inserted == 1
+    assert result.rows_updated == 0
+    assert result.rows_selected == 1
+    assert result.selected_listing_ids == (3,)
+
+    with Session(engine) as session:
+        derived = session.query(OsmFeature).filter_by(listing_id=3).one()
+        assert derived.transport_count_500m == 2
+        assert derived.parks_count_1000m == 4
+        assert derived.source_summary["derivation"] == "coordinate_exact_match"
+        assert derived.source_summary["derived_from_listing_id"] == 1
+        assert derived.source_summary["live_osm_called"] is False
+        assert derived.source_summary["source_live_osm_called"] is True
+        assert session.query(OsmFeature).filter_by(listing_id=2).count() == 0
+
+
 def test_osm_enrichment_dry_run_cli_reports_limited_coordinate_ready_rows(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -206,6 +355,71 @@ def test_osm_enrichment_dry_run_cli_reports_limited_coordinate_ready_rows(
     assert payload["rows_available"] == 2
     assert payload["feature_version"] == "osm_local_v1"
     assert "OpenStreetMap" in payload["attribution"]
+
+
+def test_osm_enrichment_dry_run_live_overpass_reports_missing_distinct_coordinates(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    database_url = _seed_coordinate_ready_database(tmp_path)
+    engine = create_engine(database_url)
+
+    with Session(engine) as session:
+        listing_with_feature = session.get(Listing, 1)
+        assert listing_with_feature is not None
+        listing_to_duplicate = session.get(Listing, 2)
+        assert listing_to_duplicate is not None
+        session.add(
+            OsmFeature(
+                listing_id=listing_with_feature.id,
+                latitude=listing_with_feature.latitude,
+                longitude=listing_with_feature.longitude,
+                feature_version="osm_local_v1",
+                transport_count_500m=1,
+                transport_count_1000m=2,
+                nearest_transport_m=120.0,
+                schools_count_1000m=1,
+                parks_count_1000m=1,
+                shops_count_1000m=1,
+                healthcare_count_1000m=1,
+                source_summary={"live_osm_called": True},
+            )
+        )
+        session.add(
+            Listing(
+                city="Moscow",
+                latitude=listing_to_duplicate.latitude,
+                longitude=listing_to_duplicate.longitude,
+                price_rub=16_000_000,
+                total_area_m2=57.0,
+                rooms=2,
+                property_type="apartment",
+                has_coordinates=True,
+                is_ml_ready=True,
+                cleaning_status="clean",
+            )
+        )
+        session.commit()
+
+    assert (
+        main(
+            [
+                "--database-url",
+                database_url,
+                "--limit",
+                "10",
+                "--live-overpass",
+                "--dry-run",
+                "--json",
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["rows_available"] == 1
+    assert payload["rows_selected"] == 1
+    assert payload["selected_listing_ids"] == [2]
+    assert payload["selection_mode"] == "live_overpass_missing_distinct_coordinates"
 
 
 def test_osm_enrichment_write_cli_persists_fixture_elements(
@@ -257,6 +471,195 @@ def test_osm_enrichment_write_cli_persists_fixture_elements(
         assert session.query(OsmFeature).count() == 2
 
 
+def test_osm_enrichment_cli_appends_progress_log_for_write_batch(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    database_url = _seed_coordinate_ready_database(tmp_path)
+    elements_file = tmp_path / "osm-elements.json"
+    progress_log = tmp_path / "logs" / "osm-batches.jsonl"
+    elements_file.write_text(
+        json.dumps(
+            {
+                "1": [
+                    {
+                        "type": "node",
+                        "lat": 55.7510,
+                        "lon": 37.6110,
+                        "tags": {"public_transport": "station"},
+                    }
+                ],
+                "2": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert (
+        main(
+            [
+                "--database-url",
+                database_url,
+                "--limit",
+                "2",
+                "--elements-file",
+                str(elements_file),
+                "--write",
+                "--json",
+                "--progress-log",
+                str(progress_log),
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+    log_payloads = [
+        json.loads(line) for line in progress_log.read_text(encoding="utf-8").splitlines()
+    ]
+
+    assert payload["rows_inserted"] == 2
+    assert len(log_payloads) == 1
+    assert log_payloads[0]["operation"] == "elements_file"
+    assert log_payloads[0]["limit"] == 2
+    assert log_payloads[0]["radius_m"] == 1000
+    assert log_payloads[0]["delay_seconds"] == 1.0
+    assert log_payloads[0]["timeout_seconds"] == 30.0
+    assert log_payloads[0]["result"]["selected_listing_ids"] == [1, 2]
+    assert log_payloads[0]["result"]["rows_inserted"] == 2
+
+
+def test_osm_enrichment_cli_derives_exact_coordinate_matches(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    database_url = _seed_coordinate_ready_database(tmp_path)
+    engine = create_engine(database_url)
+
+    with Session(engine) as session:
+        listing = session.get(Listing, 1)
+        assert listing is not None
+        session.add(
+            Listing(
+                city="Moscow",
+                latitude=listing.latitude,
+                longitude=listing.longitude,
+                price_rub=13_000_000,
+                total_area_m2=50.0,
+                rooms=2,
+                property_type="apartment",
+                has_coordinates=True,
+                is_ml_ready=True,
+                cleaning_status="clean",
+            )
+        )
+        session.add(
+            OsmFeature(
+                listing_id=listing.id,
+                latitude=listing.latitude,
+                longitude=listing.longitude,
+                feature_version="osm_local_v1",
+                transport_count_500m=1,
+                transport_count_1000m=2,
+                nearest_transport_m=120.0,
+                schools_count_1000m=1,
+                parks_count_1000m=1,
+                shops_count_1000m=1,
+                healthcare_count_1000m=1,
+                source_summary={
+                    "attribution": "OpenStreetMap contributors",
+                    "live_osm_called": True,
+                },
+            )
+        )
+        session.commit()
+
+    assert (
+        main(
+            [
+                "--database-url",
+                database_url,
+                "--derive-coordinate-matches",
+                "--write",
+                "--json",
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["rows_inserted"] == 1
+    assert payload["live_osm_called"] is False
+    assert payload["selected_listing_ids"] == [3]
+
+
+def test_persist_osm_features_from_geojson_file_uses_local_extract(
+    tmp_path: Path,
+) -> None:
+    database_url = _seed_coordinate_ready_database(tmp_path)
+    geojson_file = _write_geojson_extract(tmp_path)
+    engine = create_engine(database_url)
+
+    with Session(engine) as session:
+        result = persist_osm_features_from_geojson_file(
+            session,
+            geojson_file,
+            limit=2,
+        )
+        session.commit()
+
+    assert result.rows_available == 2
+    assert result.rows_selected == 2
+    assert result.rows_inserted == 2
+    assert result.rows_updated == 0
+    assert result.live_osm_called is False
+
+    with Session(engine) as session:
+        first = session.query(OsmFeature).filter_by(listing_id=1).one()
+        second = session.query(OsmFeature).filter_by(listing_id=2).one()
+
+    assert first.transport_count_1000m == 1
+    assert first.schools_count_1000m == 1
+    assert first.source_summary["source"] == "bbbike_geojson_extract"
+    assert first.source_summary["live_osm_called"] is False
+    assert first.source_summary["source_features_indexed"] == 2
+    assert second.transport_count_1000m == 0
+    assert second.schools_count_1000m == 0
+
+
+def test_osm_enrichment_cli_persists_local_geojson_extract(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    database_url = _seed_coordinate_ready_database(tmp_path)
+    geojson_file = _write_geojson_extract(tmp_path)
+    progress_log = tmp_path / "logs" / "osm-batches.jsonl"
+
+    assert (
+        main(
+            [
+                "--database-url",
+                database_url,
+                "--limit",
+                "2",
+                "--geojson-file",
+                str(geojson_file),
+                "--write",
+                "--json",
+                "--progress-log",
+                str(progress_log),
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+    log_payloads = [
+        json.loads(line) for line in progress_log.read_text(encoding="utf-8").splitlines()
+    ]
+
+    assert payload["rows_inserted"] == 2
+    assert payload["live_osm_called"] is False
+    assert log_payloads[0]["operation"] == "geojson_file"
+    assert log_payloads[0]["geojson_file"] == str(geojson_file)
+
+
 def test_osm_enrichment_module_runs_without_package_import_warning(tmp_path: Path) -> None:
     database_url = _seed_coordinate_ready_database(tmp_path)
 
@@ -281,6 +684,32 @@ def test_osm_enrichment_module_runs_without_package_import_warning(tmp_path: Pat
     assert "RuntimeWarning" not in result.stderr
     payload = json.loads(result.stdout)
     assert payload["rows_selected"] == 1
+
+
+def _write_geojson_extract(tmp_path: Path) -> Path:
+    geojson_file = tmp_path / "moscow.geojson"
+    lines = [
+        '{"type":"FeatureCollection","features":[\n',
+        json.dumps(
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [37.611, 55.751]},
+                "properties": {"public_transport": "station"},
+            }
+        )
+        + ",\n",
+        json.dumps(
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [37.612, 55.7505]},
+                "properties": {"amenity": "school"},
+            }
+        )
+        + "\n",
+        "]}\n",
+    ]
+    geojson_file.write_text("".join(lines), encoding="utf-8")
+    return geojson_file
 
 
 def _seed_coordinate_ready_database(tmp_path: Path) -> str:

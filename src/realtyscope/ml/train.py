@@ -12,7 +12,9 @@ from pathlib import Path
 from typing import Any
 
 import joblib
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
+from sklearn.inspection import permutation_importance
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
@@ -21,7 +23,6 @@ from sklearn.preprocessing import StandardScaler
 
 from realtyscope.database.session import create_database_engine
 from realtyscope.ml.features import (
-    FEATURE_VERSION,
     FEATURE_VERSIONS,
     NON_LEAKY_FEATURE_VERSION,
     FeatureRow,
@@ -30,6 +31,8 @@ from realtyscope.ml.features import (
 
 MODEL_VERSION = "baseline_ridge_v1"
 NON_LEAKY_MODEL_VERSION = "baseline_ridge_v2_non_leaky"
+SELECTED_MODEL_VERSION = "selected_price_model_v1"
+NON_LEAKY_SELECTED_MODEL_VERSION = "selected_price_model_v1_non_leaky"
 DEFAULT_OUTPUT_DIR = Path("data/processed/models/phase4")
 RANDOM_STATE = 42
 
@@ -52,6 +55,8 @@ class TrainingResult(BaseModel):
     mlflow_registered_model_name: str | None = None
     mlflow_model_uri: str | None = None
     split: dict[str, Any]
+    candidate_metrics: list[dict[str, Any]] = Field(default_factory=list)
+    feature_importance: list[dict[str, Any]] = Field(default_factory=list)
 
 
 def train_baseline_model(
@@ -128,13 +133,149 @@ def train_baseline_model(
     )
 
 
+def train_selected_model(
+    *,
+    feature_rows: Sequence[FeatureRow],
+    output_dir: Path,
+    candidate_names: Sequence[str] = ("ridge", "random_forest", "hist_gradient_boosting"),
+    model_version: str | None = None,
+    mlflow_tracking_uri: str | None = None,
+    mlflow_registered_model_name: str | None = None,
+) -> TrainingResult:
+    if len(feature_rows) < 4:
+        raise ValueError("at least 4 feature rows are required for selected model training")
+    if not candidate_names:
+        raise ValueError("at least one model candidate is required")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    feature_version = _single_feature_version(feature_rows)
+    if model_version is None:
+        model_version = _default_selected_model_version(feature_version)
+    feature_names = sorted(feature_rows[0].features)
+    train_rows, test_rows, split = _split_feature_rows(feature_rows)
+    x_train = [[row.features[name] for name in feature_names] for row in train_rows]
+    x_test = [[row.features[name] for name in feature_names] for row in test_rows]
+    y_train = [row.target_price_rub for row in train_rows]
+    y_test = [row.target_price_rub for row in test_rows]
+    naive_prediction = _median(y_train)
+    naive_predictions = [naive_prediction for _ in y_test]
+
+    trained_candidates: list[dict[str, Any]] = []
+    for candidate_name in candidate_names:
+        model = _candidate_model(candidate_name)
+        model.fit(x_train, y_train)
+        predictions = model.predict(x_test)
+        metrics = _metrics(
+            y_true=y_test,
+            y_pred=[float(value) for value in predictions],
+            naive_pred=naive_predictions,
+            rows_total=len(feature_rows),
+            train_rows=len(y_train),
+            test_rows=len(y_test),
+            feature_count=len(feature_names),
+            train_listing_groups=len(split["train_listing_ids"]),
+            test_listing_groups=len(split["test_listing_ids"]),
+        )
+        trained_candidates.append(
+            {
+                "candidate_name": candidate_name,
+                "model": model,
+                "metrics": metrics,
+            }
+        )
+
+    selected = max(trained_candidates, key=_candidate_rank)
+    candidate_metrics = [
+        {"candidate_name": row["candidate_name"], **row["metrics"]}
+        for row in sorted(trained_candidates, key=_candidate_rank, reverse=True)
+    ]
+    for row in candidate_metrics:
+        row["candidate_artifact_path"] = str(
+            _candidate_artifact_path(output_dir, model_version, str(row["candidate_name"]))
+        )
+    selected_candidate = str(selected["candidate_name"])
+    metrics = {
+        **selected["metrics"],
+        "candidate_count": len(candidate_metrics),
+    }
+    feature_importance = _model_feature_importance(
+        selected["model"],
+        feature_names=feature_names,
+        x_test=x_test,
+        y_test=y_test,
+    )
+    artifact_path = output_dir / f"{model_version}.joblib"
+    artifact = {
+        "candidate_metrics": candidate_metrics,
+        "feature_importance": feature_importance,
+        "feature_names": feature_names,
+        "feature_version": feature_version,
+        "metrics": metrics,
+        "model": selected["model"],
+        "model_version": model_version,
+        "selected_candidate": selected_candidate,
+        "split": split,
+    }
+    for candidate in trained_candidates:
+        candidate_name = str(candidate["candidate_name"])
+        candidate_artifact_path = _candidate_artifact_path(
+            output_dir,
+            model_version,
+            candidate_name,
+        )
+        candidate_feature_importance = _model_feature_importance(
+            candidate["model"],
+            feature_names=feature_names,
+            x_test=x_test,
+            y_test=y_test,
+        )
+        candidate_artifact = {
+            "candidate_metrics": candidate_metrics,
+            "feature_importance": candidate_feature_importance,
+            "feature_names": feature_names,
+            "feature_version": feature_version,
+            "metrics": {
+                **candidate["metrics"],
+                "candidate_count": len(candidate_metrics),
+            },
+            "model": candidate["model"],
+            "model_version": model_version,
+            "selected_candidate": candidate_name,
+            "split": split,
+        }
+        joblib.dump(candidate_artifact, candidate_artifact_path)
+    joblib.dump(artifact, artifact_path)
+    mlflow_result = _log_mlflow_if_enabled(
+        artifact_path=artifact_path,
+        feature_version=feature_version,
+        metrics={key: value for key, value in metrics.items() if isinstance(value, int | float)},
+        model=selected["model"],
+        model_version=model_version,
+        registered_model_name=mlflow_registered_model_name,
+        tracking_uri=mlflow_tracking_uri,
+    )
+    return TrainingResult(
+        artifact_path=artifact_path,
+        feature_version=feature_version,
+        model_version=model_version,
+        metrics=metrics,
+        mlflow_run_id=mlflow_result.run_id,
+        mlflow_registered_model_name=mlflow_result.registered_model_name,
+        mlflow_model_uri=mlflow_result.model_uri,
+        split=split,
+        candidate_metrics=candidate_metrics,
+        feature_importance=feature_importance,
+    )
+
+
 def train_from_database(
     *,
     database_url: str | None = None,
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     limit: int | None = None,
-    feature_version: str = FEATURE_VERSION,
+    feature_version: str = NON_LEAKY_FEATURE_VERSION,
     model_version: str | None = None,
+    trainer: str = "selected",
     mlflow_tracking_uri: str | None = None,
     mlflow_registered_model_name: str | None = None,
 ) -> TrainingResult:
@@ -147,13 +288,132 @@ def train_from_database(
             limit=limit,
             feature_version=feature_version,
         )
-    return train_baseline_model(
-        feature_rows=feature_rows,
-        output_dir=output_dir,
-        model_version=model_version,
-        mlflow_tracking_uri=mlflow_tracking_uri,
-        mlflow_registered_model_name=mlflow_registered_model_name,
+    if trainer == "selected":
+        return train_selected_model(
+            feature_rows=feature_rows,
+            output_dir=output_dir,
+            model_version=model_version,
+            mlflow_tracking_uri=mlflow_tracking_uri,
+            mlflow_registered_model_name=mlflow_registered_model_name,
+        )
+    if trainer == "baseline":
+        return train_baseline_model(
+            feature_rows=feature_rows,
+            output_dir=output_dir,
+            model_version=model_version,
+            mlflow_tracking_uri=mlflow_tracking_uri,
+            mlflow_registered_model_name=mlflow_registered_model_name,
+        )
+    raise ValueError(f"unsupported trainer: {trainer}")
+
+
+def _candidate_model(candidate_name: str) -> Any:
+    if candidate_name == "ridge":
+        return Pipeline(
+            [
+                ("scaler", StandardScaler()),
+                ("regressor", Ridge(alpha=1.0)),
+            ]
+        )
+    if candidate_name == "random_forest":
+        return RandomForestRegressor(
+            max_depth=8,
+            min_samples_leaf=2,
+            n_estimators=80,
+            random_state=RANDOM_STATE,
+        )
+    if candidate_name == "hist_gradient_boosting":
+        return HistGradientBoostingRegressor(
+            l2_regularization=0.05,
+            learning_rate=0.08,
+            max_iter=180,
+            max_leaf_nodes=31,
+            min_samples_leaf=2,
+            random_state=RANDOM_STATE,
+        )
+    raise ValueError(f"unsupported model candidate: {candidate_name}")
+
+
+def _candidate_artifact_path(output_dir: Path, model_version: str, candidate_name: str) -> Path:
+    safe_candidate = candidate_name.replace("/", "_").replace("\\", "_")
+    return output_dir / f"{model_version}__{safe_candidate}.joblib"
+
+
+def _model_feature_importance(
+    model: Any,
+    *,
+    feature_names: Sequence[str],
+    x_test: Sequence[Sequence[float]],
+    y_test: Sequence[float],
+) -> list[dict[str, Any]]:
+    regressor = _regressor_step(model)
+    coefficients = getattr(regressor, "coef_", None)
+    if coefficients is not None:
+        return _sorted_feature_importance(
+            feature_names,
+            [float(value) for value in coefficients],
+            source="coefficient",
+            coefficient_values=[float(value) for value in coefficients],
+        )
+
+    tree_importance = getattr(regressor, "feature_importances_", None)
+    if tree_importance is not None:
+        return _sorted_feature_importance(
+            feature_names,
+            [float(value) for value in tree_importance],
+            source="model_feature_importance",
+        )
+
+    if not x_test or not y_test:
+        return []
+    result = permutation_importance(
+        model,
+        x_test,
+        y_test,
+        n_repeats=5,
+        random_state=RANDOM_STATE,
+        scoring="neg_mean_absolute_error",
     )
+    return _sorted_feature_importance(
+        feature_names,
+        [float(value) for value in result.importances_mean],
+        source="permutation_importance",
+    )
+
+
+def _regressor_step(model: Any) -> Any:
+    named_steps = getattr(model, "named_steps", {})
+    if isinstance(named_steps, dict) and "regressor" in named_steps:
+        return named_steps["regressor"]
+    return model
+
+
+def _sorted_feature_importance(
+    feature_names: Sequence[str],
+    importance_values: Sequence[float],
+    *,
+    source: str,
+    coefficient_values: Sequence[float] | None = None,
+) -> list[dict[str, Any]]:
+    rows = [
+        {
+            "feature": feature_name,
+            "importance": abs(float(importance)),
+            "coefficient": float(coefficient_values[index])
+            if coefficient_values is not None
+            else 0.0,
+            "source": source,
+        }
+        for index, (feature_name, importance) in enumerate(
+            zip(feature_names, importance_values, strict=True)
+        )
+    ]
+    return sorted(rows, key=lambda item: item["importance"], reverse=True)
+
+
+def _candidate_rank(candidate: dict[str, Any]) -> tuple[float, float]:
+    metrics = candidate["metrics"]
+    return (float(metrics["r2"]), -float(metrics["mae"]))
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -167,13 +427,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--feature-version",
         choices=FEATURE_VERSIONS,
-        default=FEATURE_VERSION,
+        default=NON_LEAKY_FEATURE_VERSION,
         help="Feature snapshot version to train on.",
     )
     parser.add_argument(
         "--model-version",
         default=None,
         help="Optional model version override. Defaults from the feature version.",
+    )
+    parser.add_argument(
+        "--trainer",
+        choices=("baseline", "selected"),
+        default="selected",
+        help="Use the historical Ridge baseline or train/select the best candidate model.",
     )
     parser.add_argument(
         "--mlflow-tracking-uri",
@@ -197,6 +463,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         limit=args.limit,
         feature_version=args.feature_version,
         model_version=args.model_version,
+        trainer=args.trainer,
         mlflow_tracking_uri=args.mlflow_tracking_uri,
         mlflow_registered_model_name=args.mlflow_registered_model_name,
     )
@@ -280,6 +547,12 @@ def _default_model_version(feature_version: str) -> str:
     if feature_version == NON_LEAKY_FEATURE_VERSION:
         return NON_LEAKY_MODEL_VERSION
     return MODEL_VERSION
+
+
+def _default_selected_model_version(feature_version: str) -> str:
+    if feature_version == NON_LEAKY_FEATURE_VERSION:
+        return NON_LEAKY_SELECTED_MODEL_VERSION
+    return SELECTED_MODEL_VERSION
 
 
 def _split_feature_rows(
@@ -369,6 +642,7 @@ def _result_payload(result: TrainingResult) -> dict[str, Any]:
         "mlflow_model_uri": result.mlflow_model_uri,
         "model_version": result.model_version,
         "split": result.split,
+        "candidate_metrics": result.candidate_metrics,
     }
 
 
