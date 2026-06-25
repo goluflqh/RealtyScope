@@ -916,7 +916,10 @@ def _listing_rows(chart_frame: pd.DataFrame) -> list[dict[str, Any]]:
 
 
 def _deal_rows(chart_frame: pd.DataFrame) -> list[dict[str, Any]]:
-    required = chart_frame.dropna(subset=["rooms", "price_rub", "price_per_m2"]).copy()
+    required = chart_frame.copy()
+    for column in ["rooms", "price_rub", "price_per_m2"]:
+        required[column] = pd.to_numeric(required[column], errors="coerce")
+    required = required.dropna(subset=["rooms", "price_rub", "price_per_m2"])
     if required.empty:
         return []
     grouped = required.groupby("rooms")["price_per_m2"]
@@ -929,15 +932,15 @@ def _deal_rows(chart_frame: pd.DataFrame) -> list[dict[str, Any]]:
     required["discount_pct"] = (
         required["price_per_m2"] - required["segment_median_m2"]
     ) / required["segment_median_m2"]
-    robust_scale = (required["segment_mad_m2"] * 1.4826).replace(0, pd.NA)
-    required["robust_z"] = (
-        (required["price_per_m2"] - required["segment_median_m2"]) / robust_scale
-    ).fillna(0)
+    robust_scale = (required["segment_mad_m2"] * 1.4826).where(lambda values: values != 0)
+    required["robust_z"] = (required["price_per_m2"] - required["segment_median_m2"]) / robust_scale
+    required["robust_z"] = pd.to_numeric(required["robust_z"], errors="coerce").fillna(0.0)
     discount_depth = (-required["discount_pct"] * 100).clip(lower=0)
     percentile_bonus = ((1 - required["segment_percentile"]) * 50).clip(lower=0)
     robust_bonus = (-required["robust_z"]).clip(lower=0) * 10
+    deal_score = discount_depth + percentile_bonus + robust_bonus
     required["deal_score"] = (
-        (discount_depth + percentile_bonus + robust_bonus).clip(lower=0, upper=100).round(1)
+        pd.to_numeric(deal_score, errors="coerce").fillna(0.0).clip(lower=0, upper=100).round(1)
     )
     required = required[
         (required["discount_pct"] < 0) & (required["segment_sample_size"] >= 3)

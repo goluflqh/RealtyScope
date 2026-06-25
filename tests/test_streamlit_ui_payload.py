@@ -1,4 +1,5 @@
 import json
+import warnings
 
 import pandas as pd
 from services.streamlit import app as streamlit_app
@@ -524,6 +525,44 @@ def test_deal_rows_use_robust_real_segment_score() -> None:
     assert rows[0]["segment_percentile"] == 0.25
     assert rows[0]["robust_z"] < 0
     assert rows[0]["deal_score"] > rows[1]["deal_score"]
+
+
+def test_deal_rows_keep_numeric_scores_without_silent_downcasting() -> None:
+    frame = pd.DataFrame(
+        [
+            {
+                "address_text": "discount 1",
+                "rooms": 2,
+                "price_rub": 15_000_000,
+                "price_per_m2": 300_000,
+            },
+            {
+                "address_text": "discount 2",
+                "rooms": 2,
+                "price_rub": 22_000_000,
+                "price_per_m2": 400_000,
+            },
+            {
+                "address_text": "median",
+                "rooms": 2,
+                "price_rub": 30_000_000,
+                "price_per_m2": 500_000,
+            },
+            {"address_text": "upper", "rooms": 2, "price_rub": 39_000_000, "price_per_m2": 600_000},
+        ]
+    )
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="'future.no_silent_downcasting' is deprecated",
+            category=Warning,
+        )
+        with pd.option_context("future.no_silent_downcasting", True):
+            rows = _deal_rows(frame)
+
+    assert rows
+    assert all(isinstance(row["deal_score"], float) for row in rows)
 
 
 def test_comparable_rows_use_real_room_area_price_neighbors() -> None:
