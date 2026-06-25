@@ -40,3 +40,4 @@ redis_data/
 # Local agent/tool artifacts
 .claude/
 .gitnexus/
+output/
