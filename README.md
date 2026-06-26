@@ -246,7 +246,8 @@ docker compose -f docker-compose.prod.yml --env-file .env ps
 6. Перенести runtime bundle: PostgreSQL dump и `data/processed/models/phase5`.
 7. Восстановить bundle через `scripts/deployment/restore_vps_runtime_bundle.sh`; `data/external` монтируется из Git checkout, model artifacts - из Docker volume.
 8. Проверить `/health`, `/_stcore/health`, `/monitoring/status`, наличие mount points и dashboard rendering.
-9. Настроить backup базы до включения scheduled ingestion.
+9. Проверить `robots.txt`: основной домен разрешает индексацию dashboard, API-домен закрыт от crawler indexing.
+10. Настроить backup базы до включения scheduled ingestion.
 
 Ограничения deployment:
 

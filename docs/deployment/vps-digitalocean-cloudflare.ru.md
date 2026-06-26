@@ -210,11 +210,14 @@ curl -fsS http://api.realtyscope.bond/monitoring/status | python3 -m json.tool |
 ```bash
 curl -fsS https://realtyscope.bond/
 curl -fsS https://api.realtyscope.bond/health
+curl -fsS https://realtyscope.bond/robots.txt
+curl -fsS https://api.realtyscope.bond/robots.txt
 ```
 
 Открыть в браузере:
 
 - `https://realtyscope.bond`
+- `https://realtyscope.bond/robots.txt`
 - `https://api.realtyscope.bond/docs`
 
 ## 10. Обновление релиза
