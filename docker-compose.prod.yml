@@ -1,0 +1,166 @@
+name: realtyscope
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - temp_file_limit=2GB
+      - -c
+      - log_temp_files=64MB
+      - -c
+      - statement_timeout=300000
+      - -c
+      - idle_in_transaction_session_timeout=120000
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis_data:/data
+
+  mlflow:
+    build:
+      context: services/mlflow
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    expose:
+      - "5000"
+    volumes:
+      - mlflow_data:/mlflow
+
+  api:
+    build:
+      context: services/api
+      dockerfile: Dockerfile
+      additional_contexts:
+        app_deps: docker/build/deps
+        app_services: services
+        app_src: src
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      PROJECT_NAME: ${PROJECT_NAME:-RealtyScope}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      ACTIVE_MODEL_NAME: ${ACTIVE_MODEL_NAME:-realtyscope-price-model}
+      ACTIVE_MODEL_ARTIFACT_PATH: ${ACTIVE_MODEL_ARTIFACT_PATH:-data/processed/models/phase5/selected_price_model_v1_non_leaky.joblib}
+    expose:
+      - "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mlflow:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - model_artifacts:/app/data/processed/models
+
+  streamlit:
+    build:
+      context: services/streamlit
+      dockerfile: Dockerfile
+      additional_contexts:
+        app_deps: docker/build/deps
+        app_services: services
+        app_src: src
+    restart: unless-stopped
+    environment:
+      API_BASE_URL: http://api:8000
+      STREAMLIT_API_TIMEOUT_SECONDS: ${STREAMLIT_API_TIMEOUT_SECONDS:-30}
+    expose:
+      - "8501"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN in .env}
+      API_DOMAIN: ${API_DOMAIN:-api.realtyscope.bond}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+    depends_on:
+      streamlit:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  trainer:
+    profiles: ["tools"]
+    build:
+      context: services/trainer
+      dockerfile: Dockerfile
+      additional_contexts:
+        app_deps: docker/build/deps
+        app_src: src
+    environment:
+      APP_ENV: production
+      PROJECT_NAME: ${PROJECT_NAME:-RealtyScope}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      ACTIVE_MODEL_NAME: ${ACTIVE_MODEL_NAME:-realtyscope-price-model}
+    depends_on:
+      db:
+        condition: service_healthy
+      mlflow:
+        condition: service_started
+    volumes:
+      - mlflow_data:/mlflow
+      - model_artifacts:/app/data/processed/models
+
+volumes:
+  postgres_data:
+  redis_data:
+  mlflow_data:
+  model_artifacts:
+  caddy_data:
+  caddy_config:

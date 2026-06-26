@@ -218,9 +218,21 @@ Remove-Item Env:API_BASE_URL
 Remove-Item Env:STREAMLIT_API_TIMEOUT_SECONDS
 ```
 
-## Deployment Notes
+## Развертывание
 
-Проект подготовлен к VPS deployment на Linux через Docker Compose.
+Проект подготовлен к VPS deployment на Linux через Docker Compose. Для production-запуска добавлены отдельные файлы:
+
+- `docker-compose.prod.yml`: изолированный production Compose без публичных портов PostgreSQL, Redis и MLflow.
+- `.env.production.example`: шаблон переменных окружения для VPS.
+- `deploy/caddy/Caddyfile`: reverse proxy для `realtyscope.bond` и `api.realtyscope.bond` с HTTPS.
+- `docs/deployment/vps-digitalocean-cloudflare.ru.md`: пошаговый runbook для DigitalOcean, Termius, Cloudflare и nicnames.
+
+Базовая production-команда после настройки `.env`:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env up --build -d
+docker compose -f docker-compose.prod.yml --env-file .env ps
+```
 
 Рекомендуемый production flow:
 
@@ -234,14 +246,14 @@ Remove-Item Env:STREAMLIT_API_TIMEOUT_SECONDS
 8. Проверить `/health`, `/_stcore/health`, `/monitoring/status` и dashboard rendering.
 9. Настроить backup базы до включения scheduled ingestion.
 
-Deployment caveats:
+Ограничения deployment:
 
 - Нельзя коммитить реальные secrets.
 - Domclick collection может блокироваться QRATOR/CAPTCHA; доступ к источнику является operational dependency.
 - Windows Scheduled Task не переносится на VPS; на Linux нужен cron или systemd timer.
 - Переобучение модели должно запускаться отдельным promotion workflow, а не автоматически после ingestion.
 
-## Verification Evidence
+## Подтверждение качества
 
 Последняя release verification после merge PR #3:
 
@@ -260,6 +272,6 @@ Deployment caveats:
 - `docs/final-readiness/2026-06-25-completion-audit.md`
 - `docs/course-guidance/realtyscope-user-story-traceability.md`
 
-## License And Data Notice
+## Лицензия и примечание о данных
 
 Проект является учебным. При сборе и деплое real-estate данных необходимо соблюдать условия источников, robots policies, rate limits, требования OpenStreetMap attribution и применимые правила защиты данных.
