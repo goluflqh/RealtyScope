@@ -224,6 +224,8 @@ Remove-Item Env:STREAMLIT_API_TIMEOUT_SECONDS
 
 - `docker-compose.prod.yml`: изолированный production Compose без публичных портов PostgreSQL, Redis и MLflow.
 - `.env.production.example`: шаблон переменных окружения для VPS.
+- `scripts/deployment/export_local_runtime_bundle.sh`: экспорт проверенного локального состояния PostgreSQL и model artifacts.
+- `scripts/deployment/restore_vps_runtime_bundle.sh`: восстановление runtime bundle на VPS с smoke checks.
 - `deploy/caddy/Caddyfile`: reverse proxy для `realtyscope.bond` и `api.realtyscope.bond` с HTTPS.
 - `docs/deployment/vps-digitalocean-cloudflare.ru.md`: пошаговый runbook для DigitalOcean, Termius, Cloudflare и nicnames.
 
@@ -239,11 +241,11 @@ docker compose -f docker-compose.prod.yml --env-file .env ps
 1. Создать VPS с Docker, Docker Compose и firewall.
 2. Настроить DNS records для домена и при необходимости отдельного API subdomain.
 3. Склонировать репозиторий с GitHub на сервер.
-4. Создать production `.env` на основе `.env.example`.
-5. Использовать persistent Docker volumes для PostgreSQL, Redis, MLflow и model/data artifacts.
-6. Запустить сервисы: `docker compose -p realtyscope up --build -d`.
-7. Поставить Caddy, Nginx или Traefik перед Streamlit/API для HTTPS.
-8. Проверить `/health`, `/_stcore/health`, `/monitoring/status` и dashboard rendering.
+4. Создать production `.env` на основе `.env.production.example`.
+5. Запустить базовый Compose и Caddy, чтобы создать persistent Docker volumes.
+6. Перенести runtime bundle: PostgreSQL dump и `data/processed/models/phase5`.
+7. Восстановить bundle через `scripts/deployment/restore_vps_runtime_bundle.sh`; `data/external` монтируется из Git checkout, model artifacts - из Docker volume.
+8. Проверить `/health`, `/_stcore/health`, `/monitoring/status`, наличие mount points и dashboard rendering.
 9. Настроить backup базы до включения scheduled ingestion.
 
 Ограничения deployment:
@@ -252,6 +254,7 @@ docker compose -f docker-compose.prod.yml --env-file .env ps
 - Domclick collection может блокироваться QRATOR/CAPTCHA; доступ к источнику является operational dependency.
 - Windows Scheduled Task не переносится на VPS; на Linux нужен cron или systemd timer.
 - Переобучение модели должно запускаться отдельным promotion workflow, а не автоматически после ingestion.
+- GitHub не хранит runtime database dump и generated model artifacts; для полного production parity нужен отдельный restore bundle.
 
 ## Подтверждение качества
 
