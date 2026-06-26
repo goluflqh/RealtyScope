@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from realtyscope.database.base import Base
 from realtyscope.database.models import Listing, ListingObservation, RawListingRecord, Source
 from realtyscope.ml.features import FEATURE_VERSION, FeatureRow
-from realtyscope.ml.train import main, train_baseline_model
+from realtyscope.ml.train import main, train_baseline_model, train_selected_model
 
 NON_LEAKY_FEATURE_VERSION = "ml_features_v2_non_leaky"
 
@@ -115,6 +115,89 @@ def test_train_baseline_model_registers_mlflow_model_when_name_is_configured(
     ]
 
 
+def test_train_selected_model_records_candidate_metrics_and_selected_artifact(
+    tmp_path: Path,
+) -> None:
+    feature_rows = _tiny_feature_rows(
+        feature_version=NON_LEAKY_FEATURE_VERSION,
+        include_latest_price_feature=False,
+    )
+
+    result = train_selected_model(
+        feature_rows=feature_rows,
+        output_dir=tmp_path,
+    )
+
+    assert result.model_version == "selected_price_model_v1_non_leaky"
+    assert len(result.candidate_metrics) == 3
+    assert {row["candidate_name"] for row in result.candidate_metrics} == {
+        "hist_gradient_boosting",
+        "ridge",
+        "random_forest",
+    }
+    for row in result.candidate_metrics:
+        candidate_path = Path(str(row["candidate_artifact_path"]))
+        assert candidate_path.exists()
+        candidate_artifact = joblib.load(candidate_path)
+        assert candidate_artifact["selected_candidate"] == row["candidate_name"]
+        assert candidate_artifact["candidate_metrics"] == result.candidate_metrics
+    artifact = joblib.load(result.artifact_path)
+    assert artifact["model_version"] == result.model_version
+    assert artifact["selected_candidate"] in {
+        "hist_gradient_boosting",
+        "ridge",
+        "random_forest",
+    }
+    assert artifact["candidate_metrics"] == result.candidate_metrics
+    assert artifact["metrics"]["candidate_count"] == 3
+
+
+def test_train_selected_model_records_selected_feature_importance(
+    tmp_path: Path,
+) -> None:
+    feature_rows = _tiny_feature_rows(
+        feature_version=NON_LEAKY_FEATURE_VERSION,
+        include_latest_price_feature=False,
+    )
+
+    result = train_selected_model(
+        feature_rows=feature_rows,
+        output_dir=tmp_path,
+    )
+
+    artifact = joblib.load(result.artifact_path)
+    feature_importance = artifact["feature_importance"]
+    feature_names = set(artifact["feature_names"])
+
+    assert feature_importance
+    assert {
+        "feature",
+        "importance",
+        "coefficient",
+        "source",
+    } <= set(feature_importance[0])
+    assert all(row["feature"] in feature_names for row in feature_importance)
+    assert not any("price" in row["feature"] for row in feature_importance)
+    assert [row["importance"] for row in feature_importance] == sorted(
+        [row["importance"] for row in feature_importance],
+        reverse=True,
+    )
+
+
+def test_train_selected_model_groups_duplicate_listings_before_split(tmp_path: Path) -> None:
+    feature_rows = _duplicate_listing_feature_rows()
+
+    result = train_selected_model(feature_rows=feature_rows, output_dir=tmp_path)
+
+    artifact = joblib.load(result.artifact_path)
+    train_listing_ids = set(artifact["split"]["train_listing_ids"])
+    test_listing_ids = set(artifact["split"]["test_listing_ids"])
+    assert artifact["split"]["strategy"] == "listing_id_grouped_random"
+    assert train_listing_ids.isdisjoint(test_listing_ids)
+    assert train_listing_ids | test_listing_ids == {1, 2, 3, 4, 5, 6}
+    assert result.metrics["train_listing_groups"] + result.metrics["test_listing_groups"] == 6
+
+
 def test_train_cli_reads_feature_rows_and_writes_artifact(tmp_path: Path, capsys) -> None:
     database_url = _seed_training_database(tmp_path)
     output_dir = tmp_path / "models"
@@ -122,10 +205,30 @@ def test_train_cli_reads_feature_rows_and_writes_artifact(tmp_path: Path, capsys
     assert main(["--database-url", database_url, "--output-dir", str(output_dir), "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
 
-    assert payload["model_version"] == "baseline_ridge_v1"
+    assert payload["feature_version"] == NON_LEAKY_FEATURE_VERSION
+    assert payload["model_version"] == "selected_price_model_v1_non_leaky"
     assert payload["metrics"]["rows_total"] == 12
-    assert payload["metrics"]["mae"] <= payload["metrics"]["naive_mae"]
+    assert payload["metrics"]["candidate_count"] == 3
     assert Path(payload["artifact_path"]).exists()
+
+
+def test_train_cli_defaults_to_selected_non_leaky_model(tmp_path: Path, capsys) -> None:
+    database_url = _seed_training_database(tmp_path)
+    output_dir = tmp_path / "models"
+
+    assert main(["--database-url", database_url, "--output-dir", str(output_dir), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["feature_version"] == NON_LEAKY_FEATURE_VERSION
+    assert payload["model_version"] == "selected_price_model_v1_non_leaky"
+    assert payload["metrics"]["candidate_count"] == 3
+    artifact = joblib.load(payload["artifact_path"])
+    assert artifact["selected_candidate"] in {
+        "hist_gradient_boosting",
+        "ridge",
+        "random_forest",
+    }
+    assert not any("price" in feature_name for feature_name in artifact["feature_names"])
 
 
 def test_train_cli_can_use_non_leaky_feature_version(tmp_path: Path, capsys) -> None:
@@ -149,9 +252,16 @@ def test_train_cli_can_use_non_leaky_feature_version(tmp_path: Path, capsys) -> 
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["feature_version"] == NON_LEAKY_FEATURE_VERSION
-    assert payload["model_version"] == "baseline_ridge_v2_non_leaky"
+    assert payload["model_version"] == "selected_price_model_v1_non_leaky"
     artifact = joblib.load(payload["artifact_path"])
     assert not any("price" in feature_name for feature_name in artifact["feature_names"])
+
+
+def test_trainer_image_defaults_to_selected_model_training() -> None:
+    dockerfile = Path("services/trainer/Dockerfile").read_text(encoding="utf-8")
+
+    assert '"--trainer",' in dockerfile
+    assert '"selected",' in dockerfile
 
 
 def _tiny_feature_rows(

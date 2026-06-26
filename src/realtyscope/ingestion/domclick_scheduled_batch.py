@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from realtyscope.database.models import (
+    AppLog,
     IngestionRun,
     Listing,
     ListingSourceLink,
@@ -29,7 +30,11 @@ from realtyscope.database.real_data_ingestion import (
     inspect_real_source_snapshot,
     persist_real_source_snapshot,
 )
-from realtyscope.database.session import create_database_engine, create_session_factory
+from realtyscope.database.session import (
+    create_database_engine,
+    create_session_factory,
+    session_scope,
+)
 from realtyscope.ingestion.domclick_snapshot_collector import (
     COLLECTOR_VERSION,
     FetchedDomclickSnapshot,
@@ -261,6 +266,33 @@ def build_domclick_ingestion_status(session: Session) -> DomclickIngestionStatus
     )
 
 
+def record_domclick_scheduler_error(
+    *,
+    database_url: str | None = None,
+    level: str = "WARNING",
+    event_type: str = "domclick_scheduled_task_failed",
+    message: str,
+    context: Mapping[str, Any] | None = None,
+    clock: Callable[[], datetime] | None = None,
+) -> AppLog:
+    engine = create_database_engine(database_url)
+    session_factory = create_session_factory(engine)
+    with session_scope(session_factory) as session:
+        logged_at = _clock_now(clock)
+        row = AppLog(
+            level=level,
+            event_type=event_type,
+            message=message,
+            created_at=logged_at,
+            updated_at=logged_at,
+            context=dict(context or {}),
+        )
+        session.add(row)
+        session.flush()
+        session.refresh(row)
+        return row
+
+
 def _prepare_snapshot_dir(
     *,
     source_path: Path | None,
@@ -418,6 +450,14 @@ def _parse_datetime(value: str) -> datetime:
     return parsed
 
 
+def _datetime_json(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.isoformat()
+
+
 def _write_report(
     report: ScheduledDomclickBatchReport,
     *,
@@ -519,6 +559,32 @@ def _add_status_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentP
     status_parser.add_argument("--json", action="store_true", help="Print JSON summary.")
 
 
+def _add_log_error_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    log_parser = subparsers.add_parser(
+        "log-error",
+        help="Record a scheduled Domclick failure in app_logs for monitoring.",
+    )
+    log_parser.add_argument("--database-url", default=None, help="Override database URL.")
+    log_parser.add_argument(
+        "--level",
+        choices=["WARNING", "ERROR"],
+        default="WARNING",
+        help="Monitoring severity to record.",
+    )
+    log_parser.add_argument(
+        "--event-type",
+        default="domclick_scheduled_task_failed",
+        help="Stable app_logs event type.",
+    )
+    log_parser.add_argument("--message", required=True, help="Failure message to show.")
+    log_parser.add_argument(
+        "--context-json",
+        default="{}",
+        help="Optional JSON object with failure context.",
+    )
+    log_parser.add_argument("--json", action="store_true", help="Print JSON summary.")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Run bounded scheduled Domclick batches; this is not a continuous scraper."
@@ -526,6 +592,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
     _add_run_parser(subparsers)
     _add_status_parser(subparsers)
+    _add_log_error_parser(subparsers)
     args = parser.parse_args(argv)
 
     if args.command == "status":
@@ -538,6 +605,34 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "Domclick ingestion status "
                 f"runs={status.ingestion_runs_total} listings={status.listings_total} "
                 f"raw={status.raw_listings_total} rejected={status.rejected_listings_total}"
+            )
+        return 0
+
+    if args.command == "log-error":
+        context = json.loads(args.context_json)
+        if not isinstance(context, dict):
+            raise ValueError("--context-json must be a JSON object")
+        row = record_domclick_scheduler_error(
+            database_url=args.database_url,
+            level=args.level,
+            event_type=args.event_type,
+            message=args.message,
+            context=context,
+        )
+        payload = {
+            "status": "logged",
+            "id": row.id,
+            "level": row.level,
+            "event_type": row.event_type,
+            "message": row.message,
+            "created_at": _datetime_json(row.created_at),
+        }
+        if args.json:
+            _print_json(payload)
+        else:
+            print(
+                "Domclick scheduler error logged "
+                f"id={row.id} level={row.level} event_type={row.event_type}"
             )
         return 0
 

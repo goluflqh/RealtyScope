@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from realtyscope.database.base import Base
-from realtyscope.database.models import IngestionRun, Listing, ListingObservation, Source
+from realtyscope.database.models import AppLog, IngestionRun, Listing, ListingObservation, Source
 from realtyscope.database.session import create_database_engine
 from realtyscope.ingestion.domclick_scheduled_batch import main, run_domclick_scheduled_batch
 from realtyscope.ingestion.domclick_snapshot_collector import FetchedDomclickSnapshot
@@ -303,6 +303,53 @@ def test_scheduled_batch_status_cli_reports_database_counts(tmp_path: Path, caps
         "listings_total": 0,
         "rejected_listings_total": 0,
         "latest_ingestion_run": None,
+    }
+
+
+def test_scheduled_batch_log_error_cli_records_monitoring_event(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    database_url = _sqlite_database_url(tmp_path / "scheduled_log_error.sqlite3")
+    engine = create_database_engine(database_url)
+    Base.metadata.create_all(engine)
+
+    exit_code = main(
+        [
+            "log-error",
+            "--database-url",
+            database_url,
+            "--level",
+            "WARNING",
+            "--event-type",
+            "domclick_scheduled_capture_failed",
+            "--message",
+            "Domclick Chrome capture failed with exit code 1",
+            "--context-json",
+            json.dumps(
+                {
+                    "stage": "capture",
+                    "log_path": "data/processed/runtime_logs/domclick-scheduled-task.log",
+                }
+            ),
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "logged"
+    assert payload["event_type"] == "domclick_scheduled_capture_failed"
+
+    with Session(engine) as session:
+        row = session.scalars(select(AppLog)).one()
+
+    assert row.level == "WARNING"
+    assert row.event_type == "domclick_scheduled_capture_failed"
+    assert row.message == "Domclick Chrome capture failed with exit code 1"
+    assert row.context == {
+        "stage": "capture",
+        "log_path": "data/processed/runtime_logs/domclick-scheduled-task.log",
     }
 
 

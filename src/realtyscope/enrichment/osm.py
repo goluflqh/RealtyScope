@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import lzma
 import math
 import sys
 import time
 import urllib.parse
 import urllib.request
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import asdict, dataclass
-from typing import Any
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, TextIO
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -151,8 +154,14 @@ def persist_osm_features(
     if elements_by_listing_id is not None and fetch_elements is not None:
         raise ValueError("Use either elements_by_listing_id or fetch_elements, not both")
 
-    rows_available, listings = _coordinate_ready_listings(session, limit)
     live_osm_called = fetch_elements is not None
+    rows_available, listings = _coordinate_ready_listings(
+        session,
+        limit,
+        feature_version=feature_version,
+        missing_feature_coordinates_only=live_osm_called,
+        distinct_coordinates=live_osm_called,
+    )
     rows_inserted = 0
     rows_updated = 0
     errors: list[dict[str, str | int]] = []
@@ -206,6 +215,175 @@ def persist_osm_features(
         rows_failed=len(errors),
         selected_listing_ids=tuple(listing.id for listing in listings),
         errors=tuple(errors),
+    )
+
+
+def persist_osm_features_for_matching_coordinates(
+    session: Session,
+    *,
+    feature_version: str = OSM_FEATURE_VERSION,
+    limit: int | None = None,
+) -> OsmPersistenceResult:
+    if limit is not None and limit < 1:
+        raise ValueError("limit must be at least 1")
+
+    source_features = session.scalars(
+        select(OsmFeature)
+        .where(OsmFeature.feature_version == feature_version)
+        .order_by(OsmFeature.listing_id)
+    ).all()
+    source_by_coordinate: dict[tuple[float, float], OsmFeature] = {}
+    for feature in source_features:
+        source_summary = (
+            feature.source_summary if isinstance(feature.source_summary, Mapping) else {}
+        )
+        if source_summary.get("derivation") == "coordinate_exact_match":
+            continue
+        source_by_coordinate.setdefault(
+            (float(feature.latitude), float(feature.longitude)),
+            feature,
+        )
+
+    rows_inserted = 0
+    selected_listing_ids: list[int] = []
+    for (latitude, longitude), source_feature in source_by_coordinate.items():
+        candidate_listings = session.scalars(
+            select(Listing)
+            .where(
+                Listing.has_coordinates.is_(True),
+                Listing.latitude == latitude,
+                Listing.longitude == longitude,
+            )
+            .order_by(Listing.id)
+        ).all()
+        for listing in candidate_listings:
+            existing = session.scalar(
+                select(OsmFeature).where(
+                    OsmFeature.listing_id == listing.id,
+                    OsmFeature.feature_version == feature_version,
+                )
+            )
+            if existing is not None:
+                continue
+            session.add(
+                OsmFeature(
+                    listing_id=listing.id,
+                    latitude=latitude,
+                    longitude=longitude,
+                    feature_version=feature_version,
+                    transport_count_500m=source_feature.transport_count_500m,
+                    transport_count_1000m=source_feature.transport_count_1000m,
+                    nearest_transport_m=source_feature.nearest_transport_m,
+                    schools_count_1000m=source_feature.schools_count_1000m,
+                    parks_count_1000m=source_feature.parks_count_1000m,
+                    shops_count_1000m=source_feature.shops_count_1000m,
+                    healthcare_count_1000m=source_feature.healthcare_count_1000m,
+                    source_summary=_coordinate_match_source_summary(source_feature),
+                )
+            )
+            rows_inserted += 1
+            selected_listing_ids.append(int(listing.id))
+            if limit is not None and rows_inserted >= limit:
+                session.flush()
+                return OsmPersistenceResult(
+                    dry_run=False,
+                    feature_version=feature_version,
+                    attribution=OSM_ATTRIBUTION,
+                    live_osm_called=False,
+                    rows_available=rows_inserted,
+                    rows_selected=len(selected_listing_ids),
+                    rows_inserted=rows_inserted,
+                    rows_updated=0,
+                    rows_failed=0,
+                    selected_listing_ids=tuple(selected_listing_ids),
+                    errors=(),
+                )
+
+    session.flush()
+    return OsmPersistenceResult(
+        dry_run=False,
+        feature_version=feature_version,
+        attribution=OSM_ATTRIBUTION,
+        live_osm_called=False,
+        rows_available=rows_inserted,
+        rows_selected=len(selected_listing_ids),
+        rows_inserted=rows_inserted,
+        rows_updated=0,
+        rows_failed=0,
+        selected_listing_ids=tuple(selected_listing_ids),
+        errors=(),
+    )
+
+
+def persist_osm_features_from_geojson_file(
+    session: Session,
+    geojson_path: Path,
+    *,
+    limit: int = 50,
+    radius_m: int = 1000,
+    feature_version: str = OSM_FEATURE_VERSION,
+) -> OsmPersistenceResult:
+    if limit < 1:
+        raise ValueError("limit must be at least 1")
+    if radius_m < 1:
+        raise ValueError("radius_m must be at least 1")
+
+    rows_available, listings = _coordinate_ready_listings(
+        session,
+        limit,
+        feature_version=feature_version,
+        missing_feature_coordinates_only=True,
+        distinct_coordinates=True,
+    )
+    index = _GeoJsonElementIndex.from_file(geojson_path, radius_m=radius_m)
+
+    rows_inserted = 0
+    rows_updated = 0
+    for listing in listings:
+        elements = index.elements_near(
+            float(listing.latitude),
+            float(listing.longitude),
+        )
+        record = compute_osm_features(
+            _listing_record(listing),
+            elements,
+            radii_m=(500, radius_m),
+        ).as_record()
+        record["feature_version"] = feature_version
+        record["source_summary"] = {
+            **record["source_summary"],
+            "attribution": OSM_ATTRIBUTION,
+            "live_osm_called": False,
+            "source": "bbbike_geojson_extract",
+            "source_file": geojson_path.name,
+            "source_features_indexed": index.feature_count,
+        }
+        existing = session.scalar(
+            select(OsmFeature).where(
+                OsmFeature.listing_id == listing.id,
+                OsmFeature.feature_version == feature_version,
+            )
+        )
+        if existing is None:
+            session.add(OsmFeature(listing_id=listing.id, **record))
+            rows_inserted += 1
+        else:
+            _copy_osm_record(existing, record)
+            rows_updated += 1
+
+    session.flush()
+    return OsmPersistenceResult(
+        dry_run=False,
+        feature_version=feature_version,
+        attribution=OSM_ATTRIBUTION,
+        live_osm_called=False,
+        rows_available=rows_available,
+        rows_selected=len(listings),
+        rows_inserted=rows_inserted,
+        rows_updated=rows_updated,
+        rows_failed=0,
+        selected_listing_ids=tuple(listing.id for listing in listings),
+        errors=(),
     )
 
 
@@ -278,6 +456,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Fetch bounded OSM elements from Overpass for selected coordinate-ready listings.",
     )
+    parser.add_argument(
+        "--derive-coordinate-matches",
+        action="store_true",
+        help="Copy existing OSM features to listings with the exact same coordinates.",
+    )
+    parser.add_argument(
+        "--geojson-file",
+        type=Path,
+        help=(
+            "Local BBBike/Osmium GeoJSON or GeoJSON.xz extract; computes features offline "
+            "without calling Overpass."
+        ),
+    )
     parser.add_argument("--radius-m", type=int, default=1000, help="Overpass radius in meters.")
     parser.add_argument(
         "--delay-seconds",
@@ -292,6 +483,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Live Overpass request timeout.",
     )
     parser.add_argument("--overpass-url", default=OVERPASS_API_URL, help="Overpass API URL.")
+    parser.add_argument(
+        "--progress-log",
+        type=Path,
+        default=None,
+        help="Append one JSONL batch evidence row after a successful dry-run or write.",
+    )
     parser.add_argument("--json", action="store_true", help="Print JSON output.")
     args = parser.parse_args(argv)
 
@@ -303,8 +500,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--delay-seconds must be zero or greater")
     if args.timeout_seconds <= 0:
         parser.error("--timeout-seconds must be greater than zero")
-    if args.elements_file is not None and args.live_overpass:
-        parser.error("Use either --elements-file or --live-overpass, not both")
+    write_modes = [
+        args.elements_file is not None,
+        args.live_overpass,
+        args.derive_coordinate_matches,
+        args.geojson_file is not None,
+    ]
+    if sum(write_modes) > 1:
+        parser.error(
+            "Use only one of --elements-file, --live-overpass, or --derive-coordinate-matches"
+        )
 
     if not args.dry_run:
         if not args.write:
@@ -314,16 +519,34 @@ def main(argv: Sequence[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 2
-        if args.elements_file is None and not args.live_overpass:
+        if (
+            args.elements_file is None
+            and not args.live_overpass
+            and not args.derive_coordinate_matches
+            and args.geojson_file is None
+        ):
             print(
-                "Provide --elements-file or --live-overpass when using --write.",
+                "Provide --elements-file, --live-overpass, --derive-coordinate-matches, "
+                "or --geojson-file when using --write.",
                 file=sys.stderr,
             )
             return 2
 
         engine = create_database_engine(args.database_url)
         with Session(engine) as session:
-            if args.elements_file is not None:
+            if args.derive_coordinate_matches:
+                result = persist_osm_features_for_matching_coordinates(
+                    session,
+                    limit=args.limit,
+                )
+            elif args.geojson_file is not None:
+                result = persist_osm_features_from_geojson_file(
+                    session,
+                    args.geojson_file,
+                    limit=args.limit,
+                    radius_m=args.radius_m,
+                )
+            elif args.elements_file is not None:
                 result = persist_osm_features(
                     session,
                     elements_by_listing_id=_load_elements_by_listing_id(args.elements_file),
@@ -345,6 +568,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             session.commit()
 
         payload = result.as_payload()
+        _append_progress_log(
+            args.progress_log,
+            operation=_operation_name(args),
+            result=payload,
+            args=args,
+        )
         if args.json:
             print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
         else:
@@ -363,7 +592,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 2
 
-    payload = _build_dry_run_payload(args.database_url, args.limit)
+    payload = _build_dry_run_payload(
+        args.database_url,
+        args.limit,
+        live_overpass_selection=args.live_overpass,
+    )
+    _append_progress_log(
+        args.progress_log,
+        operation=_operation_name(args),
+        result=payload,
+        args=args,
+    )
     if args.json:
         print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     else:
@@ -375,28 +614,116 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-def _build_dry_run_payload(database_url: str | None, limit: int) -> dict[str, Any]:
+def _operation_name(args: argparse.Namespace) -> str:
+    if args.derive_coordinate_matches:
+        return "derive_coordinate_matches"
+    if args.geojson_file is not None:
+        return "geojson_file"
+    if args.live_overpass:
+        return "live_overpass" if args.write else "dry_run_live_overpass"
+    if args.elements_file is not None:
+        return "elements_file"
+    return "dry_run"
+
+
+def _append_progress_log(
+    path: Path | None,
+    *,
+    operation: str,
+    result: Mapping[str, Any],
+    args: argparse.Namespace,
+) -> None:
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    evidence = {
+        "timestamp_utc": datetime.now(UTC).isoformat(),
+        "operation": operation,
+        "database_url_provided": args.database_url is not None,
+        "limit": args.limit,
+        "radius_m": args.radius_m,
+        "delay_seconds": args.delay_seconds,
+        "timeout_seconds": args.timeout_seconds,
+        "overpass_url": args.overpass_url if args.live_overpass else None,
+        "elements_file": getattr(args.elements_file, "name", None),
+        "geojson_file": str(args.geojson_file) if args.geojson_file is not None else None,
+        "result": result,
+    }
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(evidence, ensure_ascii=False, sort_keys=True))
+        handle.write("\n")
+
+
+def _build_dry_run_payload(
+    database_url: str | None,
+    limit: int,
+    *,
+    live_overpass_selection: bool = False,
+) -> dict[str, Any]:
     engine = create_database_engine(database_url)
     with Session(engine) as session:
-        rows_available, listings = _coordinate_ready_listings(session, limit)
+        rows_available, listings = _coordinate_ready_listings(
+            session,
+            limit,
+            missing_feature_coordinates_only=live_overpass_selection,
+            distinct_coordinates=live_overpass_selection,
+        )
 
     return {
         "attribution": OSM_ATTRIBUTION,
         "dry_run": True,
         "feature_version": OSM_FEATURE_VERSION,
         "live_osm_called": False,
+        "selection_mode": "live_overpass_missing_distinct_coordinates"
+        if live_overpass_selection
+        else "coordinate_ready_listings",
         "rows_available": rows_available,
         "rows_selected": len(listings),
         "selected_listing_ids": [listing.id for listing in listings],
     }
 
 
-def _coordinate_ready_listings(session: Session, limit: int) -> tuple[int, list[Listing]]:
+def _coordinate_ready_listings(
+    session: Session,
+    limit: int,
+    *,
+    feature_version: str = OSM_FEATURE_VERSION,
+    missing_feature_coordinates_only: bool = False,
+    distinct_coordinates: bool = False,
+) -> tuple[int, list[Listing]]:
     coordinate_filter = (
         Listing.has_coordinates.is_(True),
         Listing.latitude.is_not(None),
         Listing.longitude.is_not(None),
     )
+    if missing_feature_coordinates_only or distinct_coordinates:
+        existing_feature_coordinates = (
+            {
+                (float(latitude), float(longitude))
+                for latitude, longitude in session.execute(
+                    select(OsmFeature.latitude, OsmFeature.longitude).where(
+                        OsmFeature.feature_version == feature_version
+                    )
+                )
+            }
+            if missing_feature_coordinates_only
+            else set()
+        )
+        representatives: list[Listing] = []
+        seen_coordinates: set[tuple[float, float]] = set()
+        listings = session.scalars(
+            select(Listing).where(*coordinate_filter).order_by(Listing.id)
+        ).all()
+        for listing in listings:
+            coordinate = (float(listing.latitude), float(listing.longitude))
+            if coordinate in seen_coordinates:
+                continue
+            seen_coordinates.add(coordinate)
+            if coordinate in existing_feature_coordinates:
+                continue
+            representatives.append(listing)
+        return len(representatives), representatives[:limit]
+
     rows_available = (
         session.scalar(select(func.count()).select_from(Listing).where(*coordinate_filter)) or 0
     )
@@ -404,6 +731,148 @@ def _coordinate_ready_listings(session: Session, limit: int) -> tuple[int, list[
         select(Listing).where(*coordinate_filter).order_by(Listing.id).limit(limit)
     ).all()
     return int(rows_available), listings
+
+
+@dataclass(frozen=True)
+class _GeoJsonElementIndex:
+    cells: dict[tuple[int, int], list[dict[str, Any]]]
+    cell_size_degrees: float
+    radius_m: int
+    feature_count: int
+
+    @classmethod
+    def from_file(cls, path: Path, *, radius_m: int) -> _GeoJsonElementIndex:
+        cell_size_degrees = max(radius_m / 111_000, 0.001)
+        cells: dict[tuple[int, int], list[dict[str, Any]]] = {}
+        feature_count = 0
+        with _open_geojson_text(path) as handle:
+            for feature in _iter_geojson_features(handle):
+                element = _geojson_feature_to_osm_element(feature)
+                if element is None:
+                    continue
+                latitude = float(element["lat"])
+                longitude = float(element["lon"])
+                cell = _geojson_cell(latitude, longitude, cell_size_degrees)
+                cells.setdefault(cell, []).append(element)
+                feature_count += 1
+        return cls(
+            cells=cells,
+            cell_size_degrees=cell_size_degrees,
+            radius_m=radius_m,
+            feature_count=feature_count,
+        )
+
+    def elements_near(self, latitude: float, longitude: float) -> list[dict[str, Any]]:
+        center_lat, center_lon = _geojson_cell(latitude, longitude, self.cell_size_degrees)
+        # Include a small neighborhood so boundary coordinates do not miss nearby features.
+        search_radius = 2
+        elements: list[dict[str, Any]] = []
+        for lat_cell in range(center_lat - search_radius, center_lat + search_radius + 1):
+            for lon_cell in range(center_lon - search_radius, center_lon + search_radius + 1):
+                elements.extend(self.cells.get((lat_cell, lon_cell), ()))
+        return elements
+
+
+def _open_geojson_text(path: Path) -> TextIO:
+    if path.suffix == ".xz":
+        return lzma.open(path, "rt", encoding="utf-8", errors="replace")
+    return path.open("r", encoding="utf-8", errors="replace")
+
+
+def _iter_geojson_features(handle: TextIO) -> Iterator[Mapping[str, Any]]:
+    text = handle.read()
+    if not text.strip():
+        return
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        yield from _iter_line_delimited_geojson_features(text)
+        return
+    yield from _iter_geojson_payload_features(payload)
+
+
+def _iter_line_delimited_geojson_features(text: str) -> Iterator[Mapping[str, Any]]:
+    for line in text.splitlines():
+        stripped = line.strip()
+        if '"Feature"' not in stripped:
+            continue
+        if stripped.endswith(","):
+            stripped = stripped[:-1]
+        payload = json.loads(stripped)
+        yield from _iter_geojson_payload_features(payload)
+
+
+def _iter_geojson_payload_features(payload: Any) -> Iterator[Mapping[str, Any]]:
+    if isinstance(payload, Mapping):
+        payload_type = payload.get("type")
+        if payload_type == "Feature":
+            yield payload
+            return
+        if payload_type == "FeatureCollection":
+            features = payload.get("features")
+            if isinstance(features, Sequence) and not isinstance(features, str):
+                for feature in features:
+                    yield from _iter_geojson_payload_features(feature)
+            return
+    if isinstance(payload, Sequence) and not isinstance(payload, str):
+        for feature in payload:
+            yield from _iter_geojson_payload_features(feature)
+
+
+def _geojson_feature_to_osm_element(feature: Mapping[str, Any]) -> dict[str, Any] | None:
+    properties = feature.get("properties")
+    if not isinstance(properties, Mapping) or not _categories(properties):
+        return None
+    geometry = feature.get("geometry")
+    if not isinstance(geometry, Mapping):
+        return None
+    coordinates = _geojson_geometry_center(geometry)
+    if coordinates is None:
+        return None
+    return {
+        "type": "geojson_feature",
+        "lat": coordinates[0],
+        "lon": coordinates[1],
+        "tags": dict(properties),
+    }
+
+
+def _geojson_geometry_center(geometry: Mapping[str, Any]) -> tuple[float, float] | None:
+    raw_coordinates = geometry.get("coordinates")
+    if raw_coordinates is None:
+        return None
+    points: list[tuple[float, float]] = []
+    _collect_geojson_points(raw_coordinates, points)
+    if not points:
+        return None
+    return (
+        sum(point[0] for point in points) / len(points),
+        sum(point[1] for point in points) / len(points),
+    )
+
+
+def _collect_geojson_points(raw: Any, points: list[tuple[float, float]]) -> None:
+    if (
+        isinstance(raw, Sequence)
+        and not isinstance(raw, str)
+        and len(raw) >= 2
+        and isinstance(raw[0], int | float)
+        and isinstance(raw[1], int | float)
+    ):
+        longitude = float(raw[0])
+        latitude = float(raw[1])
+        points.append((latitude, longitude))
+        return
+    if isinstance(raw, Sequence) and not isinstance(raw, str):
+        for item in raw:
+            _collect_geojson_points(item, points)
+
+
+def _geojson_cell(latitude: float, longitude: float, cell_size_degrees: float) -> tuple[int, int]:
+    return (
+        math.floor(latitude / cell_size_degrees),
+        math.floor(longitude / cell_size_degrees),
+    )
 
 
 def _listing_record(listing: Listing) -> dict[str, float | None]:
@@ -421,6 +890,23 @@ def _copy_osm_record(feature: OsmFeature, record: Mapping[str, Any]) -> None:
     feature.shops_count_1000m = record["shops_count_1000m"]
     feature.healthcare_count_1000m = record["healthcare_count_1000m"]
     feature.source_summary = record["source_summary"]
+
+
+def _coordinate_match_source_summary(source_feature: OsmFeature) -> dict[str, Any]:
+    source_summary = (
+        dict(source_feature.source_summary)
+        if isinstance(source_feature.source_summary, Mapping)
+        else {}
+    )
+    return {
+        **source_summary,
+        "attribution": source_summary.get("attribution", OSM_ATTRIBUTION),
+        "derivation": "coordinate_exact_match",
+        "derived_from_listing_id": int(source_feature.listing_id),
+        "source_feature_version": source_feature.feature_version,
+        "source_live_osm_called": bool(source_summary.get("live_osm_called")),
+        "live_osm_called": False,
+    }
 
 
 def _load_elements_by_listing_id(file_obj: Any) -> dict[int, list[Mapping[str, Any]]]:

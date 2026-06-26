@@ -11,8 +11,12 @@ WORKDIR /app
 RUN pip install --no-cache-dir "uv==0.11.3"
 
 COPY --from=app_deps pyproject.toml uv.lock README.md ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --extra api --extra data --no-install-project
+
 COPY --from=app_src . ./src
-RUN uv sync --frozen --no-dev --extra api --extra data --no-editable
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --python .venv/bin/python --no-deps .
 
 COPY --from=app_services . ./services
 

@@ -6,34 +6,33 @@ Audience: course reviewer, project operator, and future demo sessions.
 
 This script is the short defense path for showing RealtyScope without reloading the full project history. It assumes the repository is already cloned on the Windows workstation and that WSL2 Ubuntu has Docker available.
 
-Phase 9 note: this script still describes the Phase 7 `main` demo path, but Phase 9 non-UI readiness is now merged into `main` through PR `#1` and squash commit `5a2ae2a`, with post-merge GitHub Actions `ci` run `27856530977` passing. Use `docs/phase9-evidence-20260620.md` for the latest integration evidence, recovered Russian UI smoke on `127.0.0.1:8504`, selected-model MLOps/API readiness, and remaining UI caveats.
+## Current UI Branch Note
 
-## Phase 9 Local Readiness Addendum
+2026-06-26 live data refresh note: after the 00:00 scheduled run hit a Domclick QRATOR challenge, a controlled Chrome/CDP preflight succeeded and a bounded 50-page capture wrote `data/raw/domclick/2026-06-26-bulk` with `1,000` records. The ingest report is `data/processed/domclick_reports/domclick-20260626T012727-535110Z.json`; it committed run id `26` with `1,000` normalized records, `241` listings created, `759` listings updated, and `999` observations inserted. Docker `/monitoring/status` now reports `17,287` listings (`14,851` Domclick, `2,436` CIAN), `45,764` observations, `23` observation dates, and last observed date `2026-06-26`. Keep the model caveat explicit: `/model/metadata` still serves the selected `random_forest` artifact trained before this refresh with `rows_total=17,046`. The monitoring payload and UI now show this as `model.data_freshness.status=validated_snapshot`, `row_delta=241`, and `requires_retrain=false`; retrain only after a candidate passes the promotion gate.
 
-Use this addendum only when the demo is about Phase 9 readiness rather than the merged Phase 7 `main` path.
+For the retained 2026-06-24 Stitch hybrid UI branch, use workspace `E:\Магистр\2-курс\python\RealtyScope-stitch-hybrid-redesign-20260623` and branch `ui/stitch-hybrid-redesign-20260623`. The latest static/UI evidence is no longer the older `3,019`-row Phase 7 runtime snapshot: `python output\playwright\generate_static_audit.py` verifies the real live API payload with `17,046` listings (`14,610` Домклик, `2,436` ЦИАН), valuation comparable listings with real source links, real map coordinates/popups, restored data-table columns, robust real deal scoring, boundary-backed district analytics, and monitoring with bounded logs.
 
-What can be claimed from current local evidence:
+Current defense script update: use the active integration worktree `E:\Магистр\2-курс\python\RealtyScope-stitch-hybrid-redesign-20260623` on branch `integration/realtyscope-grade5-final-20260625` for the freshest evidence. The paragraph above is historical branch context; the 2026-06-26 Docker evidence is the current runtime truth.
 
-- Phase 8 scheduler readiness is preserved on `ops/domclick-scheduler-validated-20260619`; the 2026-06-19 and 2026-06-20 automatic runs both finished with Task Scheduler result `0` and 2000 records in the runtime logs/reports.
-- Phase 9A data/backend readiness is verified on split branches for teammate import and PostgreSQL guardrails; the current local runtime has real PostgreSQL `/data` total `14755`, filtered total `4676`, and a Redis filtered cache key proof.
-- Phase 9B MLOps readiness is verified on `ml/model-promotion-workflow`; it covers dry-run compare, gated promote/reject, rollback/selection behavior, decision reports, CLI behavior, and tests.
-- Phase 9C API/monitoring readiness is verified on `api/phase9-selected-model-monitoring-20260620`; an isolated `127.0.0.1:8011` smoke showed `/model/metadata` and `/monitoring/status` returning active model metadata plus a temp selected-model payload with rollback available.
-- Phase 9D UI is intentionally deferred. If shown, use only `ui/recovered-real-data-dashboard-20260620` and the recovered real-data Russian UI evidence. Do not use the rejected `ui/realtyscope-ultimate-redesign` branch as the target.
+2026-06-25 latest runtime note: Docker `127.0.0.1:8000` and Streamlit `127.0.0.1:8501` are freshly verified from the retained Stitch hybrid branch. `/model/metadata` reports `selected_price_model_v1_non_leaky` with `selected_candidate=random_forest`, `model_selection_mode=best_metric`, `candidate_count=3`, `r2=0.8653013476373554`, `mae=7,638,132.733793359`, `rows_total=17,046`, and non-empty `feature_importance`. `/stats/data-quality` reports full persisted OSM feature coverage: `osm_features_total=17,046`, `osm_featured_listings=17,046`, `osm_coverage_pct=100.0`, with provenance `local_extract+live_overpass+coordinate_exact_match`. `/stats/exposure-forecast` reports `status=ready`, `can_forecast=true`, `target_source=observation_gap_inferred_lifecycle`, and `inferred_lifecycle_target_rows=4,962`; terminal sale/removal lifecycle remains unavailable with `terminal_lifecycle_target_rows=0`. `/stats/observation-trend` remains a separate analytic trend forecast with `can_forecast=true`, `forecast_method=linear_median_price_per_m2_v1`, `history_points=22`, and forecast dates `2026-06-25` through `2026-07-01`. Older lines below that call observed lower-bound exposure the primary forecast, name `hist_gradient_boosting`, or describe partial OSM coverage are historical.
 
-What must not be claimed yet:
+Monitoring note for this branch: the static snapshot UI now includes `Статус контуров`. In local snapshot mode it explicitly marks PostgreSQL and Redis as `НЕ ПРОВЕРЕНО`; prove live DB/cache only with the Docker/API/Redis checks below.
 
-- Phase 9 non-UI integration has been pushed, opened as PR `#1`, merged into `main` at `5a2ae2a`, and proven by post-merge GitHub Actions `ci` run `27856530977`.
-- Local `main` is ahead of `origin/main` by mixed commits and must not be pushed as the Phase 9 publication path.
-- The recovered Russian UI is not the final integrated Phase 9 UI until it is deliberately resumed from the recovered branch and verified again against real API/PostgreSQL data.
+Latest live runtime smoke for this branch on `2026-06-24`: after building and starting Redis, MLflow, API, and Streamlit from this workspace, Compose showed `db`, `redis`, `api`, and `streamlit` healthy and `mlflow` up. Runtime `/monitoring/status` reported `16,512` listings, `42,765` observations, `21` observation dates, `1,300` listing IDs with price changes, `lifecycle_target_rows=0`, and service rows `api/database/cache/model/ingestion=ok`. `/predict` returned `27,115,216.38` RUB for the full 23-feature demo vector with `baseline_ridge_v2_non_leaky`, `rows_total=8,366`, and `r2=0.6231827045433119`. MLflow registry showed `realtyscope-price-model` version `4` status `READY`. Redis scan observed a filtered `/data` cache key, but it expires quickly on the short TTL path; call the filtered `/data` URL immediately before scanning.
 
-For future Phase 9 follow-up work, the minimum readiness sequence is:
+Runtime caveat: after the long cold Docker build, a few new WSL launch attempts returned `Wsl/Service/0x8007274c` while already-running containers and localhost endpoints still responded. Before a live defense, re-run a short `docker compose ps` and endpoint smoke rather than assuming the WSL shell remains stable.
 
-1. Start from `origin/main` or a dedicated clean worktree, not mixed local `main`.
-2. Re-check GitNexus index freshness before any route/shared-symbol impact analysis after each non-trivial branch switch or commit.
-3. Run `git diff --check`, full `ruff check .`, full `ruff format --check .`, and full `pytest -q -p no:cacheprovider` on the integration branch after the final docs refresh.
-4. Rebuild/smoke Docker Compose config, FastAPI, PostgreSQL, Redis, and MLflow from the integration branch. Streamlit/UI remains deferred unless explicitly included.
-5. Re-run the selected-model API smoke, Redis filtered cache proof, and read-only scheduler evidence check.
-6. Push/open PR only after the branch is clean and its workstream requirements are complete; wait for GitHub Actions `ci` before any merge.
+District note for this branch: `Сегменты и районы` now uses real Moscow district boundary polygons from `GIS-Lab/OpenStreetMap` plus address fallback. After the 2026-06-26 refresh, persisted OSM feature coverage is `17,046 / 17,287` listings (`98.61%`), not `100.0%` of the refreshed table. Present it as real boundary-backed district analytics with high persisted OSM feature coverage, while keeping provenance precise: local BBBike extract rows, earlier live Overpass rows, and exact-coordinate-derived rows.
+
+Keep the caveat explicit during a defense: OSM feature coverage is persisted local-extract/live/derived coverage, not a claim that every row was independently fetched from live Overpass, and it is currently `98.61%` after the latest Domclick refresh. Exposure-duration forecast is not a confirmed sale/removal model: monitoring uses observation-gap inferred lifecycle evidence, but terminal lifecycle target rows remain `0`. If asked about observation days, use the current persisted API/DB direction from the latest evidence: `23` distinct observed dates from `2026-05-14` to `2026-06-26`, `45,764` observations, `7,956` listings observed on multiple dates, max `21` dates for one listing, and `1,470` listing IDs with price changes.
+
+If the reviewer asks whether repeated observations exist in PostgreSQL, use the latest DB evidence rather than guessing: `listing_observations` has `42,765` persisted observations across `21` dates, `7,456` source listing IDs with multiple observed dates, max `19` dates per listing, and `1,300` listing IDs with price changes. The reason exposure forecast is still absent is not lack of repeated observations; it is that every persisted observation is still `status=observed` and `active=true`, so there are `0` terminal lifecycle target rows.
+
+Trend readiness is also partial, not missing. The monitoring page now shows `Готовность тренда`: latest API/static evidence has `45,764` persisted observations across `23` dates, `7,956` listings with observation history, and `1,470` listing IDs with price changes. Present this as descriptive trend evidence unless showing the separate `/stats/observation-trend` forecast payload; do not call it forecast-vs-actual or a promoted time-series model.
+
+The dashboard trend chart is now backed by `/stats/observation-trend`, not by the 1,000-row listing preview. Latest static/CDP evidence has trend data through `2026-06-26`, with daily median `price_per_m2` values from persisted `listing_observations`. Say "descriptive trend series" unless explicitly opening the forecast fields; do not say it validates forecast-vs-actual.
+
+Selected model / exposure update for the retained branch: Docker API evidence on `127.0.0.1:8000` now selects `selected_price_model_v1_non_leaky` with `random_forest`, `candidate_count=3`, validation `r2=0.8653013476373554`, `mae=7,638,132.733793359`, and `17,046` training rows. Exposure now has a real inferred lifecycle forecast from repeated observation gaps: `inferred_lifecycle_target_rows=4,962`, median inferred exposure `6` days, max `19` days, and `target_source=observation_gap_inferred_lifecycle`; keep saying terminal sale/removal lifecycle remains `0`, so this is not a confirmed sale/removal exposure model.
 
 ## 0. What To Say Up Front
 
@@ -54,13 +53,13 @@ Important caveat: the model is an honest non-leaky baseline appraisal model, not
 Run from PowerShell. Use WSL2 because Docker is not available in this workstation's PowerShell PATH.
 
 ```powershell
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope up --build -d"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope-stitch-hybrid-redesign-20260623 && docker compose -p realtyscope up --build -d"
 ```
 
 Check service state:
 
 ```powershell
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope ps"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope-stitch-hybrid-redesign-20260623 && docker compose -p realtyscope ps"
 ```
 
 Expected demo evidence:
@@ -90,8 +89,8 @@ What to point out:
 
 - `/data` is assignment-compatible and backed by persisted PostgreSQL rows;
 - filters cover price range, area range, rooms, source, and address/city search;
-- `/model/metadata` reports `realtyscope-price-model`, model version `baseline_ridge_v2_non_leaky`, feature version `ml_features_v2_non_leaky`, 23 features, and validation metrics;
-- `/monitoring/status` shows data-quality counts, latest ingestion run status, model status, and recent errors.
+- `/model/metadata` reports the promoted selected model artifact, currently `selected_price_model_v1_non_leaky` / `random_forest`, feature version `ml_features_v2_non_leaky`, validation metrics, and the freshness caveat that it was trained on `17,046` rows while the database now has `17,287` listings;
+- `/monitoring/status` shows data-quality counts, latest ingestion run status, model status, bounded sanitized `recent_logs`, compatibility `recent_errors`, and service rows for API/PostgreSQL/Redis/model/ingestion.
 
 ## 3. Prove Redis Cache Behavior
 
@@ -104,10 +103,10 @@ wsl -d Ubuntu -- bash -lc "curl -sS -o /dev/null -w '%{http_code}' 'http://local
 Inspect cache keys without dumping payload contents:
 
 ```powershell
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli --scan --pattern 'realtyscope:*' | sort | head -20"
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli EXISTS 'realtyscope:listings:v1:limit=3:offset=0:min_price_rub=10000000:rooms=2'"
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli TTL 'realtyscope:listings:v1:limit=3:offset=0:min_price_rub=10000000:rooms=2'"
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope exec -T redis redis-cli STRLEN 'realtyscope:listings:v1:limit=3:offset=0:min_price_rub=10000000:rooms=2'"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope-stitch-hybrid-redesign-20260623 && docker compose -p realtyscope exec -T redis redis-cli --scan --pattern 'realtyscope:*' | sort | head -20"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope-stitch-hybrid-redesign-20260623 && docker compose -p realtyscope exec -T redis redis-cli EXISTS 'realtyscope:listings:v2:limit=1:offset=0:min_price_rub=10000000:rooms=2'"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope-stitch-hybrid-redesign-20260623 && docker compose -p realtyscope exec -T redis redis-cli TTL 'realtyscope:listings:v2:limit=1:offset=0:min_price_rub=10000000:rooms=2'"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope-stitch-hybrid-redesign-20260623 && docker compose -p realtyscope exec -T redis redis-cli STRLEN 'realtyscope:listings:v2:limit=1:offset=0:min_price_rub=10000000:rooms=2'"
 ```
 
 Expected evidence:
@@ -142,7 +141,7 @@ Demo path:
 5. Point out visible OpenStreetMap attribution under the map. The map uses persisted listing coordinates and makes no live OSM/Overpass calls.
 6. In `Prediction`, keep default values or adjust area/rooms/floor, then press `Run baseline prediction`.
 7. Show the predicted price, model version, feature version, caveat, and metrics summary.
-8. In `Monitoring & Model`, show the monitoring section, including the `Last successful collection` timestamp/source/record count.
+8. In `Monitoring & Model`, show the monitoring section, including the `Last successful collection` timestamp/source/record count and service-contour status.
 9. Show `Model insights` with feature importance.
 
 ## 5. Show MLflow Evidence
@@ -157,7 +156,7 @@ What to point out:
 - verified model version: `3`;
 - run ID: `4999892d2d92402ab78e1209203c338e`;
 - model URI: `runs:/4999892d2d92402ab78e1209203c338e/model`;
-- artifact path: `data/processed/models/phase5/baseline_ridge_v2_non_leaky.joblib`.
+- artifact path: `data/processed/models/phase5/selected_price_model_v1_non_leaky.joblib`.
 
 Optional REST checks:
 
@@ -171,30 +170,38 @@ wsl -d Ubuntu -- bash -lc "python3 -c \"import json, urllib.parse, urllib.reques
 Only run this if the reviewer asks to reproduce MLflow training evidence. It may take longer than the dashboard/API demo.
 
 ```powershell
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope --profile tools run --build --rm trainer"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope-stitch-hybrid-redesign-20260623 && docker compose -p realtyscope --profile tools run --build --rm trainer"
 ```
 
 After it finishes, refresh MLflow and `/model/metadata`.
+
+Optional selected-model training path for the retained Stitch branch:
+
+```powershell
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope-stitch-hybrid-redesign-20260623 && PYTHONPATH=src python -m realtyscope.ml.train --feature-version ml_features_v2_non_leaky --trainer selected --output-dir data/processed/models/phase5 --mlflow-tracking-uri http://localhost:5000 --mlflow-registered-model-name realtyscope-price-model --json"
+```
+
+Use this only when you will verify the resulting artifact and rebuild/restart API/Streamlit. Until that is done, live `/model/metadata` still represents the currently promoted selected-model snapshot, not a newly trained model on the refreshed `17,287`-listing database.
 
 ## 7. Clean Stop Without Data Loss
 
 For routine demos, stop services without deleting named volumes:
 
 ```powershell
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope stop"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope-stitch-hybrid-redesign-20260623 && docker compose -p realtyscope stop"
 ```
 
 Or remove containers and the Compose network while keeping named volumes:
 
 ```powershell
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope down"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope-stitch-hybrid-redesign-20260623 && docker compose -p realtyscope down"
 ```
 
 Do not run these destructive cleanup commands during course-readiness work unless the goal is an intentional full reset and the data/model artifacts have been exported or are no longer needed:
 
 ```powershell
 # Destructive: removes PostgreSQL, Redis, MLflow, and model artifact volumes for this Compose project.
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope down -v"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope-stitch-hybrid-redesign-20260623 && docker compose -p realtyscope down -v"
 
 # Destructive and broader: can remove unrelated Docker volumes from other projects.
 wsl -d Ubuntu -- bash -lc "docker system prune --volumes"
@@ -209,9 +216,47 @@ git diff --check
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m ruff format --check .
 .\.venv\Scripts\python.exe -m pytest -p no:cacheprovider
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose -p realtyscope ps"
+wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope-stitch-hybrid-redesign-20260623 && docker compose -p realtyscope ps"
 wsl -d Ubuntu -- bash -lc "curl -sS -o /dev/null -w '%{http_code}' http://localhost:8000/health"
 wsl -d Ubuntu -- bash -lc "curl -sS -o /dev/null -w '%{http_code}' http://localhost:8501"
 ```
 
 Then wait for GitHub Actions `ci` on the active branch, and after final merge, on `main`.
+
+## 9. Current UI Branch Caveat
+
+On 2026-06-24 the Stitch hybrid branch restored backend source metadata and real source mix stats in code. Verification through a temporary local API on `127.0.0.1:8010` against the real database showed:
+
+- `/data` rows include source name, source label, source listing id, source URL, and observed timestamp.
+- `/stats/data-quality` includes `source_counts`: `cian=2,436`, `domclick=14,076`.
+- Static/CDP audit generated from that API reported `api 16512 {'cian': 2436, 'domclick': 14076}` and ended with `remaining_audit_chrome=0`.
+
+The already-running Docker API on `127.0.0.1:8000` was still the older image in that same session: health/model endpoints responded, but `/data` did not yet include source fields. Before a final live demo from Docker ports `8000/8501`, rebuild/restart the API and Streamlit containers from this branch once Docker/WSL is available.
+
+### Update After Docker Rebuild
+
+WSL later recovered and Docker `api` / `streamlit` were rebuilt from this branch. Current Docker-port evidence:
+
+- `/data?limit=1` includes source metadata and a real listing URL.
+- `/stats/data-quality` includes `source_counts`: `cian=2,436`, `domclick=14,076`.
+- `/model/metadata` reports `baseline_ridge_v2_non_leaky`, `23` features, ready status.
+- `/monitoring/status` reports environment `docker` and service rows for API, PostgreSQL, Redis, model, and ingestion.
+- `/predict` returns `27,115,216.38317985` RUB for the full 23-feature demo vector and includes the baseline caveat.
+- Streamlit health returns `200 ok`.
+- Static/CDP audit from Docker `8000` reports `api 16512 {'cian': 2436, 'domclick': 14076}` and `remaining_audit_chrome=0`.
+
+WSL still intermittently returns `Wsl/Service/0x8007274c`. If WSL fails during a live check, verify already-published localhost endpoints first, then retry WSL/Compose after the transport recovers.
+
+## 10. Screenshot Evidence
+
+The current CDP audit writes a reviewer screenshot set under `output/playwright/`:
+
+- `realtyscope-static-grade5-dashboard.png`
+- `realtyscope-static-grade5-valuation.png`
+- `realtyscope-static-grade5-map.png`
+- `realtyscope-static-grade5-deals.png`
+- `realtyscope-static-grade5-segments.png`
+- `realtyscope-static-grade5-data.png`
+- `realtyscope-static-grade5-monitoring.png`
+
+The same audit fails if checked UI controls/card titles are clipped or if visible page cards overlap. Latest run: all seven pages reported `clippedCount=0` and `overlapCount=0`; the map loaded real tiles and verified zoom plus a real listing popup.

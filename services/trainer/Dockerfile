@@ -11,14 +11,20 @@ WORKDIR /app
 RUN pip install --no-cache-dir "uv==0.11.3"
 
 COPY --from=app_deps pyproject.toml uv.lock README.md ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --extra data --extra ml --no-install-project
+
 COPY --from=app_src . ./src
-RUN uv sync --frozen --no-dev --extra data --extra ml --no-editable
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --python .venv/bin/python --no-deps .
 
 CMD ["python", \
     "-m", \
     "realtyscope.ml.train", \
     "--feature-version", \
     "ml_features_v2_non_leaky", \
+    "--trainer", \
+    "selected", \
     "--output-dir", \
     "data/processed/models/phase5", \
     "--mlflow-tracking-uri", \
