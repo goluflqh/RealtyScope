@@ -97,7 +97,7 @@ services:
         app_src: src
     restart: unless-stopped
     environment:
-      API_BASE_URL: http://api:8000
+      API_BASE_URL: ${STREAMLIT_API_BASE_URL:-http://api:8000}
       STREAMLIT_API_TIMEOUT_SECONDS: ${STREAMLIT_API_TIMEOUT_SECONDS:-30}
     expose:
       - "8501"
@@ -109,6 +109,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    volumes:
+      - ./data/external:/app/data/external:ro
+      - model_artifacts:/app/data/processed/models:ro
 
   caddy:
     image: caddy:2-alpine

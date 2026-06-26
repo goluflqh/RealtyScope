@@ -27,3 +27,17 @@ def test_streamlit_image_installs_database_dependencies_used_by_app_imports() ->
 
     assert "--extra streamlit" in content
     assert "--extra data" in content
+
+
+def test_production_compose_mounts_runtime_assets_used_by_streamlit() -> None:
+    content = Path("docker-compose.prod.yml").read_text(encoding="utf-8")
+
+    assert "API_BASE_URL: ${STREAMLIT_API_BASE_URL:-http://api:8000}" in content
+    assert "./data/external:/app/data/external:ro" in content
+    assert "model_artifacts:/app/data/processed/models:ro" in content
+
+
+def test_production_env_points_streamlit_to_public_api_domain() -> None:
+    content = Path(".env.production.example").read_text(encoding="utf-8")
+
+    assert "STREAMLIT_API_BASE_URL=https://api.realtyscope.bond" in content

@@ -153,7 +153,49 @@ docker compose -f docker-compose.prod.yml --env-file .env logs --tail=120 api
 docker compose -f docker-compose.prod.yml --env-file .env logs --tail=120 streamlit
 ```
 
-## 8. Smoke test
+## 8. Восстановить runtime bundle
+
+GitHub хранит код, Docker configuration и tracked reference assets, включая `data/external/moscow_district_boundaries.geojson`. Полное состояние demo также зависит от runtime artifacts, которые не должны коммититься:
+
+- PostgreSQL database volume с реальными объявлениями и ingestion history.
+- Model artifacts в `data/processed/models/phase5`.
+- Redis/MLflow volumes создаются Compose; для учебного demo их можно оставить как persistent runtime state.
+
+На локальной машине с уже проверенным Docker stack экспортировать bundle:
+
+```bash
+cd /mnt/e/Магистр/2-курс/python/RealtyScope-stitch-hybrid-redesign-20260623
+bash scripts/deployment/export_local_runtime_bundle.sh ../realtyscope-vps-transfer
+```
+
+Скопировать два созданных файла на VPS в `/opt/realtyscope`. В Termius это можно сделать через SFTP panel или drag-and-drop в директорию проекта:
+
+```text
+realtyscope-db-YYYYMMDD.dump
+realtyscope-model-artifacts-YYYYMMDD.tar.gz
+```
+
+На VPS восстановить bundle и выполнить smoke checks:
+
+```bash
+cd /opt/realtyscope
+bash scripts/deployment/restore_vps_runtime_bundle.sh
+```
+
+Скрипт останавливает API/UI на время восстановления, пересоздает database внутри PostgreSQL container, распаковывает model artifacts в Docker volume `realtyscope_model_artifacts`, затем снова запускает `api`, `streamlit` и `caddy`.
+
+После восстановления дополнительно проверить mount parity:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env exec -T streamlit test -f /app/data/external/moscow_district_boundaries.geojson
+docker compose -f docker-compose.prod.yml --env-file .env exec -T streamlit test -f /app/data/processed/models/phase5/selected_price_model_v1_non_leaky.joblib
+docker compose -f docker-compose.prod.yml --env-file .env exec -T streamlit ls -lh /app/data/external
+docker compose -f docker-compose.prod.yml --env-file .env exec -T streamlit ls -lh /app/data/processed/models/phase5
+```
+
+Это важно: Streamlit UI читает district boundaries и local model metadata напрямую из filesystem. Если эти mount points отсутствуют, dashboard может показывать частичную готовность district/model blocks даже при рабочем API.
+
+## 9. Smoke test
 
 С сервера:
 
@@ -175,7 +217,7 @@ curl -fsS https://api.realtyscope.bond/health
 - `https://realtyscope.bond`
 - `https://api.realtyscope.bond/docs`
 
-## 9. Обновление релиза
+## 10. Обновление релиза
 
 ```bash
 cd /opt/realtyscope
@@ -187,7 +229,15 @@ docker compose -f docker-compose.prod.yml --env-file .env up -d
 docker compose -f docker-compose.prod.yml --env-file .env ps
 ```
 
-## 10. Backup перед ingestion
+Если обновление меняет runtime mounts или restore scripts, после `git pull` перезапустить Streamlit/Caddy и повторить mount parity checks:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env up -d streamlit caddy
+docker compose -f docker-compose.prod.yml --env-file .env exec -T streamlit test -f /app/data/external/moscow_district_boundaries.geojson
+docker compose -f docker-compose.prod.yml --env-file .env exec -T streamlit test -f /app/data/processed/models/phase5/selected_price_model_v1_non_leaky.joblib
+```
+
+## 11. Backup перед ingestion
 
 Перед включением регулярного ingestion настроить резервную копию PostgreSQL:
 
