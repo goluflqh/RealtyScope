@@ -8,7 +8,11 @@ Tài liệu này là đường đi demo ngắn để trình bày RealtyScope mà
 
 ## Ghi Chú Nhánh UI Hiện Tại
 
+Update 2026-06-26: scheduled run luc 00:00 gap Domclick QRATOR challenge, sau do controlled Chrome/CDP preflight thanh cong va bounded 50-page capture ghi `data/raw/domclick/2026-06-26-bulk` voi `1,000` records. Ingest report `data/processed/domclick_reports/domclick-20260626T012727-535110Z.json` commit run id `26`: `1,000` normalized records, `241` listings created, `759` updated, `999` observations inserted. Docker `/monitoring/status` hien bao `17,287` listings (`14,851` Domclick, `2,436` CIAN), `45,764` observations, `23` observation dates, va `last_observed_date=2026-06-26`. Caveat model: `/model/metadata` van serve selected `random_forest` artifact train truoc refresh voi `rows_total=17,046`; monitoring/UI hien `model.data_freshness.status=validated_snapshot`, `row_delta=241`, `requires_retrain=false`. Khong tu retrain chi vi co data moi; retrain chi qua promotion gate.
+
 Với nhánh Stitch hybrid giữ lại, dùng workspace `E:\Магистр\2-курс\python\RealtyScope-stitch-hybrid-redesign-20260623` và branch `ui/stitch-hybrid-redesign-20260623`. Audit tĩnh/CDP mới nhất dùng payload API thật với `17,046` listings (`14,610` Домклик, `2,436` ЦИАН), `44,765` observations và `22` ngày quan sát từ `2026-05-14` đến `2026-06-24`.
+
+Dong tren la branch context lich su. Khi defense hien tai, dung worktree `E:\Магистр\2-курс\python\RealtyScope-stitch-hybrid-redesign-20260623` tren branch `integration/realtyscope-grade5-final-20260625` va dung evidence Docker 2026-06-26 o tren.
 
 Ghi chú runtime mới ngày 2026-06-25: runtime đang được xác minh trong lát cắt này là FastAPI `127.0.0.1:8011` và Streamlit `127.0.0.1:8509`; chỉ dùng Docker `8000` làm bằng chứng nếu kiểm tra lại riêng. Khi demo, dùng evidence hiện tại: `/model/metadata` trả `selected_price_model_v1_non_leaky` với `selected_candidate=random_forest`, `r2=0.850303822452758`, `rows_total=17,046`. `/stats/exposure-forecast` hiện trả đúng semantic terminal lifecycle: `status=partial`, `can_forecast=false`, `terminal_lifecycle_target_rows=0`; phần observed-history lower-bound vẫn có thật nhưng tách riêng với `observed_exposure_target_rows=7,766`, `observed_exposure_can_forecast=true`, median `7` ngày, max `22` ngày. `/stats/observation-trend` là forecast trend riêng với `can_forecast=true`, `forecast_method=linear_median_price_per_m2_v1`, `history_points=22`, forecast từ `2026-06-25` đến `2026-07-01`. Các dòng cũ bên dưới gọi observed lower-bound exposure là `ready` là lịch sử.
 
@@ -16,7 +20,18 @@ Trang `Сегменты и районы` hiện dùng polygon район thật 
 
 Update model/exposure cho nhánh giữ lại: code-new API tạm ở `127.0.0.1:8010` chọn `selected_price_model_v1_non_leaky` với `random_forest`, validation `r2=0.8801698812234392`, và `16,512` training rows. Docker API ở `127.0.0.1:8000` vẫn cần WSL/Compose retrain/rebuild ổn định trước khi được nói là đã promote selected model. Exposure hiện có forecast lower-bound thật theo observed history: `observed_exposure_target_rows=7,766`, median `7` ngày, max `22` ngày, target source `observed_history_lower_bound`; vẫn phải nói rõ terminal lifecycle còn `0`, nên đây không phải confirmed sale/removal exposure model.
 
-## Current Docker Runtime Note - 2026-06-25
+## Current Docker Runtime Note - 2026-06-26
+
+Ghi chu hien hanh nay supersede cac dong cu ben tren/ben duoi ve `17,046` listings la DB moi nhat, Docker stale, `hist_gradient_boosting`, `candidate_count=2`, hoac OSM partial.
+
+- Docker `127.0.0.1:8000` va Streamlit `127.0.0.1:8501` da duoc static/CDP audit lai sau controlled Domclick refresh.
+- `/monitoring/status`: `listings_total=17,287`, `source_counts={'cian': 2436, 'domclick': 14851}`, `observations_total=45,764`, `observation_date_count=23`, `last_observed_date=2026-06-26`, `inferred_lifecycle_target_rows=6,105`.
+- OSM coverage sau refresh la `17,046 / 17,287` (`98.61%`), khong con la `100.0%` cua current refreshed table.
+- `/model/metadata`: selected artifact van la `random_forest`, `rows_total=17,046`. Day la validated snapshot; khong claim model da train tren `17,287` listings.
+- UI Monitoring hien bounded `recent_logs`, compatibility `recent_errors`, va `model.data_freshness.status=validated_snapshot`.
+- Docker proof nen chay qua WSL/Docker Compose; khong gia dinh Docker CLI co san trong Windows PowerShell PATH.
+
+## Historical Docker Runtime Note - 2026-06-25
 
 Ghi chu hien hanh nay supersede cac dong cu ben tren/ben duoi ve Docker chua promote selected model, `hist_gradient_boosting`, `candidate_count=2`, hoac OSM partial.
 
@@ -38,7 +53,7 @@ RealtyScope là data-service project hướng grade 5 cho bài toán phân tích
 - Docker Compose runtime với PostgreSQL, Redis, MLflow, FastAPI và Streamlit;
 - MLflow evidence cho non-leaky Ridge baseline model.
 
-Caveat quan trọng: model hiện là baseline appraisal model trung thực, không phải estimator production cuối cùng. Trend hiện là descriptive daily median series với `observationTrendSeries=22` từ `2026-05-14` đến `2026-06-24`; không nên nói quá thành forecast-vs-actual hoặc dự báo trend cho tới khi freshness của repeated observations được kiểm tra thêm và có model chuỗi thời gian thật.
+Caveat quan trọng: model hiện là selected appraisal snapshot trung thực, không phải estimator production cuối cùng. Model đang serve train trên `17,046` rows, còn DB đã refresh lên `17,287` listings; không tự retrain nếu chưa qua promotion gate. Trend hiện là descriptive daily median series qua `2026-06-26`; không nên nói quá thành forecast-vs-actual hoặc model chuỗi thời gian thật.
 
 ## 1. Khởi Động Runtime
 
@@ -81,8 +96,8 @@ wsl -d Ubuntu -- bash -lc "curl -sS http://localhost:8000/monitoring/status | py
 
 - `/data` phù hợp yêu cầu bài và đọc từ persisted PostgreSQL rows;
 - filters có price range, area range, rooms, source, address/city search;
-- `/model/metadata` trả `realtyscope-price-model`, model version `baseline_ridge_v2_non_leaky`, feature version `ml_features_v2_non_leaky`, 23 features và validation metrics;
-- `/monitoring/status` hiển thị data-quality counts, latest ingestion run status, model status và recent errors.
+- `/model/metadata` trả promoted selected model artifact, hiện là `selected_price_model_v1_non_leaky` / `random_forest`, feature version `ml_features_v2_non_leaky`, validation metrics, và freshness caveat rằng model train trên `17,046` rows trong khi DB hiện có `17,287` listings;
+- `/monitoring/status` hiển thị data-quality counts, latest ingestion run status, model status, bounded sanitized `recent_logs`, compatibility `recent_errors`, va service rows.
 
 ## 3. Chứng Minh Redis Cache
 
@@ -148,7 +163,7 @@ Mở:
 - verified model version: `3`;
 - run ID: `4999892d2d92402ab78e1209203c338e`;
 - model URI: `runs:/4999892d2d92402ab78e1209203c338e/model`;
-- artifact path: `data/processed/models/phase5/baseline_ridge_v2_non_leaky.joblib`.
+- artifact path: `data/processed/models/phase5/selected_price_model_v1_non_leaky.joblib`.
 
 REST checks tùy chọn:
 
@@ -173,7 +188,7 @@ Sau khi chạy xong, refresh MLflow và `/model/metadata`.
 wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope-stitch-hybrid-redesign-20260623 && PYTHONPATH=src python -m realtyscope.ml.train --feature-version ml_features_v2_non_leaky --trainer selected --output-dir data/processed/models/phase5 --mlflow-tracking-uri http://localhost:5000 --mlflow-registered-model-name realtyscope-price-model --json"
 ```
 
-Chỉ dùng bước này nếu sẽ kiểm tra artifact kết quả và rebuild/restart API/Streamlit. Cho đến lúc đó, live `/model/metadata` vẫn là model đang được promote hiện tại: `baseline_ridge_v2_non_leaky`.
+Chỉ dùng bước này nếu sẽ kiểm tra artifact kết quả và rebuild/restart API/Streamlit. Cho đến lúc đó, live `/model/metadata` vẫn là selected-model snapshot đang được promote, không phải model mới train trên DB `17,287` listings.
 
 ## 7. Dừng Sạch Không Mất Dữ Liệu
 

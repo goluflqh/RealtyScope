@@ -270,6 +270,7 @@ def test_monitoring_status_endpoint_combines_counts_model_and_recent_errors(tmp_
     assert latest_success["normalized_count"] == 1
     assert payload["model"]["status"] == "ready"
     assert payload["model"]["feature_version"] == "ml_features_v2_non_leaky"
+    assert payload["model"]["data_freshness"]["status"] == "unknown"
     service_rows = {row["key"]: row for row in payload["services"]}
     assert service_rows["api"]["status"] == "ok"
     assert service_rows["database"]["status"] == "ok"
@@ -282,13 +283,54 @@ def test_monitoring_status_endpoint_combines_counts_model_and_recent_errors(tmp_
             "id": 1,
             "level": "ERROR",
             "event_type": "domclick.capture",
-            "message": "Timed out during scheduled capture",
+            "message": "Timed out during scheduled capture Traceback hidden",
             "created_at": "2026-06-02T08:00:00+00:00",
             "source_id": None,
             "ingestion_run_id": None,
             "context": {"stage": "capture"},
         }
     ]
+    assert payload["recent_logs"] == [
+        {
+            "id": 1,
+            "level": "ERROR",
+            "event_type": "domclick.capture",
+            "message": "Timed out during scheduled capture Traceback hidden",
+            "created_at": "2026-06-02T08:00:00+00:00",
+            "source_id": None,
+            "ingestion_run_id": None,
+        },
+        {
+            "id": 2,
+            "level": "INFO",
+            "event_type": "api.monitoring",
+            "message": "Monitoring status generated",
+            "created_at": "2026-06-02T07:30:00+00:00",
+            "source_id": None,
+            "ingestion_run_id": None,
+        },
+    ]
+
+
+def test_model_data_freshness_keeps_validated_snapshot_when_database_is_newer() -> None:
+    freshness = api_main._model_data_freshness(
+        model_payload={"metrics_summary": {"rows_total": 17_046}},
+        data_quality={"listings_total": 17_287},
+    )
+
+    assert freshness == {
+        "status": "validated_snapshot",
+        "status_label": "validated training snapshot",
+        "model_rows_total": 17_046,
+        "current_listings_total": 17_287,
+        "row_delta": 241,
+        "row_delta_pct": 1.41,
+        "requires_retrain": False,
+        "note": (
+            "Model remains the last validated artifact; retrain only after a candidate "
+            "passes the promotion gate."
+        ),
+    }
 
 
 def test_exposure_forecast_endpoint_reports_observed_lower_bound_target(tmp_path) -> None:
@@ -550,9 +592,17 @@ def _client_and_engine_with_seeded_monitoring_database(
             AppLog(
                 level="ERROR",
                 event_type="domclick.capture",
-                message="Timed out during scheduled capture",
+                message="Timed out during scheduled capture\nTraceback hidden",
                 created_at=datetime(2026, 6, 2, 8, 0, tzinfo=UTC),
                 context={"stage": "capture"},
+            )
+        )
+        session.add(
+            AppLog(
+                level="INFO",
+                event_type="api.monitoring",
+                message="Monitoring status generated",
+                created_at=datetime(2026, 6, 2, 7, 30, tzinfo=UTC),
             )
         )
         session.commit()

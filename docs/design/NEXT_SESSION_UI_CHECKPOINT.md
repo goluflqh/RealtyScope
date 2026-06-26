@@ -1,5 +1,21 @@
 # RealtyScope UI Next Session Checkpoint
 
+## 2026-06-26 Controlled Domclick Refresh
+
+- The 2026-06-26 00:00 scheduled task reached Domclick but failed on a QRATOR challenge before Python batch logging. Scheduler monitoring was hardened so future pre-batch failures call `domclick_scheduled_batch log-error` and populate `app_logs` for `/monitoring/status`.
+- The Windows Scheduled Task `\RealtyScope Domclick Scheduled Batch` no longer targets the older `RealtyScope` repo. Its action now runs `E:\Магистр\2-курс\python\RealtyScope-stitch-hybrid-redesign-20260623\scripts\run_domclick_scheduled_batch.ps1`; the previous XML is backed up under `output/scheduler/`.
+- Safe dry-run proof for the corrected task target resolved the Stitch hybrid repo and the `2026-06-26-bulk` source path without Docker, Chrome capture, ingestion, or DB commit.
+- A controlled Chrome/CDP preflight with the automation profile succeeded on one page (`20` records), then a bounded 50-page capture produced `data/raw/domclick/2026-06-26-bulk` with `50` payload files and `1,000` records.
+- Ingest report `data/processed/domclick_reports/domclick-20260626T012727-535110Z.json` committed run id `26`: `records_seen=1,000`, `normalized_count=1,000`, `rejected_count=0`, `listings_created=241`, `listings_updated=759`, `observations_inserted=999`.
+- Docker API `/monitoring/status` now reports `listings_total=17,287`, `source_counts={'cian': 2436, 'domclick': 14851}`, `observations_total=45,764`, `observation_date_count=23`, and `last_observed_date=2026-06-26`.
+- OSM feature coverage after the refresh is `17,046 / 17,287` (`98.61%`), because the new Domclick rows have not all gone through OSM feature enrichment. Do not keep saying OSM coverage is `100.0%` for the refreshed table.
+- Model caveat for the next session: the currently served selected model still reports `rows_total=17,046`; retrain/model-selection has not yet been rerun on the refreshed `17,287`-listing database.
+- The Streamlit payload now preserves `model.data_freshness` from `/monitoring/status` even when `/model/metadata` is used for metrics and feature importance. Static audit now requires a known freshness status and direct script execution bootstraps `src`.
+- Monitoring logs are now safer and more useful: `/monitoring/status` exposes bounded `recent_logs` in addition to compatibility `recent_errors`; API log messages are normalized/truncated before UI use, and Streamlit's system journal prefers real event type/timestamp/message from `recent_logs`.
+- Fresh Docker static audit: `API_BASE_URL=http://127.0.0.1:8000 python scripts\playwright\generate_static_audit.py` printed `api 17287 {'cian': 2436, 'domclick': 14851}` and regenerated `output/playwright/realtyscope-static-audit.html`.
+- Fresh Docker CDP audit passed on `API_BASE_URL=http://127.0.0.1:8000`, `STREAMLIT_URL=http://127.0.0.1:8501`: `listings_total=17287`, `exposure_inferred_target_rows=6105`, trend last date `2026-06-26`, selected candidate `random_forest`, and all seven screenshots had `clippedCount=0` / `overlapCount=0`.
+- Verification after the `recent_logs` hardening: API/Streamlit/static-audit tests passed with `59 passed`, targeted `py_compile` and `ruff` passed, static audit regenerated successfully, and Docker CDP audit still passed.
+
 ## 2026-06-25 Current Docker Runtime After Retrain
 
 - Compose reports `api`, `streamlit`, `db`, and `redis` healthy, with `mlflow` up.

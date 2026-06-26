@@ -501,6 +501,11 @@ def test_scheduled_batch_script_calls_chrome_capture_before_url_file_fallback() 
     assert '$ErrorActionPreference = "Continue"' in script
     assert "$Output | ForEach-Object { Write-Host $_ }" in script
     assert "[switch]$DryRun" in script
+    assert "function Write-DomclickScheduledFailureLog" in script
+    assert '"realtyscope.ingestion.domclick_scheduled_batch", "log-error"' in script
+    assert '"--event-type", "domclick_scheduled_task_failed"' in script
+    assert "catch {" in script
+    assert "Write-DomclickScheduledFailureLog" in script
 
 
 def test_scheduled_batch_script_recovers_partial_bulk_payloads_with_observed_at() -> None:

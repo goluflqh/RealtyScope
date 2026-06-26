@@ -8,7 +8,11 @@ This script is the short defense path for showing RealtyScope without reloading 
 
 ## Current UI Branch Note
 
+2026-06-26 live data refresh note: after the 00:00 scheduled run hit a Domclick QRATOR challenge, a controlled Chrome/CDP preflight succeeded and a bounded 50-page capture wrote `data/raw/domclick/2026-06-26-bulk` with `1,000` records. The ingest report is `data/processed/domclick_reports/domclick-20260626T012727-535110Z.json`; it committed run id `26` with `1,000` normalized records, `241` listings created, `759` listings updated, and `999` observations inserted. Docker `/monitoring/status` now reports `17,287` listings (`14,851` Domclick, `2,436` CIAN), `45,764` observations, `23` observation dates, and last observed date `2026-06-26`. Keep the model caveat explicit: `/model/metadata` still serves the selected `random_forest` artifact trained before this refresh with `rows_total=17,046`. The monitoring payload and UI now show this as `model.data_freshness.status=validated_snapshot`, `row_delta=241`, and `requires_retrain=false`; retrain only after a candidate passes the promotion gate.
+
 For the retained 2026-06-24 Stitch hybrid UI branch, use workspace `E:\Магистр\2-курс\python\RealtyScope-stitch-hybrid-redesign-20260623` and branch `ui/stitch-hybrid-redesign-20260623`. The latest static/UI evidence is no longer the older `3,019`-row Phase 7 runtime snapshot: `python output\playwright\generate_static_audit.py` verifies the real live API payload with `17,046` listings (`14,610` Домклик, `2,436` ЦИАН), valuation comparable listings with real source links, real map coordinates/popups, restored data-table columns, robust real deal scoring, boundary-backed district analytics, and monitoring with bounded logs.
+
+Current defense script update: use the active integration worktree `E:\Магистр\2-курс\python\RealtyScope-stitch-hybrid-redesign-20260623` on branch `integration/realtyscope-grade5-final-20260625` for the freshest evidence. The paragraph above is historical branch context; the 2026-06-26 Docker evidence is the current runtime truth.
 
 2026-06-25 latest runtime note: Docker `127.0.0.1:8000` and Streamlit `127.0.0.1:8501` are freshly verified from the retained Stitch hybrid branch. `/model/metadata` reports `selected_price_model_v1_non_leaky` with `selected_candidate=random_forest`, `model_selection_mode=best_metric`, `candidate_count=3`, `r2=0.8653013476373554`, `mae=7,638,132.733793359`, `rows_total=17,046`, and non-empty `feature_importance`. `/stats/data-quality` reports full persisted OSM feature coverage: `osm_features_total=17,046`, `osm_featured_listings=17,046`, `osm_coverage_pct=100.0`, with provenance `local_extract+live_overpass+coordinate_exact_match`. `/stats/exposure-forecast` reports `status=ready`, `can_forecast=true`, `target_source=observation_gap_inferred_lifecycle`, and `inferred_lifecycle_target_rows=4,962`; terminal sale/removal lifecycle remains unavailable with `terminal_lifecycle_target_rows=0`. `/stats/observation-trend` remains a separate analytic trend forecast with `can_forecast=true`, `forecast_method=linear_median_price_per_m2_v1`, `history_points=22`, and forecast dates `2026-06-25` through `2026-07-01`. Older lines below that call observed lower-bound exposure the primary forecast, name `hist_gradient_boosting`, or describe partial OSM coverage are historical.
 
@@ -18,15 +22,15 @@ Latest live runtime smoke for this branch on `2026-06-24`: after building and st
 
 Runtime caveat: after the long cold Docker build, a few new WSL launch attempts returned `Wsl/Service/0x8007274c` while already-running containers and localhost endpoints still responded. Before a live defense, re-run a short `docker compose ps` and endpoint smoke rather than assuming the WSL shell remains stable.
 
-District note for this branch: `Сегменты и районы` now uses real Moscow district boundary polygons from `GIS-Lab/OpenStreetMap` plus address fallback, and the current persisted OSM feature table covers all `17,046` listings. Present it as real boundary-backed district analytics with OSM feature coverage, while keeping provenance precise: local BBBike extract rows, earlier live Overpass rows, and exact-coordinate-derived rows.
+District note for this branch: `Сегменты и районы` now uses real Moscow district boundary polygons from `GIS-Lab/OpenStreetMap` plus address fallback. After the 2026-06-26 refresh, persisted OSM feature coverage is `17,046 / 17,287` listings (`98.61%`), not `100.0%` of the refreshed table. Present it as real boundary-backed district analytics with high persisted OSM feature coverage, while keeping provenance precise: local BBBike extract rows, earlier live Overpass rows, and exact-coordinate-derived rows.
 
-Keep the caveat explicit during a defense: OSM feature coverage is full persisted coverage for the current listing table, not a claim that every row was independently fetched from live Overpass. Exposure-duration forecast is not a confirmed sale/removal model: monitoring uses observation-gap inferred lifecycle evidence, but terminal lifecycle target rows remain `0`. If asked about observation days, use the current persisted API/DB direction from the latest evidence: `22` distinct observed dates from `2026-05-14` to `2026-06-24`, `44,765` observations, `7,766` listings observed on multiple dates, max `20` dates for one listing, and `1,415` listing IDs with price changes.
+Keep the caveat explicit during a defense: OSM feature coverage is persisted local-extract/live/derived coverage, not a claim that every row was independently fetched from live Overpass, and it is currently `98.61%` after the latest Domclick refresh. Exposure-duration forecast is not a confirmed sale/removal model: monitoring uses observation-gap inferred lifecycle evidence, but terminal lifecycle target rows remain `0`. If asked about observation days, use the current persisted API/DB direction from the latest evidence: `23` distinct observed dates from `2026-05-14` to `2026-06-26`, `45,764` observations, `7,956` listings observed on multiple dates, max `21` dates for one listing, and `1,470` listing IDs with price changes.
 
 If the reviewer asks whether repeated observations exist in PostgreSQL, use the latest DB evidence rather than guessing: `listing_observations` has `42,765` persisted observations across `21` dates, `7,456` source listing IDs with multiple observed dates, max `19` dates per listing, and `1,300` listing IDs with price changes. The reason exposure forecast is still absent is not lack of repeated observations; it is that every persisted observation is still `status=observed` and `active=true`, so there are `0` terminal lifecycle target rows.
 
-Trend readiness is also partial, not missing. The monitoring page now shows `Готовность тренда`: latest API/static evidence has `44,765` persisted observations across `22` dates, `7,766` listings with observation history, and `1,415` listing IDs with price changes. Present this as descriptive trend evidence only. Do not call it a forecast because `can_forecast=false` and no verified time-series model is promoted.
+Trend readiness is also partial, not missing. The monitoring page now shows `Готовность тренда`: latest API/static evidence has `45,764` persisted observations across `23` dates, `7,956` listings with observation history, and `1,470` listing IDs with price changes. Present this as descriptive trend evidence unless showing the separate `/stats/observation-trend` forecast payload; do not call it forecast-vs-actual or a promoted time-series model.
 
-The dashboard trend chart is now backed by `/stats/observation-trend`, not by the 1,000-row listing preview. Latest static/CDP evidence has `observationTrendSeries=22`, first date `2026-05-14`, last date `2026-06-24`, with daily median `price_per_m2` values from persisted `listing_observations`. Say "descriptive trend series"; do not say "forecast".
+The dashboard trend chart is now backed by `/stats/observation-trend`, not by the 1,000-row listing preview. Latest static/CDP evidence has trend data through `2026-06-26`, with daily median `price_per_m2` values from persisted `listing_observations`. Say "descriptive trend series" unless explicitly opening the forecast fields; do not say it validates forecast-vs-actual.
 
 Selected model / exposure update for the retained branch: Docker API evidence on `127.0.0.1:8000` now selects `selected_price_model_v1_non_leaky` with `random_forest`, `candidate_count=3`, validation `r2=0.8653013476373554`, `mae=7,638,132.733793359`, and `17,046` training rows. Exposure now has a real inferred lifecycle forecast from repeated observation gaps: `inferred_lifecycle_target_rows=4,962`, median inferred exposure `6` days, max `19` days, and `target_source=observation_gap_inferred_lifecycle`; keep saying terminal sale/removal lifecycle remains `0`, so this is not a confirmed sale/removal exposure model.
 
@@ -85,8 +89,8 @@ What to point out:
 
 - `/data` is assignment-compatible and backed by persisted PostgreSQL rows;
 - filters cover price range, area range, rooms, source, and address/city search;
-- `/model/metadata` reports `realtyscope-price-model`, model version `baseline_ridge_v2_non_leaky`, feature version `ml_features_v2_non_leaky`, 23 features, and validation metrics;
-- `/monitoring/status` shows data-quality counts, latest ingestion run status, model status, recent errors, and service rows for API/PostgreSQL/Redis/model/ingestion.
+- `/model/metadata` reports the promoted selected model artifact, currently `selected_price_model_v1_non_leaky` / `random_forest`, feature version `ml_features_v2_non_leaky`, validation metrics, and the freshness caveat that it was trained on `17,046` rows while the database now has `17,287` listings;
+- `/monitoring/status` shows data-quality counts, latest ingestion run status, model status, bounded sanitized `recent_logs`, compatibility `recent_errors`, and service rows for API/PostgreSQL/Redis/model/ingestion.
 
 ## 3. Prove Redis Cache Behavior
 
@@ -152,7 +156,7 @@ What to point out:
 - verified model version: `3`;
 - run ID: `4999892d2d92402ab78e1209203c338e`;
 - model URI: `runs:/4999892d2d92402ab78e1209203c338e/model`;
-- artifact path: `data/processed/models/phase5/baseline_ridge_v2_non_leaky.joblib`.
+- artifact path: `data/processed/models/phase5/selected_price_model_v1_non_leaky.joblib`.
 
 Optional REST checks:
 
@@ -177,7 +181,7 @@ Optional selected-model training path for the retained Stitch branch:
 wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope-stitch-hybrid-redesign-20260623 && PYTHONPATH=src python -m realtyscope.ml.train --feature-version ml_features_v2_non_leaky --trainer selected --output-dir data/processed/models/phase5 --mlflow-tracking-uri http://localhost:5000 --mlflow-registered-model-name realtyscope-price-model --json"
 ```
 
-Use this only when you will verify the resulting artifact and rebuild/restart API/Streamlit. Until that is done, live `/model/metadata` still represents the currently promoted `baseline_ridge_v2_non_leaky` model.
+Use this only when you will verify the resulting artifact and rebuild/restart API/Streamlit. Until that is done, live `/model/metadata` still represents the currently promoted selected-model snapshot, not a newly trained model on the refreshed `17,287`-listing database.
 
 ## 7. Clean Stop Without Data Loss
 

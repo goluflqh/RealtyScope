@@ -7,6 +7,33 @@ Phase 7 merge evidence commit: `05f9b0cac3e77d55b93820be5d2b3db442d5295c`
 
 This document is the operating status board for the final course-readiness work. It consolidates the assignment requirements, implemented phase evidence, current gaps, and the next smaller workstreams so future sessions do not have to reload the full history.
 
+## 2026-06-26 Controlled Domclick Refresh And Scheduler Monitoring Fix
+
+Current branch: `integration/realtyscope-grade5-final-20260625`.
+
+This addendum supersedes older runtime notes that list `17,046` listings, `44,765` observations, or last observed date `2026-06-24` as the freshest Docker database evidence.
+
+- Root cause of the missed 2026-06-26 scheduled refresh was source access, not UI polling: the scheduled Chrome capture hit a Domclick QRATOR challenge before the Python scheduled batch could record DB state.
+- The scheduler now records pre-batch failures into `app_logs`: `scripts/run_domclick_scheduled_batch.ps1` captures the native command output tail and calls `python -m realtyscope.ingestion.domclick_scheduled_batch log-error`; the CLI writes a `domclick_scheduled_task_failed` warning for `/monitoring/status` recent errors while still rethrowing the original failure.
+- `/monitoring/status` now also exposes bounded UI-safe `recent_logs` alongside compatibility `recent_errors`; log messages are whitespace-normalized/truncated before reaching the UI, while `recent_errors` still carries context for debugging.
+- A controlled Chrome/CDP preflight using `%LOCALAPPDATA%\RealtyScope\ChromeAutomation\User Data\Default` succeeded on offset `0` with `20` records. The evidence folder was preserved as `data/raw/domclick/2026-06-26-bulk-preflight-20records`.
+- A bounded 50-page capture then wrote `data/raw/domclick/2026-06-26-bulk` with `50` payload files and `1,000` records.
+- The safe ingest command committed run id `26` from `data/raw/domclick/2026-06-26-bulk`: `records_seen=1,000`, `normalized_count=1,000`, `rejected_count=0`, `listings_created=241`, `listings_updated=759`, `observations_inserted=999`, report `data/processed/domclick_reports/domclick-20260626T012727-535110Z.json`.
+- Docker API `127.0.0.1:8000/monitoring/status` now reports `17,287` listings, `source_counts={'cian': 2436, 'domclick': 14851}`, `45,764` observations, `23` observation dates, `first_observed_date=2026-05-14`, `last_observed_date=2026-06-26`, `listings_with_observation_history=7,956`, `max_observation_dates_per_listing=21`, `listing_price_change_count=1,470`, and `inferred_lifecycle_target_rows=6,105`.
+- OSM caveat after the refresh: persisted OSM feature rows remain `17,046`; against the refreshed `17,287` listing table this is `98.61%` coverage, not a fresh all-rows live Overpass claim.
+- Model caveat: Docker `/model/metadata` still serves the selected `random_forest` artifact trained before this data refresh with `rows_total=17,046`; do not imply the model was retrained on `17,287` rows until trainer/model-selection is rerun and verified.
+- Model freshness gate: Docker `/monitoring/status` now exposes `model.data_freshness.status=validated_snapshot`, `model_rows_total=17,046`, `current_listings_total=17,287`, `row_delta=241`, and `requires_retrain=false`; keep serving the current validated artifact until a retrain candidate passes promotion validation.
+- Static audit is now freshness-gated: `scripts/playwright/generate_static_audit.py` bootstraps `src` for direct CLI execution and fails API-mode audits unless the UI payload includes a known `model.data_freshness` status.
+- Streamlit Monitoring now prefers `recent_logs` for the system journal, so scheduler/API operational events can render their real event type, timestamp, and sanitized message instead of a generic placeholder.
+- Fresh Docker static audit with `API_BASE_URL=http://127.0.0.1:8000` passed and printed `api 17287 {'cian': 2436, 'domclick': 14851}`.
+- Fresh Docker CDP audit with `API_BASE_URL=http://127.0.0.1:8000` and `STREAMLIT_URL=http://127.0.0.1:8501` passed with `listings_total=17287`, `exposure_inferred_target_rows=6105`, trend series through `2026-06-26`, selected candidate `random_forest`, and all seven screenshots at `clippedCount=0` / `overlapCount=0`.
+- Fresh WSL Compose smoke: `wsl -d Ubuntu -- bash -lc "cd '/mnt/e/Магистр/2-курс/python/RealtyScope-stitch-hybrid-redesign-20260623' && docker compose -p realtyscope ps"` showed `api`, `streamlit`, `db`, and `redis` healthy, with `mlflow` up; `curl.exe --noproxy "*"` returned Docker API `/health` status `ok`, Streamlit health `ok`, and `/monitoring/status` with `listings_total=17287`.
+- Full Docker rebuild was not rerun in this slice; the evidence above is a WSL Compose/runtime smoke against already-running rebuilt containers.
+- Fresh verification after the `recent_logs` hardening: `tests/test_api_monitoring.py tests/test_streamlit_ui_payload.py tests/test_static_audit_requirements.py` passed with `59 passed`; targeted `py_compile`, `ruff`, static audit, and Docker CDP audit all passed.
+- Operational caveat resolved: Windows Scheduled Task previously pointed at `E:\Магистр\2-курс\python\RealtyScope\scripts\run_domclick_scheduled_batch.ps1`; the scheduler-monitoring fix was also ported to that old repo branch, but the active scheduled task now targets the Stitch hybrid worktree below.
+- Scheduler target correction: the Windows Scheduled Task `\RealtyScope Domclick Scheduled Batch` was updated to run `E:\Магистр\2-курс\python\RealtyScope-stitch-hybrid-redesign-20260623\scripts\run_domclick_scheduled_batch.ps1`. The previous XML was backed up at `output/scheduler/realtyscope-domclick-scheduled-batch-before-20260626.xml`.
+- Safe scheduler dry-run proof: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ...\RealtyScope-stitch-hybrid-redesign-20260623\scripts\run_domclick_scheduled_batch.ps1 -DryRun -SkipCapture -SkipDockerStart -CollectionDate 2026-06-26` resolved the new repo and printed the expected batch command against `data\raw\domclick\2026-06-26-bulk` without Docker, Chrome, ingestion, or DB commit.
+
 ## 2026-06-25 Current Integration Branch Local Runtime After Manual Model Selection
 
 Current branch: `integration/realtyscope-grade5-final-20260625`.
@@ -608,7 +635,7 @@ This addendum supersedes older notes in this document that said Docker `127.0.0.
   - `python output\playwright\generate_static_audit.py`: passed in API mode with `api 17046 {'cian': 2436, 'domclick': 14610}`.
   - `node output\playwright\cdp_static_grade5_audit.mjs`: passed with `trend_status=ready`, `trend_can_forecast=true`, `exposure_status=ready`, selected-model provenance, real map tiles/zoom/drag/popup, and all seven screenshots at `clippedCount=0` / `overlapCount=0`.
 - A later clean-image `docker compose -p realtyscope build streamlit` smoke was attempted, but it again spent more than 90 seconds inside `uv sync --frozen --no-dev --extra streamlit --no-install-project` downloading/installing heavy dependencies. The build process was terminated cleanly; no build process remained running, and runtime `/health` plus Streamlit `/_stcore/health` still passed. Treat final immutable image rebuild as a separate packaging task.
-- Remaining truth caveats for the current runtime: terminal sale/removal exposure remains unavailable because `lifecycle_target_rows=0`; OSM infrastructure coverage is now full persisted coverage for the current listing table, but the provenance is local extract + live Overpass + exact-coordinate derivation rather than all-live Overpass.
+- Remaining truth caveats for the current runtime: terminal sale/removal exposure remains unavailable because `lifecycle_target_rows=0`; after the 2026-06-26 refresh, OSM infrastructure coverage is `17,046 / 17,287` (`98.61%`), with provenance from local extract + live Overpass + exact-coordinate derivation rather than all-live Overpass.
 
 ## 2026-06-25 Exposure Forecast Semantics Correction
 

@@ -536,7 +536,11 @@ def monitoring_status(
 ) -> dict[str, Any]:
     settings = get_settings()
     data_quality = _data_quality_stats_payload(session)
-    model_payload = _model_metadata_payload(prediction_model)
+    model_payload = dict(_model_metadata_payload(prediction_model))
+    model_payload["data_freshness"] = _model_data_freshness(
+        model_payload=model_payload,
+        data_quality=data_quality,
+    )
     return {
         "service": "realtyscope-api",
         "status": "ok",
@@ -551,6 +555,7 @@ def monitoring_status(
             redis_error=getattr(request.app.state, "redis_error", None),
         ),
         "recent_errors": _recent_error_payloads(session),
+        "recent_logs": _recent_log_payloads(session),
     }
 
 
@@ -1609,6 +1614,60 @@ def _model_metadata_payload(model: ArtifactPredictionModel | None) -> dict[str, 
     }
 
 
+def _model_data_freshness(
+    *,
+    model_payload: dict[str, Any],
+    data_quality: dict[str, Any],
+) -> dict[str, Any]:
+    metrics = model_payload.get("metrics_summary")
+    if not isinstance(metrics, Mapping):
+        metrics = {}
+    model_rows = _int_metric(metrics.get("rows_total"))
+    current_rows = _int_metric(data_quality.get("listings_total"))
+    if not model_rows or not current_rows:
+        return {
+            "status": "unknown",
+            "status_label": "unknown",
+            "model_rows_total": model_rows,
+            "current_listings_total": current_rows,
+            "row_delta": None,
+            "row_delta_pct": None,
+            "requires_retrain": False,
+            "note": (
+                "Model/data freshness cannot be compared because training-row "
+                "metadata or current listing count is unavailable."
+            ),
+        }
+
+    row_delta = current_rows - model_rows
+    row_delta_pct = round(row_delta / model_rows * 100, 2)
+    if row_delta <= 0:
+        return {
+            "status": "current",
+            "status_label": "current training snapshot",
+            "model_rows_total": model_rows,
+            "current_listings_total": current_rows,
+            "row_delta": row_delta,
+            "row_delta_pct": row_delta_pct,
+            "requires_retrain": False,
+            "note": "Model training rows cover the current listing count.",
+        }
+
+    return {
+        "status": "validated_snapshot",
+        "status_label": "validated training snapshot",
+        "model_rows_total": model_rows,
+        "current_listings_total": current_rows,
+        "row_delta": row_delta,
+        "row_delta_pct": row_delta_pct,
+        "requires_retrain": False,
+        "note": (
+            "Model remains the last validated artifact; retrain only after a candidate "
+            "passes the promotion gate."
+        ),
+    }
+
+
 def _load_selected_model_payload(selection_path: str) -> dict[str, Any] | None:
     try:
         selected_model = load_selected_model(Path(selection_path))
@@ -1645,19 +1704,36 @@ def _recent_error_payloads(session: Session, *, limit: int = 10) -> list[dict[st
         .order_by(AppLog.created_at.desc(), AppLog.id.desc())
         .limit(limit)
     ).all()
-    return [
-        {
-            "id": row.id,
-            "level": row.level,
-            "event_type": row.event_type,
-            "message": row.message,
-            "created_at": _datetime_payload(row.created_at),
-            "source_id": row.source_id,
-            "ingestion_run_id": row.ingestion_run_id,
-            "context": row.context,
-        }
-        for row in rows
-    ]
+    return [_app_log_payload(row, include_context=True) for row in rows]
+
+
+def _recent_log_payloads(session: Session, *, limit: int = 12) -> list[dict[str, Any]]:
+    rows = session.scalars(
+        select(AppLog).order_by(AppLog.created_at.desc(), AppLog.id.desc()).limit(limit)
+    ).all()
+    return [_app_log_payload(row, include_context=False) for row in rows]
+
+
+def _app_log_payload(row: AppLog, *, include_context: bool) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "id": row.id,
+        "level": row.level,
+        "event_type": row.event_type,
+        "message": _clean_log_message(row.message),
+        "created_at": _datetime_payload(row.created_at),
+        "source_id": row.source_id,
+        "ingestion_run_id": row.ingestion_run_id,
+    }
+    if include_context:
+        payload["context"] = row.context
+    return payload
+
+
+def _clean_log_message(message: str, *, max_length: int = 240) -> str:
+    cleaned = " ".join(str(message).split())
+    if len(cleaned) <= max_length:
+        return cleaned
+    return f"{cleaned[: max_length - 1].rstrip()}…"
 
 
 def _datetime_payload(value: datetime | None) -> str | None:

@@ -175,6 +175,11 @@ def _build_payload(*, data: DashboardData, monitoring: MonitoringData) -> dict[s
     model_metadata = _model_metadata_for_ui(
         monitoring.model_metadata or monitoring_status.get("model") or {}
     )
+    monitoring_model = monitoring_status.get("model")
+    if isinstance(monitoring_model, dict) and "data_freshness" not in model_metadata:
+        data_freshness = monitoring_model.get("data_freshness")
+        if isinstance(data_freshness, dict):
+            model_metadata["data_freshness"] = data_freshness
     local_model = _local_model_payload()
     if not model_metadata and local_model:
         model_metadata = {
@@ -3362,6 +3367,31 @@ function modelCandidateOptions() {{
   const candidateOptions = names.map(name => `<option value="${{esc(name)}}">${{modelCandidateName(name)}}</option>`).join('');
   return `<option value="">Авто</option>${{candidateOptions}}`;
 }}
+function modelFreshnessRows(model, metrics) {{
+  const freshness = model.data_freshness || {{}};
+  const statusText = {{
+    current: '\u0441\u0440\u0435\u0437 \u0430\u043a\u0442\u0443\u0430\u043b\u0435\u043d',
+    unknown: '\u043d\u0435\u0442 \u0441\u0440\u0430\u0432\u043d\u0435\u043d\u0438\u044f',
+    validated_snapshot: '\u0432\u0430\u043b\u0438\u0434\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u044b\u0439 snapshot',
+  }}[freshness.status] || freshness.status_label || freshness.status || '\u043d\u0435\u0442 \u0441\u0440\u0430\u0432\u043d\u0435\u043d\u0438\u044f';
+  const modelRows = freshness.model_rows_total ?? metrics.rows_total;
+  const currentRows = freshness.current_listings_total;
+  const delta = freshness.row_delta;
+  const deltaPct = freshness.row_delta_pct;
+  const deltaText = delta === null || delta === undefined
+    ? '\u2014'
+    : `${{delta > 0 ? '+' : ''}}${{fmtInt(delta)}}${{deltaPct === null || deltaPct === undefined ? '' : ` (${{fmtPct(deltaPct)}})`}}`;
+  const retrainText = freshness.requires_retrain
+    ? '\u043d\u0443\u0436\u0435\u043d \u043a\u0430\u043d\u0434\u0438\u0434\u0430\u0442'
+    : '\u043d\u0435 \u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044f \u0431\u0435\u0437 validation gate';
+  return [
+    ['\u0421\u0442\u0430\u0442\u0443\u0441 \u0441\u0440\u0435\u0437\u0430', statusText],
+    ['\u0421\u0442\u0440\u043e\u043a \u0432 \u043c\u043e\u0434\u0435\u043b\u0438', fmtInt(modelRows)],
+    ['\u0421\u0442\u0440\u043e\u043a \u0441\u0435\u0439\u0447\u0430\u0441', fmtInt(currentRows)],
+    ['\u0420\u0430\u0437\u043d\u0438\u0446\u0430', deltaText],
+    ['Retrain', retrainText],
+  ];
+}}
 function modelProvenancePanel() {{
   const model = data.model || {{}};
   const metrics = model.metrics || data.localModel?.metrics || {{}};
@@ -3376,6 +3406,7 @@ function modelProvenancePanel() {{
     ['Обучающих групп', metrics.train_listing_groups ? fmtInt(metrics.train_listing_groups) : '—'],
     ['Тестовых групп', metrics.test_listing_groups ? fmtInt(metrics.test_listing_groups) : '—'],
   ];
+  rows.push(...modelFreshnessRows(model, metrics));
   const baseline = String(model.model_version || data.localModel?.modelVersion || '').toLowerCase().includes('baseline')
     || String(model.model_version || data.localModel?.modelVersion || '').toLowerCase().includes('ridge');
   const note = baseline
@@ -3518,8 +3549,23 @@ function monitoringLogRows() {{
     rows.push(['предупр.', 'Инфраструктура района', `OpenStreetMap-признаки есть в модели; ${{coverage}}`]);
   }}
   rows.push(['предупр.', 'Незавершенные аналитики', 'Полные районные границы, OSM-кластеры и прогноз срока экспозиции требуют отдельных backend-артефактов и не показаны как готовые результаты']);
-  const errors = data.monitoring?.recent_errors || [];
-  errors.slice(0, 4).forEach(r => rows.push([r.level === 'error' ? 'ошибка' : 'предупр.', r.event_type || 'Событие мониторинга', 'Событие требует проверки в журнале сервиса']));
+  const levelText = level => {{
+    const normalized = String(level || '').toUpperCase();
+    if (normalized === 'ERROR') return 'ошибка';
+    if (normalized === 'WARNING') return 'предупр.';
+    if (normalized === 'INFO') return 'инфо';
+    return level || 'инфо';
+  }};
+  const apiLogs = Array.isArray(data.monitoring?.recent_logs) ? data.monitoring.recent_logs : [];
+  apiLogs.slice(0, 6).forEach(r => rows.push([
+    levelText(r.level),
+    r.event_type || 'Событие мониторинга',
+    `${{shortDate(r.created_at)}} · ${{r.message || 'Сообщение не указано'}}`,
+  ]));
+  if (!apiLogs.length) {{
+    const errors = data.monitoring?.recent_errors || [];
+    errors.slice(0, 4).forEach(r => rows.push([levelText(r.level), r.event_type || 'Событие мониторинга', 'Событие требует проверки в журнале сервиса']));
+  }}
   (data.recentReports || []).slice(0, 5).forEach(reportRow => {{
     const when = reportRow.finished_at || reportRow.started_at;
     rows.push(['инфо', 'История сборов', `${{shortDate(when)}} · ${{statusText(reportRow.status)}} · ${{fmtInt(reportRow.normalized_count)}} из ${{fmtInt(reportRow.records_seen)}}`]);

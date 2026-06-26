@@ -195,6 +195,15 @@ def test_build_payload_keeps_local_model_fallback_with_api_model_metadata(monkey
         monitoring=MonitoringData(
             status={
                 "status": "ok",
+                "model": {
+                    "data_freshness": {
+                        "status": "validated_snapshot",
+                        "model_rows_total": 8_366,
+                        "current_listings_total": 16_512,
+                        "row_delta": 8_146,
+                        "requires_retrain": False,
+                    }
+                },
                 "services": [
                     {
                         "key": "model",
@@ -224,6 +233,8 @@ def test_build_payload_keeps_local_model_fallback_with_api_model_metadata(monkey
     assert payload["model"]["model_version"] == "baseline_ridge_v2_non_leaky"
     assert payload["model"]["metrics"]["rows_total"] == 8_366
     assert payload["model"]["feature_importance"][0]["feature"] == "total_area_m2"
+    assert payload["model"]["data_freshness"]["status"] == "validated_snapshot"
+    assert payload["model"]["data_freshness"]["row_delta"] == 8_146
 
 
 def test_build_payload_uses_full_analytics_rows_for_districts(monkeypatch) -> None:
@@ -1014,6 +1025,15 @@ def test_workstation_html_renders_model_provenance_and_baseline_caveat() -> None
                     "test_listing_groups": 1_674,
                     "r2": 0.6231827045433119,
                 },
+                "data_freshness": {
+                    "status": "validated_snapshot",
+                    "status_label": "validated training snapshot",
+                    "model_rows_total": 8_366,
+                    "current_listings_total": 16_512,
+                    "row_delta": 8_146,
+                    "requires_retrain": False,
+                    "note": "Model remains the last validated artifact.",
+                },
             },
         }
     )
@@ -1030,10 +1050,37 @@ def test_workstation_html_renders_model_provenance_and_baseline_caveat() -> None
     assert "modelCandidateOptions" in html
     assert "modelCandidateSelect" in html
     assert "model_candidate" in html
+    assert "modelFreshnessRows" in html
+    assert "data_freshness" in html
+    assert "validated_snapshot" in html
     assert "row.candidate_artifact_path || name === selected" not in html
     assert "Авто" in html
     assert "базовая Ridge-модель" in html
     assert "не заявляется как финальный промышленный оценщик" in html
+
+
+def test_workstation_html_renders_recent_operational_logs() -> None:
+    html = _workstation_html(
+        {
+            "mode": "api",
+            "stats": {"listings_total": 17_287},
+            "monitoring": {
+                "recent_logs": [
+                    {
+                        "level": "WARNING",
+                        "event_type": "domclick_scheduled_task_failed",
+                        "message": "Domclick returned QRATOR challenge",
+                        "created_at": "2026-06-26T00:00:05+03:00",
+                    }
+                ]
+            },
+        }
+    )
+
+    assert "recent_logs" in html
+    assert "apiLogs" in html
+    assert "Domclick returned QRATOR challenge" in html
+    assert "domclick_scheduled_task_failed" in html
 
 
 def test_workstation_html_prefers_api_model_metrics_over_local_fallback() -> None:

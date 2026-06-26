@@ -4,6 +4,17 @@ Date: 2026-06-24
 Branch: `ui/stitch-hybrid-redesign-20260623`  
 Workspace: `E:\Магистр\2-курс\python\RealtyScope-stitch-hybrid-redesign-20260623`
 
+## 2026-06-26 Current Evidence Addendum
+
+This historical gap audit now has newer evidence from the integration worktree. Treat older sections that mention `17,046` listings, `44,765` observations, `2026-06-24` last observed date, stale Docker runtime, `hist_gradient_boosting` as current, `candidate_count=2`, or partial OSM coverage as provenance only unless a later addendum explicitly says otherwise.
+
+- Docker `/monitoring/status` now reports `17,287` listings, `source_counts={'cian': 2436, 'domclick': 14851}`, `45,764` observations, `23` observation dates, and `last_observed_date=2026-06-26`.
+- OSM feature coverage after the refresh is `17,046 / 17,287` (`98.61%`), so older `100.0%` notes apply only to the pre-refresh `17,046` listing table.
+- The selected `random_forest` model is still the validated snapshot trained on `17,046` rows; the fresh data refresh is visible through `model.data_freshness.status=validated_snapshot` and is not an automatic retrain.
+- Scheduler recovery corrected the Windows Scheduled Task target to the Stitch hybrid worktree and preserves the old task XML under `output/scheduler/`.
+- Monitoring now has bounded `recent_logs`, compatibility `recent_errors`, and a scheduler `app_logs` path for QRATOR/source-blocked pre-batch failures.
+- Final Docker evidence should be refreshed through WSL/Docker Compose before defense, and no terminal sale/removal lifecycle rows should be fabricated.
+
 ## 2026-06-25 Current Docker Runtime After Retrain
 
 This addendum supersedes older same-day notes below that mention `hist_gradient_boosting`, `candidate_count=2`, or partial OSM coverage as current.

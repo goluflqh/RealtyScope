@@ -5,6 +5,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from services.streamlit.api_client import fetch_dashboard_data, fetch_monitoring_data  # noqa: E402
 from services.streamlit.app import (  # noqa: E402
@@ -30,6 +31,12 @@ def validate_static_audit_payload(payload: dict, *, require_api: bool) -> None:
         raise SystemExit(
             f"Static audit requires the full real dataset, got listings_total={listings_total}"
         )
+    model = payload.get("model") or {}
+    data_freshness = model.get("data_freshness") if isinstance(model, dict) else None
+    if not isinstance(data_freshness, dict) or not data_freshness.get("status"):
+        raise SystemExit("Static audit requires model.data_freshness from the API payload")
+    if data_freshness.get("status") == "unknown":
+        raise SystemExit("Static audit requires known model.data_freshness status")
 
 
 def build_payload_with_retries(*, require_api: bool) -> dict:

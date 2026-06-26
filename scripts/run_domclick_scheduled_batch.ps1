@@ -59,11 +59,59 @@ function Invoke-DomclickNativeCommand {
         $ErrorActionPreference = $PreviousErrorActionPreference
     }
 
+    $script:LastDomclickNativeOutput = $Output
+
     if ($Output.Count -gt 0) {
         $Output | ForEach-Object { Write-Host $_ }
     }
 
     return $ExitCode
+}
+
+function Write-DomclickScheduledFailureLog {
+    param(
+        [string]$Python,
+        [string]$DatabaseUrl,
+        [string]$Message,
+        [string]$LogPath,
+        [string]$CollectionDate
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Python) -or [string]::IsNullOrWhiteSpace($DatabaseUrl)) {
+        Write-Warning "Cannot write Domclick scheduler failure log because Python or DatabaseUrl is empty."
+        return
+    }
+
+    $NativeOutputTail = @($script:LastDomclickNativeOutput | Select-Object -Last 20)
+    $BlockedLine = @(
+        $NativeOutputTail |
+            Where-Object { $_ -match "DomclickAccessBlocked|QRATOR|CAPTCHA|challenge" } |
+            Select-Object -Last 1
+    )
+    $DisplayMessage = $Message
+    if ($BlockedLine.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($BlockedLine[0])) {
+        $DisplayMessage = $BlockedLine[0]
+    }
+
+    $ContextJson = @{
+        collection_date = $CollectionDate
+        log_path = $LogPath
+        native_output_tail = $NativeOutputTail
+    } | ConvertTo-Json -Compress -Depth 4
+
+    $LogArgs = @(
+        "-m", "realtyscope.ingestion.domclick_scheduled_batch", "log-error",
+        "--database-url", $DatabaseUrl,
+        "--level", "WARNING",
+        "--event-type", "domclick_scheduled_task_failed",
+        "--message", $DisplayMessage,
+        "--context-json", $ContextJson,
+        "--json"
+    )
+    $LogExitCode = Invoke-DomclickNativeCommand -FilePath $Python -Arguments $LogArgs
+    if ($LogExitCode -ne 0) {
+        Write-Warning "Failed to write Domclick scheduler failure to app_logs; see transcript at $LogPath."
+    }
 }
 
 function Get-DomclickSnapshotPayloadFiles {
@@ -377,6 +425,15 @@ try {
     if ($BatchExitCode -ne 0) {
         throw "Domclick scheduled batch failed with exit code $BatchExitCode"
     }
+}
+catch {
+    Write-DomclickScheduledFailureLog `
+        -Python $Python `
+        -DatabaseUrl $DatabaseUrl `
+        -Message $_.Exception.Message `
+        -LogPath $LogPath `
+        -CollectionDate $CollectionDate
+    throw
 }
 finally {
     Stop-Transcript | Out-Null
