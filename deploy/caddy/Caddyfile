@@ -4,10 +4,16 @@
 
 {$APP_DOMAIN} {
 	encode zstd gzip
+	respond /robots.txt `User-agent: *
+Allow: /
+` 200
 	reverse_proxy streamlit:8501
 }
 
 {$API_DOMAIN} {
 	encode zstd gzip
+	respond /robots.txt `User-agent: *
+Disallow: /
+` 200
 	reverse_proxy api:8000
 }

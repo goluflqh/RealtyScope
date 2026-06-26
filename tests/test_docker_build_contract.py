@@ -41,3 +41,10 @@ def test_production_env_points_streamlit_to_public_api_domain() -> None:
     content = Path(".env.production.example").read_text(encoding="utf-8")
 
     assert "STREAMLIT_API_BASE_URL=https://api.realtyscope.bond" in content
+
+
+def test_production_caddy_serves_site_and_api_robots_txt() -> None:
+    content = Path("deploy/caddy/Caddyfile").read_text(encoding="utf-8")
+
+    assert "respond /robots.txt `User-agent: *\nAllow: /\n` 200" in content
+    assert "respond /robots.txt `User-agent: *\nDisallow: /\n` 200" in content
