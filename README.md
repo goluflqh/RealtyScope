@@ -1,136 +1,265 @@
 # RealtyScope
 
-RealtyScope — учебный data-service проект уровня grade 5 для оценки стоимости квартир в Москве.
+RealtyScope is a course-ready real-estate data service for Moscow apartment analytics. It combines bounded Domclick/CIAN data ingestion, PostgreSQL persistence, FastAPI, Redis caching, MLflow-backed model artifacts, and a Streamlit dashboard for data exploration, valuation, monitoring, and model evidence.
 
-## Current Course-Readiness Status
+The current release is merged into `main` through PR #3, `Final Grade-5 RealtyScope integration`.
 
-Phase 6 and Phase 7 have been merged into `main`; the phase branches remain preserved as milestone branches. For the current readiness board, requirement checklist, Domclick schedule note, and future polish guidance, see `docs/project-status.md`.
+## Current Status
 
-Phase 9 non-UI readiness has been integrated into `main` through PR `#1` and squash merge commit `5a2ae2a`, with GitHub Actions `ci` run `27856530977` passing after merge. The merged scope covers scheduler validation, data/backend checks, MLOps model promotion workflow, selected-model API/monitoring, and docs/CI/demo gates. The recovered Russian UI remains a separate deferred workstream at `ui/recovered-real-data-dashboard-20260620`; do not use the rejected `ui/realtyscope-ultimate-redesign` branch as the target.
+Latest verified runtime evidence as of 2026-06-26:
 
-The repository currently contains a tested course-ready foundation:
+- Docker API: `http://127.0.0.1:8000`
+- Streamlit UI: `http://127.0.0.1:8501`
+- MLflow: `http://127.0.0.1:5000`
+- Listings: `17,287`
+- Sources: `14,851` Domclick, `2,436` CIAN
+- Observations: `45,764`
+- Observation dates: `23`, from `2026-05-14` through `2026-06-26`
+- OSM feature coverage: `17,046 / 17,287` listings (`98.61%`)
+- Selected model: `selected_price_model_v1_non_leaky`, `random_forest`
+- Model training rows: `17,046`
+- Model freshness: validated snapshot; the model is not automatically retrained on every new daily ingest
 
-- общий Python-пакет `realtyscope`;
-- FastAPI-сервис с endpoint `/health`, DB-backed `/listings`, assignment-compatible `/data`, `/predict`, `/model/metadata`, `/monitoring/status` и фильтрами для data explorer;
-- Streamlit dashboard slice, который читает DB-backed FastAPI endpoints и показывает tabs, KPI, filters, paginated listing preview, reviewer charts/map, prediction, monitoring и model insights;
-- Docker Compose каркас для PostgreSQL, Redis, MLflow, API и Streamlit;
-- lockfile `uv.lock` для воспроизводимой установки зависимостей;
-- базовую настройку pytest, ruff, pre-commit и GitHub Actions CI;
-- typed ingestion contracts для raw, normalized и rejected listing records;
-- CSV import contract для teammate data;
-- replaceable Domclick snapshot parser с безопасными лимитами;
-- local JSONL path для raw, normalized и rejected ingestion artifacts;
-- SQLAlchemy 2.0 models для sources, ingestion runs, raw listings, canonical listings, source links, rejected rows и app logs;
-- Alembic initial migration для database foundation;
-- persistence из Phase 2 `IngestionBatch` в database tables;
-- sample ingestion command `python -m realtyscope.database.sample_ingestion --json` для проверки database write path;
-- Phase 3.5 Domclick collector command для RU-accessible host: `python -m realtyscope.ingestion.domclick_snapshot_collector --url-file <urls.txt> --output-root data/raw/domclick --json`;
-- Phase 3.6 Chrome-assisted Domclick SSR capture command для daily Moscow sale-apartment snapshots: `python -m realtyscope.ingestion.domclick_chrome_capture --output-root data/raw/domclick --capture-runtime cdp --json`;
-- bounded scheduled Domclick batch command for safe inspect/commit runs: `python -m realtyscope.ingestion.domclick_scheduled_batch run --source-path <snapshot-dir> --commit --json`;
-- Domclick ingestion status command: `python -m realtyscope.ingestion.domclick_scheduled_batch status --json`;
-- Phase 3.5 Domclick snapshot inspect command без записи в database: `python -m realtyscope.database.real_data_ingestion --source-type domclick_snapshot_dir --source-path <snapshot-dir> --inspect-only --json`;
-- Phase 3.5 Domclick snapshot ingestion command для реальных JSON/HTML snapshots или дневной папки `data/raw/domclick/YYYY-MM-DD`: `python -m realtyscope.database.real_data_ingestion --source-type domclick_snapshot_dir --source-path <snapshot-dir> --json`;
-- controlled Domclick access probe, который проверяет robots rules, sitemap index и QRATOR challenge без обхода disallowed `/search`;
-- первые backend read endpoints, которые читают persisted database rows, а не mock data;
-- cleaning/ML-readiness flags и audit trail для rejected rows;
-- Phase 3.5 EDA summary command, который читает persisted database tables и пишет markdown/JSON: `python -m realtyscope.analysis.eda_summary --database-url <url> --output docs/data/phase3_5_eda_summary.vi.md --json`;
-- English technical plan и полноценный Vietnamese companion с диакритикой для Phase 3;
-- Phase 4 data-readiness audit and observation-based EDA on persisted real Domclick rows: `docs/data/phase4-data-readiness.vi.md`, `docs/data/phase4-eda-observations.md`;
-- OpenStreetMap enrichment foundation with local/fixture feature computation, `osm_features` persistence, and explicit OpenStreetMap attribution rules: `docs/data/osm-enrichment.md`;
-- deterministic ML feature snapshot command: `python -m realtyscope.ml.features --json`;
-- baseline training command with joblib artifact output: `python -m realtyscope.ml.train --output-dir data/processed/models/phase4 --json`;
-- Phase 4 baseline model evidence in `docs/ml/phase4-baseline-model.md` and `docs/ml/phase4-baseline-model.vi.md`;
-- FastAPI `/predict` contract with Pydantic validation and model artifact loading from `ACTIVE_MODEL_ARTIFACT_PATH`;
-- Streamlit baseline prediction form that calls `/predict` and displays predicted price, model version, metrics summary, and caveat;
-- Phase 7.2 API/Streamlit filters for price range, area range, rooms, source, and address search;
-- Phase 7 reviewer polish: filters, tabbed navigation, paginated Data Explorer, reviewer charts/map, demo runbook, and visible last-successful-collection monitoring.
+Important caveat: the price model is a validated academic appraisal snapshot, not a production-grade estimator. Fresh data does not automatically imply a better model. Retraining should happen only through the model candidate and promotion workflow.
 
-Important caveat: RealtyScope now has non-leaky baseline evidence and a real Docker-backed MLflow registration path, but the model is still a baseline appraisal model rather than a final production estimator. Forecast-vs-actual conclusions still need richer repeated observations per listing, and deeper operations evidence would benefit from more consistent runtime app logs.
+## Architecture
 
-Phase 7 completed the final course-readiness polish: status/docs, fresh runtime and data checks, safe Docker/storage cleanup guidance, Streamlit data explorer filters and reviewer visuals, demo script, and a documented decision to keep Domclick ingestion daily for now.
-
-## Phase 5-6 updates
-
-Phase 5 adds the hardening layer on top of the Phase 4 baseline:
-
-- scheduled ingestion now stores deliberate daily observation evidence even when raw payloads are reused;
-- bounded live OSM enrichment has written real `osm_features` rows for local evidence;
-- `ml_features_v2_non_leaky` removes latest-price leakage and trains `baseline_ridge_v2_non_leaky` with grouped validation by `listing_id`;
-- FastAPI exposes `/model/metadata` and `/monitoring/status` in addition to `/predict`, `/listings`, and `/stats/data-quality`;
-- Streamlit now has overview, prediction, monitoring, and model-insight sections backed by the API client;
-- default `ACTIVE_MODEL_ARTIFACT_PATH` points to `data/processed/models/phase5/baseline_ridge_v2_non_leaky.joblib`.
-
-Phase 6 adds production-like MLOps and runtime evidence:
-
-- Docker Compose builds from scoped in-repo contexts instead of the repository root;
-- Redis backs the `/listings` and `/data` read path;
-- the trainer service logs a real MLflow run and registers `realtyscope-price-model` version `3`;
-- GitHub Actions is green for the Phase 6 base at `30bce998...` and for `main` after the Phase 7 merge.
-
-Phase 7.2-7.4 adds reviewer-facing readiness polish:
-
-- `/data` and `/listings` support filters for price range, area range, rooms, source, and address search;
-- Streamlit exposes those filters in the sidebar and adds tabbed sections for overview, data explorer, visuals, prediction, and monitoring/model evidence;
-- Streamlit renders reviewer visuals for price distribution, median price by rooms, and a coordinate map with OpenStreetMap attribution;
-- Data Explorer has a simple `Page` control backed by real `/data` offset pagination;
-- Phase 7 was fast-forward merged into `main`; current CI/runtime evidence is tracked in `docs/project-status.md`.
-
-Generated model artifacts and runtime logs remain under ignored `data/processed/`. See `docs/ml/phase5-non-leaky-model.md`, `docs/ml/phase6-mlflow-registration.md`, and `docs/project-status.md` for metrics, MLOps evidence, and current caveats.
-
-## Локальная установка
-
-Проект использует явное разделение сред:
-
-- Windows — рабочая среда для Codex Desktop, dedicated Chrome automation profile, browser-assisted Domclick capture и Python-команд через локальный `.venv`.
-- WSL2 Ubuntu — Linux runtime для Docker Compose, PostgreSQL, Redis, MLflow и production-like проверок.
-- VPS/production — Linux/Docker окружение, совместимое с WSL2, а не с global Python packages на Windows.
-
-Подробные инструкции:
-
-- English setup/runtime: `docs/development/local-environment.md`
-- Tiếng Việt setup/runtime: `docs/development/local-environment.vi.md`
-- Demo script: `docs/demo-script.md`
-- Kịch bản demo tiếng Việt: `docs/demo-script.vi.md`
-- Runtime proof and cleanup: the local environment docs include Redis cache verification plus safe Docker/storage cleanup guidance.
-
-Создать локальный Windows `.venv` из PowerShell:
-
-```powershell
-python -m venv .venv
-$env:PYTHONIOENCODING="utf-8"
-$env:PIP_NO_COLOR="1"
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -e ".[dev,data,api,streamlit]"
+```text
+Domclick / CIAN raw data
+        |
+        v
+Ingestion and normalization
+        |
+        v
+PostgreSQL + SQLAlchemy + Alembic
+        |
+        +--> FastAPI API
+        |       +--> Redis cached reads
+        |       +--> /data, /predict, /model/metadata, /monitoring/status
+        |
+        +--> ML feature snapshots
+        |       +--> model training and MLflow evidence
+        |
+        +--> Streamlit dashboard
+                +--> overview, data, valuation, map, trends, monitoring
 ```
 
-Запускать Python-команды только через `.venv`:
+Main services:
 
-```powershell
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m ruff format --check .
+- `db`: PostgreSQL 16
+- `redis`: read-path cache
+- `mlflow`: experiment and registry evidence
+- `api`: FastAPI backend
+- `streamlit`: reviewer-facing dashboard
+- `trainer`: optional model training container
+
+## Repository Layout
+
+```text
+services/api/             FastAPI service
+services/streamlit/       Streamlit dashboard and static audit HTML builder
+services/trainer/         Docker trainer entrypoint
+src/realtyscope/          Core package: ingestion, database, enrichment, ML, analysis
+alembic/                  Database migrations
+docs/                     Course, operations, demo, readiness, and design docs
+scripts/                  Runtime and audit helper scripts
+tests/                    API, ML, ingestion, UI-payload, Docker-contract tests
+data/                     Local data folders, mostly ignored/generated
 ```
 
-Запустить PostgreSQL через WSL2 Docker Compose:
+## API
 
-```powershell
-wsl -d Ubuntu -- bash -lc "cd /mnt/e/Магистр/2-курс/python/RealtyScope && docker compose up -d db"
+Useful local endpoints after Docker Compose is running:
+
+- `GET /health`: service health
+- `GET /docs`: FastAPI Swagger UI
+- `GET /data`: assignment-compatible listings table with filters and pagination
+- `GET /listings`: cached listings read path
+- `POST /predict`: price prediction from the promoted model artifact
+- `GET /model/metadata`: model version, candidate metrics, feature importance, freshness
+- `GET /stats/data-quality`: persisted data and observation statistics
+- `GET /stats/observation-trend`: observation-based trend payload
+- `GET /stats/exposure-forecast`: observation-gap inferred lifecycle forecast
+- `GET /monitoring/status`: service, ingestion, model, data, and recent log status
+
+Example:
+
+```bash
+curl -sS "http://localhost:8000/data?limit=3&offset=0&rooms=2" | python -m json.tool
+curl -sS "http://localhost:8000/model/metadata" | python -m json.tool
+curl -sS "http://localhost:8000/monitoring/status" | python -m json.tool
 ```
 
-CI/Linux/VPS должны устанавливаться из `uv.lock`:
+## Dashboard
+
+The Streamlit dashboard exposes:
+
+- overview KPIs
+- data explorer filters and pagination
+- listing preview and exportable table
+- valuation form with model candidate selection
+- comparable listings and model feature drivers
+- map and district analytics
+- observation trend readiness
+- inferred exposure forecast readiness
+- monitoring cards, service status, model freshness, and recent logs
+
+Open it locally at:
+
+```text
+http://localhost:8501
+```
+
+## Data Pipeline
+
+The Domclick daily batch is intentionally bounded and source-aware:
+
+- Chrome/CDP capture writes raw payloads under `data/raw/domclick/YYYY-MM-DD-bulk`.
+- Scheduled ingestion normalizes payloads and commits successful runs to PostgreSQL.
+- Failures such as QRATOR/CAPTCHA/source blocking are recorded through `app_logs` for monitoring.
+- The scheduler avoids aggressive retry loops; source blocking should be inspected before reruns.
+
+Common commands:
+
+```powershell
+python -m realtyscope.ingestion.domclick_chrome_capture --output-root data/raw/domclick --capture-runtime cdp --json
+python -m realtyscope.ingestion.domclick_scheduled_batch run --source-path data/raw/domclick/2026-06-26-bulk --commit --json
+python -m realtyscope.ingestion.domclick_scheduled_batch status --json
+```
+
+On the Windows workstation, the scheduled task should point at:
+
+```text
+scripts/run_domclick_scheduled_batch.ps1
+```
+
+## Machine Learning
+
+The current selected artifact is:
+
+```text
+data/processed/models/phase5/selected_price_model_v1_non_leaky.joblib
+```
+
+Current selected candidate:
+
+- candidate: `random_forest`
+- model version: `selected_price_model_v1_non_leaky`
+- feature version: `ml_features_v2_non_leaky`
+- training rows: `17,046`
+- validation R2: `0.8653`
+- MAE: about `7.64M` RUB
+- candidate count: `3` (`random_forest`, `hist_gradient_boosting`, `ridge`)
+
+Truth boundaries:
+
+- No XGBoost result is claimed.
+- The model is a validated snapshot, not an automatically retrained daily model.
+- The current database has `17,287` listings, so the dashboard shows a model freshness delta.
+- Confirmed terminal sale/removal lifecycle rows remain unavailable; exposure forecasting is inferred from observation gaps.
+
+## Local Development
+
+Install Python dependencies with `uv`:
 
 ```bash
 python -m pip install uv==0.11.3
 UV_LINK_MODE=copy uv sync --frozen --extra dev --extra data --extra api --extra streamlit
 ```
 
-Полезные локальные URL после запуска сервисов:
+Run checks:
 
-- FastAPI health: http://localhost:8000/health
-- FastAPI Swagger: http://localhost:8000/docs
-- Streamlit: http://localhost:8501
-- MLflow: http://localhost:5000
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run pytest --cov=realtyscope --cov=services --cov-report=term-missing --cov-fail-under=50
+```
 
-## Атрибуция OpenStreetMap
+On Windows without `uv` in the current shell, the equivalent local commands used for release verification were:
 
-В будущих страницах dashboard, где используются карты или данные, полученные из OpenStreetMap, должна быть видимая атрибуция OpenStreetMap.
+```powershell
+python -m ruff check .
+python -m ruff format --check .
+python -m pytest -p no:cacheprovider --cov=realtyscope --cov=services --cov-report=term-missing --cov-fail-under=50
+```
+
+## Docker Compose
+
+Use WSL2 or a Linux host for Docker Compose. From the repository root:
+
+```bash
+docker compose -p realtyscope up --build -d
+docker compose -p realtyscope ps
+```
+
+Expected services:
+
+- `db` healthy
+- `redis` healthy
+- `api` healthy on port `8000`
+- `streamlit` healthy on port `8501`
+- `mlflow` up on port `5000`
+
+Quick smoke:
+
+```bash
+curl -sS http://localhost:8000/health
+curl -sS http://localhost:8501/_stcore/health
+curl -sS http://localhost:8000/monitoring/status | python -m json.tool
+```
+
+For the static audit against a live Docker API, use a longer timeout when the database is cold:
+
+```powershell
+$env:API_BASE_URL="http://127.0.0.1:8000"
+$env:STREAMLIT_API_TIMEOUT_SECONDS="30"
+python scripts\playwright\generate_static_audit.py
+Remove-Item Env:API_BASE_URL
+Remove-Item Env:STREAMLIT_API_TIMEOUT_SECONDS
+```
+
+## Deployment Notes
+
+The project is designed for a Linux VPS deployment with Docker Compose.
+
+Recommended production steps:
+
+1. Provision a VPS with Docker, Docker Compose, and a firewall.
+2. Create DNS records for the domain and optional API subdomain.
+3. Copy the repository to the server or deploy from GitHub.
+4. Create a production `.env` from `.env.example`.
+5. Use persistent Docker volumes for PostgreSQL, Redis, MLflow, and model/data artifacts.
+6. Start services with `docker compose -p realtyscope up --build -d`.
+7. Put Caddy, Nginx, or Traefik in front of Streamlit/API for HTTPS.
+8. Verify `/health`, `/_stcore/health`, `/monitoring/status`, and dashboard rendering.
+9. Configure database backups before enabling scheduled ingestion.
+
+Deployment caveats:
+
+- Do not commit real secrets.
+- Domclick collection can be blocked by QRATOR/CAPTCHA; treat source access as an operational dependency.
+- The Windows Scheduled Task is not portable to VPS; use cron or a systemd timer on Linux.
+- Run model retraining as an explicit promotion workflow, not as an automatic side effect of ingestion.
+
+## Verification Evidence
+
+Latest release verification after PR #3 merge:
+
+- GitHub Actions CI: passing for PR and push.
+- Local merged-main pytest: `241 passed`, coverage `80.84%`, fail-under `50%`.
+- Local `ruff check .`: passed.
+- Local `ruff format --check .`: passed.
+- Docker/WSL runtime smoke: API, Streamlit, PostgreSQL, Redis healthy; MLflow up.
+- Static audit with Docker API and `STREAMLIT_API_TIMEOUT_SECONDS=30`: `api 17287 {'cian': 2436, 'domclick': 14851}`.
+
+See also:
+
+- `docs/project-status.md`
+- `docs/demo-script.md`
+- `docs/demo-script.vi.md`
+- `docs/final-readiness/2026-06-25-completion-audit.md`
+- `docs/course-guidance/realtyscope-user-story-traceability.md`
+
+## License And Data Notice
+
+This is an academic project. Respect source-site terms, robots policies, rate limits, OpenStreetMap attribution requirements, and local data protection rules when collecting or deploying real estate data.
