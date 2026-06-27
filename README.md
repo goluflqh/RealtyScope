@@ -10,7 +10,7 @@
 | --- | --- |
 | Описание проекта | См. [Описание проекта.html](<./Описание проекта.html>) и этот README |
 | Git проекта | Репозиторий: [github.com/goluflqh/RealtyScope](https://github.com/goluflqh/RealtyScope) |
-| Основная презентация через ПК | Локальный/серверный Streamlit UI: `http://127.0.0.1:8501` или домен VPS |
+| Основная презентация через ПК | Локальный Streamlit UI: `http://127.0.0.1:8501`; deployed URL: [realtyscope.bond](https://realtyscope.bond/) |
 
 ## Что делает система
 
@@ -71,6 +71,20 @@ PostgreSQL + SQLAlchemy + Alembic
 - **Backend** предоставляет стабильный API-контракт.
 - **Frontend** показывает данные и результаты модели на русском языке.
 - **Docker/VPS layer** обеспечивает переносимость между локальным запуском и сервером.
+
+## Технологический стек
+
+| Слой | Технологии | Роль в проекте |
+| --- | --- | --- |
+| Язык и backend | Python 3.11/3.12, FastAPI, Pydantic, Uvicorn | REST API, валидация контрактов, inference endpoint |
+| Данные и БД | PostgreSQL, SQLAlchemy, Alembic | хранение объявлений, наблюдений, логов, миграции схемы |
+| Кэш и мониторинг | Redis, structured status endpoints | ускорение повторных запросов и контроль состояния сервисов |
+| ML | scikit-learn, HistGradientBoosting, RandomForest, Ridge, joblib | обучение, сравнение кандидатов и сохранение артефактов |
+| MLOps | MLflow-compatible artifacts, model metadata | версионирование модели, метрики, feature contract |
+| Геоданные | OpenStreetMap-derived features, GeoJSON boundaries | признаки инфраструктуры и районная аналитика |
+| Frontend | Streamlit + embedded HTML/CSS/JS | интерактивная русскоязычная витрина для защиты |
+| DevOps | Docker Compose, Caddy, GitHub Actions | локальный запуск, VPS deployment, CI-проверки |
+| Проверки | pytest, ruff, compileall, headless Chrome audit | API/UI contract, качество кода, smoke/runtime evidence |
 
 ## Данные и признаки
 
@@ -180,6 +194,30 @@ Streamlit UI локализован на русский язык и включа
 
 Страница оценки отправляет в API тот же canonical feature vector, на котором обучалась модель. Координаты, инфраструктура, этажность, год постройки и missing flags передаются явно.
 
+## Функциональные возможности
+
+- **Market overview:** агрегаты по рынку, источникам, комнатности, площади и цене за квадратный метр.
+- **Data explorer:** таблица объявлений с пагинацией, фильтрами, датами наблюдений и ссылками на источники.
+- **Valuation:** расчёт стоимости квартиры по параметрам пользователя, выбор модели-кандидата, echo входных признаков и сопоставимые объявления.
+- **Map view:** карта объектов Москвы с точками, popup, zoom, drag-pan и реальными ссылками.
+- **Deals:** поиск потенциально интересных объектов относительно медианных сегментов.
+- **District analytics:** районные сравнения, покрытие извлечения районов, кластеризация районных профилей.
+- **Monitoring:** состояние API, PostgreSQL, Redis, модели, ingestion, источников и OSM-покрытия.
+- **Deployment readiness:** Docker Compose для локального запуска и production runbook для VPS.
+
+## Проверочный чеклист проекта
+
+| Направление | Статус | Подтверждение |
+| --- | --- | --- |
+| Репозиторий и CI | Готово | GitHub branch/PR workflow, GitHub Actions `lint-test` |
+| База данных | Готово | PostgreSQL runtime содержит 17 287 объявлений и 45 764 наблюдения |
+| API | Готово | `/health`, `/data`, `/predict`, `/model/metadata`, `/monitoring/status` |
+| ML-модель | Готово | HGB R² 0,9314; spatial/temporal audit положительный |
+| UI | Готово | Streamlit dashboard, valuation, map, data, deals, districts, monitoring |
+| Docker | Готово | `docker compose -p realtyscope up -d --build` |
+| VPS | Готово к повторному deploy | production compose + runtime bundle restore |
+| Документация | Готово | README, HTML-описание, ML-документы, VPS runbook |
+
 ## Локальный запуск
 
 Установка зависимостей:
@@ -240,6 +278,7 @@ docker compose -p realtyscope ps
 - MLflow: `http://localhost:5000`
 - PostgreSQL: внутренний сервис `db`
 - Redis: внутренний сервис `redis`
+- Deployed UI: [https://realtyscope.bond/](https://realtyscope.bond/)
 
 Smoke checks:
 

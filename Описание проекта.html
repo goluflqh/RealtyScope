@@ -157,9 +157,11 @@
         <div class="nav-links">
           <a href="#goal">Цель</a>
           <a href="#architecture">Архитектура</a>
+          <a href="#stack">Стек</a>
           <a href="#data">Данные</a>
           <a href="#ml">ML</a>
           <a href="#ui">Интерфейс</a>
+          <a href="#checklist">Чеклист</a>
           <a href="#deploy">Запуск</a>
           <a href="#defense">Защита</a>
         </div>
@@ -181,6 +183,7 @@
             <span class="chip">Docker</span>
             <span class="chip">OSM features</span>
             <span class="chip">HistGradientBoosting</span>
+            <span class="chip"><a href="https://realtyscope.bond/">realtyscope.bond</a></span>
           </div>
         </div>
         <aside class="side-card">
@@ -188,6 +191,7 @@
           <div class="metric"><span>Наблюдения</span><strong>45 764</strong></div>
           <div class="metric"><span>Validation R²</span><strong>0,9314</strong></div>
           <div class="metric"><span>Runtime</span><strong>Docker + VPS-ready</strong></div>
+          <div class="metric"><span>Web</span><strong><a href="https://realtyscope.bond/">realtyscope.bond</a></strong></div>
         </aside>
       </div>
     </section>
@@ -234,6 +238,30 @@
           <div class="code">Raw listings → Normalization → PostgreSQL → FastAPI → Streamlit
                                       ↘ ML feature snapshot → trained model artifacts → /predict</div>
         </div>
+      </div>
+    </section>
+
+    <section id="stack">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">Технологический стек</div>
+          <h2>Инструменты выбраны под полный цикл data-service</h2>
+          <p>Проект не ограничивается визуализацией: в нём есть слой хранения, API-контракты, машинное обучение, мониторинг, упаковка в Docker и сценарий серверного развёртывания.</p>
+        </div>
+        <table>
+          <thead><tr><th>Слой</th><th>Технологии</th><th>Назначение</th></tr></thead>
+          <tbody>
+            <tr><td>Язык и backend</td><td>Python, FastAPI, Pydantic, Uvicorn</td><td>REST API, валидация входных данных, inference endpoint.</td></tr>
+            <tr><td>Хранилище</td><td>PostgreSQL, SQLAlchemy, Alembic</td><td>Объявления, наблюдения, источники, логи, миграции схемы.</td></tr>
+            <tr><td>Кэш и runtime</td><td>Redis, Docker Compose</td><td>Повторные запросы, локальная и серверная воспроизводимость.</td></tr>
+            <tr><td>ML</td><td>scikit-learn, HistGradientBoosting, RandomForest, Ridge, joblib</td><td>Обучение кандидатов, выбор лучшей модели, сохранение артефактов.</td></tr>
+            <tr><td>MLOps</td><td>MLflow-compatible metadata, model artifacts</td><td>Версии модели, метрики, feature contract, воспроизводимость inference.</td></tr>
+            <tr><td>Геоаналитика</td><td>OpenStreetMap-derived features, GeoJSON boundaries</td><td>Инфраструктура вокруг объекта, районы и кластеры.</td></tr>
+            <tr><td>Frontend</td><td>Streamlit, HTML/CSS/JS</td><td>Русскоязычная интерактивная витрина для демонстрации.</td></tr>
+            <tr><td>Качество</td><td>pytest, ruff, compileall, headless Chrome audit, GitHub Actions</td><td>Проверка backend/UI контрактов, сборки, форматирования и runtime-сценариев.</td></tr>
+            <tr><td>Deployment</td><td>Caddy, Docker volumes, VPS runbook</td><td>Публичный URL, reverse proxy, восстановление БД и артефактов модели.</td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
 
@@ -329,6 +357,34 @@
           <div class="card"><h3>Карта</h3><p>Точки объявлений, масштабирование, перемещение карты, popup с ценой и ссылкой на источник.</p></div>
           <div class="card"><h3>Мониторинг</h3><p>Статусы API, БД, Redis, модели, ingestion, источников и покрытия OSM-признаками.</p></div>
         </div>
+        <div class="grid cols-3" style="margin-top:18px">
+          <div class="card"><h3>Таблица данных</h3><p>Пагинация, важные поля объявлений, дата наблюдения, цена за квадратный метр и ссылка на исходное объявление.</p></div>
+          <div class="card"><h3>Районы и кластеры</h3><p>Сравнение районов, покрытие геоизвлечения, профили районов и осторожная интерпретация частичных данных.</p></div>
+          <div class="card"><h3>Кандидаты на сделки</h3><p>Скоринговая витрина объектов, которые выглядят дешевле похожих рыночных предложений в своём сегменте.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="checklist">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">Функциональная готовность</div>
+          <h2>Что реализовано и проверено</h2>
+          <p>Ниже — инженерный чеклист проекта. Он показывает, что система покрывает не только UI, но и данные, API, ML, deployment и проверяемость результата.</p>
+        </div>
+        <table>
+          <thead><tr><th>Направление</th><th>Статус</th><th>Подтверждение</th></tr></thead>
+          <tbody>
+            <tr><td>Git и CI</td><td><span class="ok">готово</span></td><td>GitHub repository, Pull Request workflow, GitHub Actions `lint-test`.</td></tr>
+            <tr><td>Хранилище</td><td><span class="ok">готово</span></td><td>PostgreSQL runtime: 17 287 объявлений, 45 764 наблюдения.</td></tr>
+            <tr><td>API</td><td><span class="ok">готово</span></td><td>`/health`, `/data`, `/predict`, `/model/metadata`, `/monitoring/status`.</td></tr>
+            <tr><td>ML-модель</td><td><span class="ok">готово</span></td><td>HGB R² 0,9314; train/validation gap 0,0281; spatial/temporal audit положительный.</td></tr>
+            <tr><td>Интерфейс</td><td><span class="ok">готово</span></td><td>Dashboard, valuation, map, data table, deals, districts, monitoring.</td></tr>
+            <tr><td>Docker</td><td><span class="ok">готово</span></td><td>Compose stack: API, DB, Redis, MLflow, Streamlit.</td></tr>
+            <tr><td>VPS</td><td><span class="ok">готово к повторному deploy</span></td><td>Production compose, Caddy, runtime bundle restore, deployed URL.</td></tr>
+            <tr><td>Документация</td><td><span class="ok">готово</span></td><td>README, HTML-описание, ML audit docs, VPS runbook.</td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
 
@@ -337,7 +393,7 @@
         <div class="section-head">
           <div class="eyebrow">Запуск и развёртывание</div>
           <h2>Одинаковая логика локально и на VPS</h2>
-          <p>Проект упакован в Docker Compose. Для VPS используются production compose, Caddy reverse proxy, PostgreSQL volume и отдельный volume с артефактами модели.</p>
+          <p>Проект упакован в Docker Compose. Для VPS используются production compose, Caddy reverse proxy, PostgreSQL volume и отдельный volume с артефактами модели. Публичная витрина: <a href="https://realtyscope.bond/">https://realtyscope.bond/</a>.</p>
         </div>
         <div class="grid cols-2">
           <div class="panel">
