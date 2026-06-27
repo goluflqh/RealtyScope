@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RealtyScope — описание проекта</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #101a2e;
+      --card: #15223a;
+      --line: #263653;
+      --text: #eef6ff;
+      --muted: #aab8ca;
+      --soft: #d8e7f8;
+      --cyan: #5eead4;
+      --blue: #60a5fa;
+      --green: #34d399;
+      --amber: #fbbf24;
+      --red: #fb7185;
+      --shadow: 0 24px 80px rgba(0, 0, 0, .32);
+      --radius: 22px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 18% 5%, rgba(94, 234, 212, .18), transparent 30%),
+        radial-gradient(circle at 85% 12%, rgba(96, 165, 250, .20), transparent 34%),
+        linear-gradient(180deg, #07101f, var(--bg));
+      line-height: 1.65;
+    }
+    a { color: var(--cyan); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .wrap { width: min(1180px, calc(100% - 36px)); margin: 0 auto; }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      backdrop-filter: blur(16px);
+      background: rgba(7, 16, 31, .78);
+      border-bottom: 1px solid rgba(216, 231, 248, .10);
+    }
+    nav { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 0; }
+    .brand { font-weight: 900; letter-spacing: .04em; }
+    .nav-links { display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; color: var(--muted); }
+    .nav-links a { color: var(--muted); }
+    .hero { padding: 92px 0 64px; }
+    .hero-grid { display: grid; grid-template-columns: 1.35fr .65fr; gap: 28px; align-items: stretch; }
+    .hero-card, .card, .panel {
+      background: linear-gradient(180deg, rgba(21, 34, 58, .95), rgba(16, 26, 46, .92));
+      border: 1px solid rgba(216, 231, 248, .12);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .hero-card { padding: 42px; }
+    .eyebrow { color: var(--cyan); text-transform: uppercase; font-weight: 900; letter-spacing: .18em; font-size: 12px; }
+    h1 { font-size: clamp(42px, 8vw, 86px); line-height: .95; margin: 16px 0 22px; }
+    h2 { font-size: clamp(28px, 4vw, 46px); margin: 0 0 18px; line-height: 1.05; }
+    h3 { margin: 0 0 10px; font-size: 20px; }
+    p { margin: 0 0 14px; color: var(--soft); }
+    .lead { font-size: 20px; color: #dbeafe; max-width: 820px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border: 1px solid rgba(94, 234, 212, .28);
+      border-radius: 999px;
+      color: #d9fffb;
+      background: rgba(94, 234, 212, .08);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .side-card { padding: 28px; display: grid; gap: 14px; align-content: center; }
+    .metric { padding: 14px; border-radius: 16px; background: rgba(255, 255, 255, .04); border: 1px solid rgba(216, 231, 248, .10); }
+    .metric span { display: block; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .12em; font-weight: 800; }
+    .metric strong { display: block; margin-top: 5px; font-size: 24px; color: var(--text); }
+    section { padding: 58px 0; }
+    .section-head { margin-bottom: 26px; max-width: 900px; }
+    .grid { display: grid; gap: 18px; }
+    .grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .card, .panel { padding: 24px; }
+    .card p, li { color: var(--soft); }
+    ul { margin: 12px 0 0; padding-left: 20px; }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      align-items: stretch;
+    }
+    .step {
+      min-height: 128px;
+      padding: 18px;
+      border-radius: 18px;
+      border: 1px solid rgba(96, 165, 250, .25);
+      background: rgba(96, 165, 250, .08);
+    }
+    .step b { color: var(--cyan); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 18px;
+      border: 1px solid rgba(216, 231, 248, .12);
+      background: rgba(255, 255, 255, .03);
+    }
+    th, td { padding: 13px 14px; border-bottom: 1px solid rgba(216, 231, 248, .10); text-align: left; vertical-align: top; }
+    th { color: #dbeafe; background: rgba(96, 165, 250, .10); font-size: 13px; text-transform: uppercase; letter-spacing: .08em; }
+    td { color: var(--soft); }
+    tr:last-child td { border-bottom: 0; }
+    .ok { color: var(--green); font-weight: 900; }
+    .warn { color: var(--amber); font-weight: 900; }
+    .bad { color: var(--red); font-weight: 900; }
+    .code {
+      font-family: "JetBrains Mono", Consolas, monospace;
+      color: #b7f7ff;
+      background: rgba(0, 0, 0, .22);
+      border: 1px solid rgba(216, 231, 248, .10);
+      border-radius: 16px;
+      padding: 16px;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .callout {
+      border-left: 4px solid var(--cyan);
+      background: rgba(94, 234, 212, .08);
+      padding: 18px 20px;
+      border-radius: 16px;
+      color: #e6fffb;
+    }
+    footer { padding: 42px 0 62px; color: var(--muted); border-top: 1px solid rgba(216, 231, 248, .10); }
+    @media (max-width: 900px) {
+      .hero-grid, .grid.cols-3, .grid.cols-2, .flow { grid-template-columns: 1fr; }
+      nav { align-items: flex-start; flex-direction: column; }
+      .hero-card { padding: 28px; }
+    }
+    @media print {
+      header { position: static; }
+      body { background: #fff; color: #111827; }
+      .hero-card, .card, .panel, .side-card { box-shadow: none; background: #fff; color: #111827; border-color: #d1d5db; }
+      p, td, li, .lead { color: #1f2937; }
+      a { color: #0f766e; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <nav>
+        <div class="brand">RealtyScope</div>
+        <div class="nav-links">
+          <a href="#goal">Цель</a>
+          <a href="#architecture">Архитектура</a>
+          <a href="#stack">Стек</a>
+          <a href="#data">Данные</a>
+          <a href="#ml">ML</a>
+          <a href="#ui">Интерфейс</a>
+          <a href="#checklist">Чеклист</a>
+          <a href="#deploy">Запуск</a>
+          <a href="#defense">Защита</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-card">
+          <div class="eyebrow">Семестровый проект · большие данные · ML · Web service</div>
+          <h1>RealtyScope</h1>
+          <p class="lead">Платформа для анализа рынка квартир Москвы и оценки стоимости объекта на основе реальных объявлений, признаков городской инфраструктуры и проверенной ML-модели без утечки целевой переменной.</p>
+          <div class="chips">
+            <span class="chip">FastAPI</span>
+            <span class="chip">PostgreSQL</span>
+            <span class="chip">Streamlit</span>
+            <span class="chip">Docker</span>
+            <span class="chip">OSM features</span>
+            <span class="chip">HistGradientBoosting</span>
+            <span class="chip"><a href="https://realtyscope.bond/">realtyscope.bond</a></span>
+          </div>
+        </div>
+        <aside class="side-card">
+          <div class="metric"><span>Объявления</span><strong>17 287</strong></div>
+          <div class="metric"><span>Наблюдения</span><strong>45 764</strong></div>
+          <div class="metric"><span>Validation R²</span><strong>0,9314</strong></div>
+          <div class="metric"><span>Runtime</span><strong>Docker + VPS-ready</strong></div>
+          <div class="metric"><span>Web</span><strong><a href="https://realtyscope.bond/">realtyscope.bond</a></strong></div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="goal">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">Постановка задачи</div>
+          <h2>От сырых объявлений до воспроизводимого аналитического сервиса</h2>
+          <p>Цель проекта — построить не статичный notebook, а полноценный data-service: данные собираются и сохраняются в базе, backend отдаёт API, frontend показывает аналитику, а ML-модель рассчитывает стоимость квартиры по параметрам пользователя.</p>
+        </div>
+        <div class="grid cols-3">
+          <div class="card">
+            <h3>1. Описание проекта</h3>
+            <p>Этот HTML-файл и README дают научное и техническое описание: домен, данные, архитектура, ML, проверки, ограничения.</p>
+          </div>
+          <div class="card">
+            <h3>2. Git проекта</h3>
+            <p>Код ведётся в GitHub-репозитории <a href="https://github.com/goluflqh/RealtyScope">goluflqh/RealtyScope</a>, история изменений фиксируется через коммиты и PR.</p>
+          </div>
+          <div class="card">
+            <h3>3. Презентация через ПК</h3>
+            <p>Основная демонстрация выполняется через Streamlit dashboard: данные, карта, прогноз цены, мониторинг и качество модели.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="architecture">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">Архитектура</div>
+          <h2>Система разделена на слои</h2>
+          <p>Архитектура соответствует идее DataPulse: ingestion, storage, ML pipeline, backend, frontend и deployment существуют как отдельные, проверяемые части.</p>
+        </div>
+        <div class="flow">
+          <div class="step"><b>Data</b><br>Domclick/CIAN-потоки, нормализация, отчёты качества.</div>
+          <div class="step"><b>Storage</b><br>PostgreSQL, SQLAlchemy, Alembic, наблюдения объявлений.</div>
+          <div class="step"><b>ML</b><br>Non-leaky features, joblib artifacts, сравнение кандидатов.</div>
+          <div class="step"><b>API</b><br>FastAPI endpoints для данных, модели и мониторинга.</div>
+          <div class="step"><b>UI</b><br>Streamlit dashboard на русском языке для защиты.</div>
+        </div>
+        <div class="panel" style="margin-top:18px">
+          <div class="code">Raw listings → Normalization → PostgreSQL → FastAPI → Streamlit
+                                      ↘ ML feature snapshot → trained model artifacts → /predict</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="stack">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">Технологический стек</div>
+          <h2>Инструменты выбраны под полный цикл data-service</h2>
+          <p>Проект не ограничивается визуализацией: в нём есть слой хранения, API-контракты, машинное обучение, мониторинг, упаковка в Docker и сценарий серверного развёртывания.</p>
+        </div>
+        <table>
+          <thead><tr><th>Слой</th><th>Технологии</th><th>Назначение</th></tr></thead>
+          <tbody>
+            <tr><td>Язык и backend</td><td>Python, FastAPI, Pydantic, Uvicorn</td><td>REST API, валидация входных данных, inference endpoint.</td></tr>
+            <tr><td>Хранилище</td><td>PostgreSQL, SQLAlchemy, Alembic</td><td>Объявления, наблюдения, источники, логи, миграции схемы.</td></tr>
+            <tr><td>Кэш и runtime</td><td>Redis, Docker Compose</td><td>Повторные запросы, локальная и серверная воспроизводимость.</td></tr>
+            <tr><td>ML</td><td>scikit-learn, HistGradientBoosting, RandomForest, Ridge, joblib</td><td>Обучение кандидатов, выбор лучшей модели, сохранение артефактов.</td></tr>
+            <tr><td>MLOps</td><td>MLflow-compatible metadata, model artifacts</td><td>Версии модели, метрики, feature contract, воспроизводимость inference.</td></tr>
+            <tr><td>Геоаналитика</td><td>OpenStreetMap-derived features, GeoJSON boundaries</td><td>Инфраструктура вокруг объекта, районы и кластеры.</td></tr>
+            <tr><td>Frontend</td><td>Streamlit, HTML/CSS/JS</td><td>Русскоязычная интерактивная витрина для демонстрации.</td></tr>
+            <tr><td>Качество</td><td>pytest, ruff, compileall, headless Chrome audit, GitHub Actions</td><td>Проверка backend/UI контрактов, сборки, форматирования и runtime-сценариев.</td></tr>
+            <tr><td>Deployment</td><td>Caddy, Docker volumes, VPS runbook</td><td>Публичный URL, reverse proxy, восстановление БД и артефактов модели.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="data">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">Данные</div>
+          <h2>Реальный snapshot рынка Москвы</h2>
+          <p>Проект хранит не только текущие карточки объявлений, но и repeated observations — это позволяет показывать историю наблюдений, изменение цен и состояние ingestion.</p>
+        </div>
+        <table>
+          <thead><tr><th>Показатель</th><th>Значение</th><th>Зачем нужен</th></tr></thead>
+          <tbody>
+            <tr><td>Объявления</td><td>17 287</td><td>База для витрины, карты, аналитики и ML.</td></tr>
+            <tr><td>Наблюдения</td><td>45 764</td><td>История появления и изменения объявлений.</td></tr>
+            <tr><td>OSM-признаки</td><td>17 046 строк, 98,61%</td><td>Инфраструктура вокруг объекта: школы, парки, транспорт, магазины.</td></tr>
+            <tr><td>Источники</td><td>CIAN + Domclick</td><td>Сравнение и объединение рыночных предложений.</td></tr>
+            <tr><td>Период</td><td>2026-05-14 — 2026-06-26</td><td>Проверяемый временной snapshot для проекта.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="ml">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">Machine Learning</div>
+          <h2>Модель оценки цены без прямой утечки</h2>
+          <p>Финальная модель обучена на `ml_features_v2_non_leaky`. Она прогнозирует цену за квадратный метр, а итоговая стоимость получается умножением на площадь, введённую пользователем.</p>
+        </div>
+        <div class="grid cols-2">
+          <div class="card">
+            <h3>Финальные метрики</h3>
+            <table>
+              <tbody>
+                <tr><td>Алгоритм</td><td>HistGradientBoosting</td></tr>
+                <tr><td>Validation R²</td><td>0,9314</td></tr>
+                <tr><td>Train R²</td><td>0,9595</td></tr>
+                <tr><td>Gap</td><td>0,0281</td></tr>
+                <tr><td>MAE</td><td>4,81 млн ₽</td></tr>
+                <tr><td>MAPE</td><td>11,04%</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card">
+            <h3>Проверка переобучения</h3>
+            <table>
+              <thead><tr><th>Split</th><th>R²</th><th>Смысл</th></tr></thead>
+              <tbody>
+                <tr><td>Random holdout</td><td>0,9345</td><td>Сильная, но оптимистичная проверка.</td></tr>
+                <tr><td>Spatial holdout</td><td>0,8882</td><td>Проверка переноса между районами.</td></tr>
+                <tr><td>Temporal holdout</td><td>0,8503</td><td>Проверка устойчивости к сдвигу по времени.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:18px">
+          Ridge оставлен как baseline: отрицательный R² показывает, что простая линейная модель плохо описывает нелинейный рынок недвижимости. Основная модель — HistGradientBoosting.
+        </div>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">Интерпретация признаков</div>
+          <h2>Что означают поля окружения в форме оценки</h2>
+          <p>Поля «школы 1 км», «парки 1 км», «транспорт 500 м» — это счётчики объектов инфраструктуры в заданном радиусе. Изменение на единицу означает один дополнительный найденный объект, а не один процент и не один балл.</p>
+        </div>
+        <table>
+          <thead><tr><th>Поле</th><th>Значение</th><th>Интерпретация +1</th></tr></thead>
+          <tbody>
+            <tr><td>Школы 1 км</td><td>Количество школ в радиусе 1 км</td><td>Ещё одна школа рядом с объектом.</td></tr>
+            <tr><td>Парки 1 км</td><td>Количество парков или зелёных зон в радиусе 1 км</td><td>Ещё один парк/зелёная зона.</td></tr>
+            <tr><td>Магазины 1 км</td><td>Количество торговых объектов в радиусе 1 км</td><td>Ещё один магазин/торговая точка.</td></tr>
+            <tr><td>Транспорт 500 м</td><td>Количество остановок/станций в радиусе 500 м</td><td>Ещё один транспортный объект в пешей доступности.</td></tr>
+            <tr><td>Транспорт 1 км</td><td>Количество транспортных объектов в радиусе 1 км</td><td>Ещё один транспортный объект в более широком окружении.</td></tr>
+            <tr><td>Ближайший транспорт, м</td><td>Расстояние до ближайшего транспорта</td><td>На один метр дальше; здесь меньше обычно лучше.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="ui">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">UI/UX</div>
+          <h2>Интерфейс для демонстрации и проверки</h2>
+          <p>Streamlit dashboard показывает полный контур проекта: от рыночных данных до объяснимого результата модели. Интерфейс работает с реальным API, а не с фиктивным mock.</p>
+        </div>
+        <div class="grid cols-3">
+          <div class="card"><h3>Оценка квартиры</h3><p>Пользователь меняет площадь, комнаты, этаж, год, координаты и окружение; API пересчитывает стоимость по модели.</p></div>
+          <div class="card"><h3>Карта</h3><p>Точки объявлений, масштабирование, перемещение карты, popup с ценой и ссылкой на источник.</p></div>
+          <div class="card"><h3>Мониторинг</h3><p>Статусы API, БД, Redis, модели, ingestion, источников и покрытия OSM-признаками.</p></div>
+        </div>
+        <div class="grid cols-3" style="margin-top:18px">
+          <div class="card"><h3>Таблица данных</h3><p>Пагинация, важные поля объявлений, дата наблюдения, цена за квадратный метр и ссылка на исходное объявление.</p></div>
+          <div class="card"><h3>Районы и кластеры</h3><p>Сравнение районов, покрытие геоизвлечения, профили районов и осторожная интерпретация частичных данных.</p></div>
+          <div class="card"><h3>Кандидаты на сделки</h3><p>Скоринговая витрина объектов, которые выглядят дешевле похожих рыночных предложений в своём сегменте.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="checklist">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">Функциональная готовность</div>
+          <h2>Что реализовано и проверено</h2>
+          <p>Ниже — инженерный чеклист проекта. Он показывает, что система покрывает не только UI, но и данные, API, ML, deployment и проверяемость результата.</p>
+        </div>
+        <table>
+          <thead><tr><th>Направление</th><th>Статус</th><th>Подтверждение</th></tr></thead>
+          <tbody>
+            <tr><td>Git и CI</td><td><span class="ok">готово</span></td><td>GitHub repository, Pull Request workflow, GitHub Actions `lint-test`.</td></tr>
+            <tr><td>Хранилище</td><td><span class="ok">готово</span></td><td>PostgreSQL runtime: 17 287 объявлений, 45 764 наблюдения.</td></tr>
+            <tr><td>API</td><td><span class="ok">готово</span></td><td>`/health`, `/data`, `/predict`, `/model/metadata`, `/monitoring/status`.</td></tr>
+            <tr><td>ML-модель</td><td><span class="ok">готово</span></td><td>HGB R² 0,9314; train/validation gap 0,0281; spatial/temporal audit положительный.</td></tr>
+            <tr><td>Интерфейс</td><td><span class="ok">готово</span></td><td>Dashboard, valuation, map, data table, deals, districts, monitoring.</td></tr>
+            <tr><td>Docker</td><td><span class="ok">готово</span></td><td>Compose stack: API, DB, Redis, MLflow, Streamlit.</td></tr>
+            <tr><td>VPS</td><td><span class="ok">готово к повторному deploy</span></td><td>Production compose, Caddy, runtime bundle restore, deployed URL.</td></tr>
+            <tr><td>Документация</td><td><span class="ok">готово</span></td><td>README, HTML-описание, ML audit docs, VPS runbook.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="deploy">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">Запуск и развёртывание</div>
+          <h2>Одинаковая логика локально и на VPS</h2>
+          <p>Проект упакован в Docker Compose. Для VPS используются production compose, Caddy reverse proxy, PostgreSQL volume и отдельный volume с артефактами модели. Публичная витрина: <a href="https://realtyscope.bond/">https://realtyscope.bond/</a>.</p>
+        </div>
+        <div class="grid cols-2">
+          <div class="panel">
+            <h3>Локально</h3>
+            <div class="code">docker compose -p realtyscope up -d --build
+curl -fsS http://localhost:8000/health
+curl -fsS http://localhost:8501/_stcore/health</div>
+          </div>
+          <div class="panel">
+            <h3>VPS</h3>
+            <div class="code">cd /opt/realtyscope
+git pull
+bash scripts/deployment/restore_vps_runtime_bundle.sh
+docker compose -f docker-compose.prod.yml up -d --build</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="defense">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">Готовность к защите</div>
+          <h2>Что важно проговорить комиссии</h2>
+        </div>
+        <div class="grid cols-2">
+          <div class="card">
+            <h3>Сильные стороны</h3>
+            <ul>
+              <li>end-to-end pipeline: данные → БД → API → UI → ML;</li>
+              <li>реальные данные и проверяемые runtime-метрики;</li>
+              <li>модель без прямой price leakage;</li>
+              <li>Docker/VPS-ready упаковка;</li>
+              <li>русскоязычный UI для демонстрации.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Честные ограничения</h3>
+            <ul>
+              <li>это учебный оценочный snapshot, не промышленная экспертиза стоимости;</li>
+              <li>random validation для недвижимости может быть оптимистичной;</li>
+              <li>lifecycle forecast основан на observation gaps, а не на подтверждённых продажах;</li>
+              <li>модельные артефакты и БД восстанавливаются через runtime bundle, а не хранятся в Git.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:18px">
+          Короткая защита: RealtyScope показывает полный цикл инженерии данных и ML-сервиса. Главная ценность проекта — не только R² модели, а воспроизводимый backend/UI контур, честная валидация и готовность к запуску через Docker/VPS.
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      RealtyScope · GitHub: <a href="https://github.com/goluflqh/RealtyScope">github.com/goluflqh/RealtyScope</a> · Проверенная версия: 27 июня 2026 г.
+    </div>
+  </footer>
+</body>
+</html>
