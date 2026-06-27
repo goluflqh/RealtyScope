@@ -245,20 +245,24 @@ Example crontab entry:
 
 ## Systemd Timer
 
-For a Linux VPS, prefer a systemd service plus timer. Keep secrets in an environment file outside git, for example `/etc/realtyscope/domclick-ingestor.env`.
+For a Linux VPS, prefer a systemd service plus timer. The production Docker Compose file provides an `ingestor` one-shot service under the `jobs` profile, so the timer should call Docker Compose instead of relying on a host virtual environment.
+
+The Dockerized job performs Alembic migration, inspect, quality gates, PostgreSQL commit, and report writing from a bounded snapshot path. It does not magically bypass Domclick QRATOR/CAPTCHA and does not provide a browser sidecar. Live Chrome/CDP capture on the VPS is only equivalent to local capture after Chrome/headless access and source access have been validated on that VPS.
 
 Service sketch:
 
 ```ini
 [Unit]
-Description=RealtyScope Domclick scheduled batch ingestion
+Description=RealtyScope Dockerized Domclick scheduled batch ingestion
+Requires=docker.service
+After=docker.service
 
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/realtyscope
-EnvironmentFile=/etc/realtyscope/domclick-ingestor.env
-ExecStart=/opt/realtyscope/.venv/bin/python -m alembic upgrade head
-ExecStart=/opt/realtyscope/.venv/bin/python -m realtyscope.ingestion.domclick_scheduled_batch run --source-path data/raw/domclick/current --database-url ${DATABASE_URL} --commit --max-records 2000 --min-records 1 --min-normalized-records 1000 --json
+EnvironmentFile=/opt/realtyscope/.env
+ExecStartPre=/usr/bin/docker compose -f docker-compose.prod.yml --env-file .env up -d db
+ExecStart=/usr/bin/docker compose -f docker-compose.prod.yml --env-file .env --profile jobs run --rm ingestor
 ```
 
 Timer sketch:
@@ -275,7 +279,7 @@ Persistent=true
 WantedBy=timers.target
 ```
 
-Point `data/raw/domclick/current` at the latest copied day directory, or use a small wrapper script stored outside git for dynamic dates. Do not put an infinite loop inside the Python process.
+Point `data/raw/domclick/current` at the latest copied day directory, or set `DOMCLICK_SOURCE_PATH` in `/opt/realtyscope/.env`. Do not put an infinite loop inside the Python process.
 
 ## Failure Policy
 

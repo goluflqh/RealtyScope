@@ -10,6 +10,7 @@ This runbook deploys the same Dockerized runtime used locally for the final Real
 - Redis;
 - MLflow service inside the Docker network;
 - Caddy reverse proxy;
+- Dockerized one-shot ingestion job for scheduled bounded Domclick snapshot parsing;
 - restored PostgreSQL runtime data;
 - restored phase5 model artifact volume.
 
@@ -21,6 +22,29 @@ Public endpoints:
 Private services:
 
 - PostgreSQL, Redis, and MLflow must stay inside the Docker network.
+
+## 0. Release gate before Termius
+
+Do not redeploy from Termius until the local branch is actually merged and pushed to `origin/main`.
+
+Local release checklist:
+
+```bash
+git status --short --branch
+python -m pytest tests/test_api_prediction_contract.py tests/test_streamlit_ui_payload.py tests/test_streamlit_api_client.py tests/test_static_audit_requirements.py tests/test_docker_build_contract.py -q --basetemp output/pytest-tmp -o cache_dir=output/pytest-cache
+python -m ruff check services/streamlit/app.py tests/test_streamlit_ui_payload.py tests/test_docker_build_contract.py
+git diff --check
+```
+
+After merge, confirm:
+
+```bash
+git checkout main
+git pull --ff-only origin main
+git log -1 --oneline
+```
+
+Only then export a fresh runtime bundle and deploy through Termius.
 
 ## 1. Server baseline
 
@@ -86,6 +110,9 @@ API_DOMAIN=api.realtyscope.bond
 ACME_EMAIL=<your-email>
 ACTIVE_MODEL_NAME=realtyscope-price-model
 ACTIVE_MODEL_ARTIFACT_PATH=data/processed/models/phase5/selected_price_model_v1_non_leaky.joblib
+DOMCLICK_SOURCE_PATH=data/raw/domclick/current
+DOMCLICK_MAX_RECORDS=2000
+DOMCLICK_MIN_NORMALIZED_RECORDS=1000
 ```
 
 Never commit `.env`.
@@ -202,6 +229,8 @@ mae ≈ 4.81M RUB
 
 ## 8. Updating the release
 
+Use this block in Termius after the local branch has been merged and pushed:
+
 ```bash
 cd /opt/realtyscope
 git fetch origin
@@ -214,6 +243,15 @@ docker compose -f docker-compose.prod.yml --env-file .env ps
 
 If a release changes model artifacts or database state, repeat the bundle restore after pulling the code.
 
+Full Termius redeploy sequence:
+
+1. Open the VPS SSH session in Termius.
+2. Run the `git fetch` / `git pull --ff-only` block above.
+3. Upload the fresh local files `realtyscope-db-YYYYMMDD.dump` and `realtyscope-model-artifacts-YYYYMMDD.tar.gz` into `/opt/realtyscope`.
+4. Run `bash scripts/deployment/restore_vps_runtime_bundle.sh`.
+5. Run the parity smoke checks in section 7.
+6. Check logs with `docker compose -f docker-compose.prod.yml --env-file .env logs --tail=120 api streamlit caddy`.
+
 ## 9. Backup before ingestion or risky updates
 
 ```bash
@@ -223,7 +261,76 @@ docker compose -f docker-compose.prod.yml --env-file .env exec -T db \
   > /opt/realtyscope/backups/realtyscope-$(date +%F-%H%M).sql
 ```
 
-## 10. Known boundaries
+## 10. Dockerized scheduled ingestion on VPS
+
+The production Compose file includes an `ingestor` service under the `jobs` profile. It is not started by normal `up -d`; it is a one-shot job for systemd timers or manual runs.
+
+Check ingestion status from Termius:
+
+```bash
+cd /opt/realtyscope
+docker compose -f docker-compose.prod.yml --env-file .env --profile jobs run --rm \
+  ingestor sh -lc 'python -m realtyscope.ingestion.domclick_scheduled_batch status \
+  --database-url "$DATABASE_URL" --json'
+```
+
+Run one commit batch from the configured snapshot path:
+
+```bash
+cd /opt/realtyscope
+docker compose -f docker-compose.prod.yml --env-file .env --profile jobs run --rm ingestor
+```
+
+The default path is `DOMCLICK_SOURCE_PATH=data/raw/domclick/current`. Keep this as a symlink or copied directory pointing at the latest bounded Domclick snapshot, for example:
+
+```bash
+mkdir -p /opt/realtyscope/data/raw/domclick
+ln -sfn 2026-06-27-bulk /opt/realtyscope/data/raw/domclick/current
+```
+
+Example systemd service:
+
+```ini
+[Unit]
+Description=RealtyScope Dockerized Domclick ingestion batch
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/realtyscope
+EnvironmentFile=/opt/realtyscope/.env
+ExecStartPre=/usr/bin/docker compose -f docker-compose.prod.yml --env-file .env up -d db
+ExecStart=/usr/bin/docker compose -f docker-compose.prod.yml --env-file .env --profile jobs run --rm ingestor
+```
+
+Example timer:
+
+```ini
+[Unit]
+Description=Run RealtyScope Domclick ingestion daily
+
+[Timer]
+OnCalendar=*-*-* 00:20:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+Install through Termius:
+
+```bash
+nano /etc/systemd/system/realtyscope-domclick-ingestor.service
+nano /etc/systemd/system/realtyscope-domclick-ingestor.timer
+systemctl daemon-reload
+systemctl enable --now realtyscope-domclick-ingestor.timer
+systemctl list-timers | grep realtyscope
+```
+
+Important parsing boundary: this Docker job ingests and commits an already available bounded snapshot. Live Domclick Chrome/CDP capture still depends on a Chrome-capable host, source accessibility, and QRATOR/CAPTCHA behavior. If the VPS itself must do live capture, install and validate Chrome/headless access first or add a managed browser sidecar; do not claim full live scraping parity until that smoke test passes on the VPS.
+
+## 11. Known boundaries
 
 - Docker Compose does not solve Domclick QRATOR/CAPTCHA access.
 - The selected model is a validated snapshot; automatic retraining is not enabled.

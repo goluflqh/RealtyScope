@@ -160,6 +160,49 @@ services:
       - mlflow_data:/mlflow
       - model_artifacts:/app/data/processed/models
 
+  ingestor:
+    profiles: ["jobs"]
+    build:
+      context: services/api
+      dockerfile: Dockerfile
+      additional_contexts:
+        app_deps: docker/build/deps
+        app_services: services
+        app_src: src
+    environment:
+      APP_ENV: production
+      PROJECT_NAME: ${PROJECT_NAME:-RealtyScope}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:?set POSTGRES_DB in .env}
+      DOMCLICK_SOURCE_PATH: ${DOMCLICK_SOURCE_PATH:-data/raw/domclick/current}
+      DOMCLICK_MAX_RECORDS: ${DOMCLICK_MAX_RECORDS:-2000}
+      DOMCLICK_MIN_RECORDS: ${DOMCLICK_MIN_RECORDS:-1}
+      DOMCLICK_MIN_NORMALIZED_RECORDS: ${DOMCLICK_MIN_NORMALIZED_RECORDS:-1000}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./data/raw:/app/data/raw
+      - ./data/processed:/app/data/processed
+      - ./data/external:/app/data/external:ro
+    command:
+      - sh
+      - -lc
+      - >
+        python -m alembic upgrade head &&
+        python -m realtyscope.ingestion.domclick_scheduled_batch run
+        --source-path "$${DOMCLICK_SOURCE_PATH}"
+        --database-url "$${DATABASE_URL}"
+        --commit
+        --max-records "$${DOMCLICK_MAX_RECORDS}"
+        --min-records "$${DOMCLICK_MIN_RECORDS}"
+        --min-normalized-records "$${DOMCLICK_MIN_NORMALIZED_RECORDS}"
+        --json
+
 volumes:
   postgres_data:
   redis_data:
