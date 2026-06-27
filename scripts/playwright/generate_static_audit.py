@@ -15,6 +15,9 @@ from services.streamlit.app import (  # noqa: E402
     _workstation_html,
 )
 
+EXPECTED_LISTINGS_TOTAL = 17_287
+EXPECTED_SOURCE_COUNTS = {"cian": 2_436, "domclick": 14_851}
+
 
 def validate_static_audit_payload(payload: dict, *, require_api: bool) -> None:
     if not require_api:
@@ -27,9 +30,19 @@ def validate_static_audit_payload(payload: dict, *, require_api: bool) -> None:
     if not isinstance(source_counts, dict) or not source_counts:
         raise SystemExit("Static audit requires real source_counts from the API payload")
     listings_total = int(stats.get("listings_total") or 0)
-    if listings_total < 10_000:
+    if listings_total != EXPECTED_LISTINGS_TOTAL:
         raise SystemExit(
             f"Static audit requires the full real dataset, got listings_total={listings_total}"
+        )
+    normalized_counts = {
+        str(name).lower(): int(count)
+        for name, count in source_counts.items()
+        if isinstance(count, int | float)
+    }
+    if normalized_counts != EXPECTED_SOURCE_COUNTS:
+        raise SystemExit(
+            "Static audit requires full real source_counts "
+            f"{EXPECTED_SOURCE_COUNTS}, got {normalized_counts}"
         )
     model = payload.get("model") or {}
     data_freshness = model.get("data_freshness") if isinstance(model, dict) else None

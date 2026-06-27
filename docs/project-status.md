@@ -7,6 +7,23 @@ Phase 7 merge evidence commit: `05f9b0cac3e77d55b93820be5d2b3db442d5295c`
 
 This document is the operating status board for the final course-readiness work. It consolidates the assignment requirements, implemented phase evidence, current gaps, and the next smaller workstreams so future sessions do not have to reload the full history.
 
+## 2026-06-27 Final Valuation Model, UI Contract, And Docker Readiness
+
+Current branch: `integration/final-backend-ui-ux-polish-20260626`.
+
+This addendum supersedes older notes that name `random_forest`, `17,046` training rows, or an HGB result without spatial/temporal audit as the current valuation model evidence.
+
+- The final selected artifact is `data/processed/models/phase5/selected_price_model_v1_non_leaky.joblib`.
+- The selected candidate is regularized `hist_gradient_boosting` trained on target `price_per_m2`; the API scales the raw model output by the user-provided `total_area_m2`.
+- Runtime database evidence used for training: `17,287` ML-ready listings, `45,764` listing observations, `23` observation days, and date range `2026-05-14` to `2026-06-26`.
+- Final grouped random artifact metrics: `r2=0.9314280463062249`, `mae=4,810,418.71`, `mape=0.11043901000842905`, `train_r2=0.9595466031429585`, and `r2_generalization_gap=0.028118556836733588`.
+- Candidate comparison on the same grouped split: HGB `r2=0.9314`, RandomForest `r2=0.8936`, Ridge `r2=-0.9874`.
+- Overfitting audit conclusion: the feature set is non-leaky, but random validation is optimistic. Stress checks remain positive: spatial grid holdout `r2=0.8882`, latest-20% temporal holdout `r2=0.8503`.
+- The valuation UI now treats the old `60 m²` value as a default only, not a fixed assumption. Area is editable up to `1200 m²`, rooms are editable from `0` to `20`, and OSM controls use ranges aligned with the real feature distribution.
+- `/predict` returns the canonical backend input echo and `target_variable`, so the UI can prove which features were actually sent to the model.
+- Docker/runtime dependency parity pins `scikit-learn==1.6.1`, matching the trained artifact runtime.
+- Documentation refreshed: root `README.md`, `docs/ml/phase5-non-leaky-model.md`, and `docs/ml/phase5-non-leaky-model.vi.md`.
+
 ## 2026-06-26 Controlled Domclick Refresh And Scheduler Monitoring Fix
 
 Current branch: `integration/realtyscope-grade5-final-20260625`.

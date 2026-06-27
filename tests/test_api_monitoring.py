@@ -61,12 +61,15 @@ def test_model_metadata_endpoint_reports_loaded_model_contract() -> None:
         "model_selection_mode": "best_metric",
         "model_selection_reason": "dependency_override",
         "model_candidates": [],
+        "model_artifact_scan_candidates": [],
+        "available_candidates": [],
         "selected_candidate": None,
         "training_candidates": [],
         "model_version": "selected_price_model_v1_non_leaky",
         "feature_version": "ml_features_v2_non_leaky",
         "feature_names": ["rooms", "total_area_m2"],
         "feature_count": 2,
+        "target_variable": "price_rub",
         "metrics_summary": {"mae": 21_189_758.79, "naive_mae": 23_656_479.23},
         "feature_importance": [
             {"feature": "total_area_m2", "importance": 0.8, "coefficient": 0.8},
@@ -136,13 +139,44 @@ def test_model_metadata_endpoint_reports_unavailable_model() -> None:
     assert payload["model_selection_mode"] == "best_metric"
     assert payload["model_selection_reason"] == "unavailable"
     assert payload["model_candidates"] == []
+    assert payload["available_candidates"] == []
     assert payload["selected_candidate"] is None
     assert payload["training_candidates"] == []
     assert payload["model_version"] is None
     assert payload["feature_names"] == []
+    assert payload["target_variable"] is None
     assert payload["feature_importance"] == []
     assert payload["selected_model"] is None
     assert isinstance(payload["error"], str)
+
+
+def test_model_metadata_endpoint_reports_available_prediction_candidates() -> None:
+    class CandidateAwareModel(FakePredictionModel):
+        selected_candidate = "random_forest"
+        training_candidates = [
+            {"candidate_name": "random_forest", "r2": 0.86},
+            {"candidate_name": "hist_gradient_boosting", "r2": 0.84},
+            {"candidate_name": "ridge", "r2": 0.58},
+        ]
+
+        def available_candidate_names(self) -> list[str]:
+            return ["random_forest", "ridge"]
+
+    client = _client_with_fake_model(CandidateAwareModel())
+    try:
+        response = client.get("/model/metadata")
+    finally:
+        api_main.app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["selected_candidate"] == "random_forest"
+    assert payload["available_candidates"] == ["random_forest", "ridge"]
+    assert [row["candidate_name"] for row in payload["training_candidates"]] == [
+        "random_forest",
+        "hist_gradient_boosting",
+        "ridge",
+    ]
 
 
 def test_model_artifact_selector_prefers_best_validation_metric(tmp_path: Path) -> None:
@@ -218,6 +252,70 @@ def test_model_metadata_reports_selected_training_candidate(tmp_path: Path) -> N
         {"candidate_name": "random_forest", "r2": 0.64, "mae": 20_000_000.0},
         {"candidate_name": "ridge", "r2": 0.62, "mae": 21_000_000.0},
     ]
+
+
+def test_model_metadata_model_candidates_exclude_stale_scan_dir_artifacts(tmp_path: Path) -> None:
+    selected_path = _write_model_artifact(
+        tmp_path / "selected_price_model_v1_non_leaky.joblib",
+        model_version="selected_price_model_v1_non_leaky",
+        r2=0.86,
+        mae=7_600_000.0,
+        selected_candidate="random_forest",
+        candidate_metrics=[
+            {
+                "candidate_name": "random_forest",
+                "r2": 0.86,
+                "mae": 7_600_000.0,
+                "candidate_artifact_path": str(
+                    tmp_path / "selected_price_model_v1_non_leaky__random_forest.joblib"
+                ),
+            },
+            {
+                "candidate_name": "ridge",
+                "r2": 0.58,
+                "mae": 16_900_000.0,
+                "candidate_artifact_path": str(
+                    tmp_path / "selected_price_model_v1_non_leaky__ridge.joblib"
+                ),
+            },
+        ],
+    )
+    stale_baseline_path = _write_model_artifact(
+        tmp_path / "baseline_ridge_v2_non_leaky.joblib",
+        model_version="baseline_ridge_v2_non_leaky",
+        r2=0.99,
+        mae=1_000_000.0,
+    )
+    selection = api_main.ModelArtifactSelection(
+        path=selected_path,
+        mode="best_metric",
+        reason="best_validation_metric",
+        candidates=(
+            {
+                "artifact_path": str(selected_path),
+                "model_version": "selected_price_model_v1_non_leaky",
+                "selected_candidate": "random_forest",
+            },
+            {
+                "artifact_path": str(stale_baseline_path),
+                "model_version": "baseline_ridge_v2_non_leaky",
+                "selected_candidate": None,
+            },
+        ),
+    )
+    model = api_main.ArtifactPredictionModel.from_artifact(selected_path, selection=selection)
+
+    payload = api_main._model_metadata_payload(model)
+
+    assert [row["candidate_name"] for row in payload["model_candidates"]] == [
+        "random_forest",
+        "ridge",
+    ]
+    assert all("baseline_ridge_v2_non_leaky" not in str(row) for row in payload["model_candidates"])
+    assert any(
+        "baseline_ridge_v2_non_leaky" in str(row)
+        for row in payload["model_artifact_scan_candidates"]
+    )
 
 
 def test_monitoring_status_endpoint_combines_counts_model_and_recent_errors(tmp_path) -> None:
@@ -310,6 +408,32 @@ def test_monitoring_status_endpoint_combines_counts_model_and_recent_errors(tmp_
             "ingestion_run_id": None,
         },
     ]
+
+
+def test_monitoring_status_limits_recent_logs_to_40_newest_rows(tmp_path) -> None:
+    client, engine = _client_and_engine_with_seeded_monitoring_database(tmp_path)
+    with Session(engine) as session:
+        for index in range(45):
+            session.add(
+                AppLog(
+                    level="INFO",
+                    event_type=f"event-{index}",
+                    message=f"message-{index}",
+                    created_at=datetime(2026, 6, 26, 8, index % 60, tzinfo=UTC),
+                )
+            )
+        session.commit()
+
+    try:
+        response = client.get("/monitoring/status")
+    finally:
+        api_main.app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    logs = response.json()["recent_logs"]
+    assert len(logs) == 40
+    assert logs[0]["event_type"] == "event-44"
+    assert logs[0]["created_at"].startswith("2026-06-26T08:")
 
 
 def test_model_data_freshness_keeps_validated_snapshot_when_database_is_newer() -> None:
@@ -538,9 +662,9 @@ def test_observation_trend_endpoint_forecasts_when_history_is_sufficient(tmp_pat
     }
 
 
-def _client_with_fake_model() -> TestClient:
+def _client_with_fake_model(model: FakePredictionModel | None = None) -> TestClient:
     def override_model() -> FakePredictionModel:
-        return FakePredictionModel()
+        return model or FakePredictionModel()
 
     api_main.app.dependency_overrides[api_main.get_optional_prediction_model] = override_model
     return TestClient(api_main.app)

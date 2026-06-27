@@ -35,7 +35,7 @@ API_TIMEOUT_SECONDS = float(os.environ.get("STREAMLIT_API_TIMEOUT_SECONDS", "5.0
 REQUEST_PREDICTION_REF = request_prediction
 LOCAL_SNAPSHOT_LIMIT = 50_000
 LOCAL_SNAPSHOT_CACHE_VERSION = 2
-LOCAL_UI_PAYLOAD_CACHE_VERSION = 16
+LOCAL_UI_PAYLOAD_CACHE_VERSION = 17
 LOCAL_UI_PAYLOAD_CACHE_PATH = Path("output/cache/streamlit_ui_payload.json")
 MOSCOW_LATITUDE_BOUNDS = (54.5, 56.5)
 MOSCOW_LONGITUDE_BOUNDS = (36.5, 38.8)
@@ -160,7 +160,7 @@ def _build_payload(*, data: DashboardData, monitoring: MonitoringData) -> dict[s
     if cached_payload is not None:
         return cached_payload
     snapshot = _local_snapshot_data() if use_snapshot else None
-    listings = snapshot["listings"] if snapshot else data.listings
+    listings = snapshot["listings"] if snapshot else data.analytics_listings or data.listings
     analytics_listings = snapshot["listings"] if snapshot else data.analytics_listings or listings
     chart_frame = _chart_frame_with_metadata(listings)
     analytics_frame = _chart_frame_with_metadata(analytics_listings)
@@ -825,6 +825,11 @@ def _stats_with_listing_fallback(
             for row in listings
             if row.get("latitude") is not None and row.get("longitude") is not None
         )
+    if "source_counts" not in normalized and listings:
+        source_counts = _source_counts(listings)
+        if source_counts:
+            normalized["source_counts"] = source_counts
+            normalized.setdefault("sources_total", len(source_counts))
     if "median_price_rub" not in normalized and not chart_frame.empty:
         prices = chart_frame["price_rub"].dropna()
         if not prices.empty:
@@ -2060,7 +2065,7 @@ def _source_rows(
 
 
 def _known_listing_source_name(raw_source_name: str, *, snapshot: bool) -> str | None:
-    if snapshot or raw_source_name == "domclick":
+    if raw_source_name == "domclick":
         return "Домклик"
     if raw_source_name == "cian":
         return "ЦИАН"
@@ -2127,6 +2132,7 @@ def _local_model_payload() -> dict[str, Any] | None:
         "intercept": float(intercept),
         "modelVersion": artifact.get("model_version"),
         "featureVersion": artifact.get("feature_version"),
+        "targetVariable": artifact.get("target_variable", "price_rub"),
         "metrics": artifact.get("metrics", {}),
     }
 
@@ -2310,6 +2316,18 @@ h1 {{ margin:0; font-size:24px; line-height:30px; letter-spacing:0; }}
 .valuation-fact {{ border-top:1px solid var(--line); padding-top:10px; min-width:0; }}
 .valuation-fact span {{ display:block; color:var(--muted); font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }}
 .valuation-fact strong {{ display:block; margin-top:5px; color:var(--text); font-size:16px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }}
+.valuation-form.compact .form-section {{ margin-top:10px; padding-top:10px; }}
+.valuation-form.compact .mini-grid {{ gap:10px; }}
+.valuation-form.compact .field {{ margin-bottom:8px; }}
+.valuation-primary-controls {{ display:grid; gap:10px; margin-top:10px; }}
+.valuation-action-bar {{ display:flex; gap:10px; align-items:center; margin-top:12px; }}
+.valuation-action-bar .primary-btn {{ min-height:40px; flex:1; }}
+.advanced-valuation-fields summary {{ cursor:pointer; color:var(--primary); font-size:11px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; list-style:none; }}
+.advanced-valuation-fields summary::-webkit-details-marker {{ display:none; }}
+.advanced-valuation-fields summary::after {{ content:'+'; float:right; color:var(--muted); font-size:16px; line-height:12px; }}
+.advanced-valuation-fields[open] summary::after {{ content:'-'; }}
+.check-row {{ display:flex; align-items:center; gap:8px; margin:8px 0 2px; color:var(--muted); font-size:12px; font-weight:800; }}
+.check-row input {{ width:16px; height:16px; accent-color:var(--primary); }}
 .range-pair {{ border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:12px; background:color-mix(in srgb,var(--surface-low) 62%,transparent); }}
 .range-pair .range-row {{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }}
 .range-label {{ display:flex; justify-content:space-between; gap:10px; color:var(--muted); font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; }}
@@ -2391,10 +2409,17 @@ body.light .map-panel {{ background:rgba(255,255,255,.82); }}
 .audit-status.ready {{ color:var(--success); border-color:color-mix(in srgb,var(--success) 55%,var(--line)); background:color-mix(in srgb,var(--success) 10%,transparent); }}
 .audit-status.partial {{ color:var(--warning); border-color:color-mix(in srgb,var(--warning) 55%,var(--line)); background:color-mix(in srgb,var(--warning) 10%,transparent); }}
 .audit-status.missing {{ color:var(--error); border-color:color-mix(in srgb,var(--error) 55%,var(--line)); background:color-mix(in srgb,var(--error) 10%,transparent); }}
+.status-badge {{ display:inline-flex; align-items:center; justify-content:center; border-radius:999px; padding:4px 9px; font-size:11px; font-weight:800; letter-spacing:0; border:1px solid var(--line); }}
+.status-ok {{ color:#7ff5d8; background:rgba(78,222,190,.14); border-color:rgba(78,222,190,.55); }}
+.status-partial {{ color:#ffd166; background:rgba(255,193,7,.14); border-color:rgba(255,193,7,.55); }}
+.status-missing {{ color:#ff9f9f; background:rgba(255,99,99,.14); border-color:rgba(255,99,99,.55); }}
+.monitoring-card-structured {{ background:color-mix(in srgb,var(--panel-high) 72%,var(--panel)); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary) 10%,transparent); }}
+.monitoring-card-structured .metric-line strong {{ color:var(--text); }}
 .log-shell {{ display:grid; gap:12px; }}
 .log-shell table {{ table-layout:fixed; }}
-.log-shell th:nth-child(1), .log-shell td:nth-child(1) {{ width:86px; }}
-.log-shell th:nth-child(2), .log-shell td:nth-child(2) {{ width:210px; }}
+.log-shell th:nth-child(1), .log-shell td:nth-child(1) {{ width:96px; }}
+.log-shell th:nth-child(2), .log-shell td:nth-child(2) {{ width:155px; }}
+.log-shell th:nth-child(3), .log-shell td:nth-child(3) {{ width:210px; }}
 .log-shell td {{ white-space:normal; line-height:17px; }}
 .log-level {{ display:inline-flex; border:1px solid var(--line); border-radius:999px; padding:2px 8px; color:var(--muted); font-size:11px; font-weight:800; }}
 .log-level.warn {{ color:var(--warning); border-color:color-mix(in srgb,var(--warning) 55%,var(--line)); }}
@@ -2414,14 +2439,23 @@ table {{ width:100%; border-collapse:collapse; font-size:13px; }}
 .analytic-table td:first-child .row-title {{ display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; }}
 .analytic-table .source-badge {{ max-width:100%; padding-inline:6px; white-space:nowrap; overflow-wrap:normal; }}
 .date-stack {{ display:grid; gap:1px; white-space:nowrap; font-variant-numeric:tabular-nums; }}
-.rows-table th:nth-child(1), .rows-table td:nth-child(1) {{ width:24%; }}
-.rows-table th:nth-child(2), .rows-table td:nth-child(2) {{ width:12%; }}
-.rows-table th:nth-child(3), .rows-table td:nth-child(3) {{ width:8%; }}
-.rows-table th:nth-child(4), .rows-table td:nth-child(4) {{ width:10%; }}
+.rows-table th:nth-child(1), .rows-table td:nth-child(1) {{ width:6%; }}
+.rows-table th:nth-child(2), .rows-table td:nth-child(2) {{ width:25%; }}
+.rows-table th:nth-child(3), .rows-table td:nth-child(3) {{ width:12%; }}
+.rows-table th:nth-child(4), .rows-table td:nth-child(4) {{ width:7%; }}
 .rows-table th:nth-child(5), .rows-table td:nth-child(5) {{ width:8%; }}
-.rows-table th:nth-child(6), .rows-table td:nth-child(6) {{ width:13%; }}
+.rows-table th:nth-child(6), .rows-table td:nth-child(6) {{ width:8%; }}
 .rows-table th:nth-child(7), .rows-table td:nth-child(7) {{ width:13%; }}
-.rows-table th:nth-child(8), .rows-table td:nth-child(8) {{ width:12%; }}
+.rows-table th:nth-child(8), .rows-table td:nth-child(8) {{ width:10%; }}
+.rows-table th:nth-child(9), .rows-table td:nth-child(9) {{ width:11%; }}
+.detail-drawer {{ position:fixed; inset:0; z-index:1000; opacity:0; visibility:hidden; pointer-events:none; transition:opacity .18s ease, visibility .18s ease; }}
+.detail-drawer.open {{ opacity:1; visibility:visible; pointer-events:auto; }}
+.detail-modal-backdrop {{ position:absolute; inset:0; background:rgba(3,7,10,.72); backdrop-filter:blur(3px); }}
+.detail-modal-panel {{ position:absolute; inset:24px; max-width:1180px; margin:auto; background:var(--panel); border:1px solid var(--primary-border); border-radius:8px; box-shadow:0 24px 90px rgba(0,0,0,.48); padding:24px; overflow:auto; }}
+.detail-modal-panel .metric-list {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 28px; }}
+.drawer-head {{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding-bottom:14px; margin-bottom:14px; border-bottom:1px solid var(--line); }}
+.drawer-head strong {{ color:var(--text); font-size:15px; }}
+.icon-btn {{ min-width:34px; min-height:32px; border:1px solid var(--line); border-radius:6px; background:var(--panel-high); color:var(--text); cursor:pointer; font-weight:900; }}
 .deal-table th, .deal-table td {{ font-size:11px; }}
 .deal-table th:nth-child(1), .deal-table td:nth-child(1) {{ width:7%; }}
 .deal-table th:nth-child(2), .deal-table td:nth-child(2) {{ width:19%; }}
@@ -2532,6 +2566,37 @@ tr:hover td {{ background:color-mix(in srgb,var(--primary) 7%,transparent); }}
 <script id="payload" type="application/json">{payload_json}</script>
 <script>
 const data = JSON.parse(document.getElementById('payload').textContent);
+function browserApiOrigin(port) {{
+  let parentLocation = null;
+  try {{
+    parentLocation = window.parent && window.parent.location ? window.parent.location : null;
+  }} catch (error) {{
+    parentLocation = null;
+  }}
+  const locations = [parentLocation, window.location];
+  for (const locationRef of locations) {{
+    const protocol = String(locationRef?.protocol || '');
+    const hostname = String(locationRef?.hostname || '');
+    if ((protocol === 'http:' || protocol === 'https:') && hostname) {{
+      return `${{protocol}}//${{hostname}}:${{port}}`;
+    }}
+  }}
+  return `http://127.0.0.1:${{port}}`;
+}}
+function clientApiBaseUrl() {{
+  const raw = String(data.apiBaseUrl || '').replace(/\\/$/, '');
+  if (!raw) return '';
+  try {{
+    const url = new URL(raw, window.location.href);
+    if (url.hostname === 'api') {{
+      const port = url.port || '8000';
+      return browserApiOrigin(port);
+    }}
+    return url.toString().replace(/\\/$/, '');
+  }} catch (error) {{
+    return raw;
+  }}
+}}
 const pages = [
   ['dashboard','dashboard','Дашборд'],
   ['valuation','calculate','Оценка квартиры'],
@@ -2543,14 +2608,58 @@ const pages = [
 ];
 const blankFilters = () => ({{ search:'', rooms:'', source:'', minPrice:'', maxPrice:'', minArea:'', maxArea:'' }});
 const state = {{ page:'dashboard', room:2, mapLayer:'both', mapSource:'', selectedMapIndex:null, heatRadius:30, heatOpacity:46, mapZoom:10, mapCenterLat:55.751244, mapCenterLon:37.618423, dataPage:1, pageSize:25, logPage:1, logPageSize:8, sort:{{}}, filters:{{ deals:blankFilters(), segments:blankFilters(), data:blankFilters() }} }};
+const VALUATION_REQUEST_TIMEOUT_MS = 8000;
+let valuationRecalcTimer = null;
+let valuationRequestSeq = 0;
+let activeValuationController = null;
+let lastValuationSnapshot = null;
 const fmtInt = v => v === null || v === undefined || Number.isNaN(Number(v))
   ? '—' : Math.round(Number(v)).toLocaleString('ru-RU');
 const fmtRub = v => v === null || v === undefined || Number.isNaN(Number(v))
   ? '—' : Math.round(Number(v)).toLocaleString('ru-RU') + ' ₽';
 const fmtMln = v => v === null || v === undefined || Number.isNaN(Number(v))
   ? '—' : (Number(v) / 1000000).toLocaleString('ru-RU', {{ maximumFractionDigits:1 }}) + ' млн ₽';
+function fmtPredictionRub(value) {{
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+  return (number / 1000000).toLocaleString('ru-RU', {{
+    minimumFractionDigits: 2,
+    maximumFractionDigits:2,
+  }}) + ' млн ₽';
+}}
+function fmtDeltaMln(value) {{
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '';
+  const prefix = number > 0 ? '+' : '';
+  return prefix + (number / 1000000).toLocaleString('ru-RU', {{
+    minimumFractionDigits: 2,
+    maximumFractionDigits:2,
+  }}) + ' млн ₽';
+}}
 const fmtM2 = v => v === null || v === undefined || Number.isNaN(Number(v))
   ? '—' : Math.round(Number(v)).toLocaleString('ru-RU') + ' ₽/м²';
+function valuationInputSummary(features, targetVariable = 'price_rub', predictedPrice = null) {{
+  const f = features || {{}};
+  const number = (value, digits = 0) => Number(value).toLocaleString('ru-RU', {{ maximumFractionDigits:digits }});
+  const parts = [
+    `площадь ${{number(f.total_area_m2, 1)}} м²`,
+    `комнат ${{number(f.rooms)}}`,
+    `этаж ${{number(f.floor)}} из ${{number(f.floors_total)}}`,
+    f.building_year_missing ? 'год дома не указан' : `дом ${{number(f.building_year)}} г.`,
+    f.nearest_transport_m_missing ? 'расстояние до транспорта не указано' : `до транспорта ${{number(f.nearest_transport_m)}} м`,
+    `школ ${{number(f.schools_count_1000m)}}`,
+    `парков ${{number(f.parks_count_1000m)}}`,
+    `магазинов ${{number(f.shops_count_1000m)}}`,
+    `транспорт 500 м: ${{number(f.transport_count_500m)}}`,
+    `транспорт 1 км: ${{number(f.transport_count_1000m)}}`,
+  ];
+  const area = Number(f.total_area_m2);
+  const total = Number(predictedPrice);
+  if (targetVariable === 'price_per_m2' && Number.isFinite(total) && total > 0 && area > 0) {{
+    parts.push(`расчетная цена ${{fmtM2(total / area)}}`);
+  }}
+  return 'Модель получила: ' + parts.join(' · ');
+}}
 const fmtShortM2 = v => v === null || v === undefined || Number.isNaN(Number(v))
   ? '—' : (Number(v) / 1000).toLocaleString('ru-RU', {{ maximumFractionDigits:1 }}) + ' тыс.';
 const fmtPct = v => v === null || v === undefined || Number.isNaN(Number(v))
@@ -2563,7 +2672,7 @@ function roomLabel(value) {{
   return `${{n}}-к`;
 }}
 function roomButtons() {{
-  return [0,1,2,3,4,5].map(n => `<button class="${{state.room===n?'active':''}}" data-room="${{n}}">${{roomLabel(n)}}</button>`).join('');
+  return [0,1,2,3,4,5].map(n => `<button class="${{state.room===n?'active':''}}" data-room="${{n}}" data-room-preset="${{n}}">${{roomLabel(n)}}</button>`).join('');
 }}
 function title(key) {{ return pages.find(p => p[0] === key)?.[2] || 'Дашборд'; }}
 function setPage(key) {{
@@ -2681,8 +2790,8 @@ function sortRows(rows, scope = state.page) {{
 function rowsTable(rows) {{
   if (!rows.length) return `<div class="empty">В текущей выборке нет объявлений для отображения.</div>`;
   rows = sortRows(rows);
-  return `<div class="table-scroll"><table class="analytic-table rows-table"><thead><tr>${{th('Адрес','address_text')}}${{th('Ист.','source_name','Источник')}}${{th('Комн.','rooms','Комнат')}}${{th('м²','total_area_m2','Площадь')}}${{th('Этаж','floor')}}${{th('Дата','observed_at')}}${{th('Цена','price_rub')}}${{th('₽/м²','price_per_m2','Цена за м²')}}</tr></thead><tbody>` +
-    rows.map(r => `<tr><td>${{listingLink(r)}}</td><td>${{sourceBadge(r)}}</td><td>${{fmtInt(r.rooms)}}</td><td>${{fmtInt(r.total_area_m2)}} м²</td><td>${{floorText(r)}}</td><td>${{tableDate(r.observed_at)}}</td><td>${{fmtMln(r.price_rub)}}</td><td>${{fmtM2(r.price_per_m2)}}</td></tr>`).join('') +
+  return `<div class="table-scroll"><table class="analytic-table rows-table"><thead><tr><th></th>${{th('Адрес','address_text')}}${{th('Ист.','source_name','Источник')}}${{th('Комн.','rooms','Комнат')}}${{th('м²','total_area_m2','Площадь')}}${{th('Этаж','floor')}}${{th('Дата','observed_at')}}${{th('Цена','price_rub')}}${{th('₽/м²','price_per_m2','Цена за м²')}}</tr></thead><tbody>` +
+    rows.map((r, idx) => `<tr><td><button class="icon-btn" data-action="detail" data-listing-index="${{esc(r.id ?? idx)}}" title="Полная карточка объявления">▣</button></td><td>${{listingLink(r)}}</td><td>${{sourceBadge(r)}}</td><td>${{fmtInt(r.rooms)}}</td><td>${{fmtInt(r.total_area_m2)}} м²</td><td>${{floorText(r)}}</td><td>${{tableDate(r.observed_at)}}</td><td>${{fmtMln(r.price_rub)}}</td><td>${{fmtM2(r.price_per_m2)}}</td></tr>`).join('') +
     `</tbody></table></div>`;
 }}
 function floorText(r) {{
@@ -2772,8 +2881,17 @@ function sourceRows() {{
 function serviceStatusTable() {{
   const rows = data.serviceStatus || [];
   if (!rows.length) return `<div class="empty">Статусы контуров не получены.</div>`;
-  const labelClass = status => status === 'ok' ? 'ok' : (status === 'warning' ? 'partial' : 'missing');
-  return `<div class="audit-list">` + rows.map(row => `<div class="audit-row"><div class="audit-name"><span class="material-symbols-outlined" style="vertical-align:-5px;margin-right:6px">${{esc(row.icon || 'database')}}</span>${{esc(row.label || row.key)}}</div><div><span class="audit-status ${{labelClass(row.status)}}">${{esc(row.status_label || row.status || 'не проверено')}}</span></div><div class="audit-note">${{esc(row.detail || '')}}${{row.count === null || row.count === undefined ? '' : ` · ${{fmtInt(row.count)}}`}}</div></div>`).join('') + `</div>`;
+  return `<div class="audit-list">` + rows.map(row => `<div class="audit-row monitoring-card-structured"><div class="audit-name"><span class="material-symbols-outlined" style="vertical-align:-5px;margin-right:6px">${{esc(row.icon || 'database')}}</span>${{esc(row.label || row.key)}}</div><div>${{statusBadge(row.status, row.status_label || row.status || 'не проверено')}}</div><div class="audit-note">${{esc(row.detail || '')}}${{row.count === null || row.count === undefined ? '' : ` · ${{fmtInt(row.count)}}`}}</div></div>`).join('') + `</div>`;
+}}
+function statusBadge(status, label) {{
+  const normalized = String(status || '').toLowerCase();
+  const cls = normalized.includes('ok') || normalized.includes('ready') || normalized.includes('готов') || normalized.includes('success') || normalized.includes('info')
+    ? 'status-ok'
+    : normalized.includes('partial') || normalized.includes('част') || normalized.includes('validated') || normalized.includes('warn') || normalized.includes('предуп')
+      ? 'status-partial'
+      : 'status-missing';
+  const className = cls === 'status-ok' ? 'status-badge status-ok' : (cls === 'status-partial' ? 'status-badge status-partial' : 'status-badge status-missing');
+  return `<span class="${{className}}">${{esc(label || status || 'нет')}}</span>`;
 }}
 function recentListingRows(rows, limit = 4) {{
   return [...(rows || [])]
@@ -2821,7 +2939,7 @@ function dashboard() {{
       ${{connectionNotice()}}
       <article class="card span4"><div class="card-title">Быстрая оценка объекта <button class="ghost-btn" data-go="valuation">Открыть оценку</button></div>
         <div class="field"><label class="label">Адрес или ЖК</label><input placeholder="Улица, дом или название ЖК"></div>
-        ${{stepInput('quickArea', 'Площадь, м²', 60, 10, 250, 1)}}
+        ${{stepInput('quickArea', 'Площадь, м²', 60, 10, 1200, 1)}}
         <div class="segmented">${{roomButtons()}}</div>
         <button class="primary-btn" id="quickValuation" style="width:100%;margin-top:16px">Рассчитать стоимость</button>
         <div class="sub" id="quickResult">Расчет использует текущую базу объявлений и подключенный сервис оценки, если он доступен.</div>
@@ -2829,8 +2947,8 @@ function dashboard() {{
       <article class="card span8"><div class="card-title">Тепловая карта цен <button class="ghost-btn" data-go="map">Открыть карту</button></div>${{mapQuickControls()}}${{map(mapFilteredPoints())}}</article>
       <article class="card span4"><div class="card-title">Источники данных <span class="material-symbols-outlined">hub</span></div>${{sourceRows()}}</article>
       <article class="card span4"><div class="card-title">Инфраструктура района <span class="material-symbols-outlined">location_city</span></div>${{infrastructureStatus()}}</article>
-      <article class="card span4"><div class="card-title">Тренд медианы за м² <span class="material-symbols-outlined">trending_up</span></div>${{priceTrendChart()}}</article>
       <article class="card span4"><div class="card-title">Новые поступления <button class="ghost-btn" data-go="data">Все</button></div>${{listingList(listings.slice(0,4))}}</article>
+      <article class="card span8 dashboard-trend-wide"><div class="card-title">Тренд медианы за м² <span class="material-symbols-outlined">trending_up</span></div>${{priceTrendChart()}}</article>
     </section>`;
 }}
 function bars(items) {{
@@ -2980,7 +3098,8 @@ function valuationScenarioChart(prediction, metricsOverride = null) {{
 }}
 function valuationComparableRows(prediction) {{
   const area = Number(document.getElementById('areaInput')?.value || data.valuationDefaults?.total_area_m2 || 60);
-  const rooms = Number(document.getElementById('roomsInput')?.value ?? state.room);
+  const selectedRooms = Number(document.getElementById('roomsSelect')?.value);
+  const rooms = Number.isFinite(selectedRooms) ? selectedRooms : state.room;
   const targetM2 = prediction && area ? Number(prediction) / area : Number(data.stats?.median_price_per_m2 || 0);
   const valid = (data.listings || []).filter(row =>
     Number(row.price_rub) > 0 && Number(row.price_per_m2) > 0 && Number(row.total_area_m2) > 0
@@ -3008,11 +3127,65 @@ function valuationComparables(prediction) {{
     fallbackRows.map(row => `<tr><td>${{listingLink(row)}}</td><td>${{sourceBadge(row)}}</td><td>${{roomLabel(row.rooms)}}</td><td>${{fmtInt(row.total_area_m2)}} м²</td><td>${{floorText(row)}}</td><td>${{fmtMln(row.price_rub)}}</td><td>${{fmtM2(row.price_per_m2)}}</td><td>${{Number(row.price_per_m2_delta_pct || 0).toLocaleString('ru-RU', {{ maximumFractionDigits:1 }})}}%</td></tr>`).join('') +
     `</tbody></table></div>`;
 }}
-function modelDriverRows(featureImportanceOverride = null) {{
-  const apiImportance = Array.isArray(featureImportanceOverride)
-    ? featureImportanceOverride
-    : (Array.isArray(data.model?.feature_importance) ? data.model.feature_importance : []);
-  const model = Array.isArray(featureImportanceOverride) ? null : data.localModel;
+function normalizeModelDrivers(source) {{
+  const rows = Array.isArray(source) ? source : [];
+  return rows
+    .map(row => ({{
+      feature: row.feature || row.name || row.column || '',
+      importance: Number(row.importance ?? row.coefficient ?? row.value ?? 0),
+      coefficient: Number(row.coefficient ?? row.value ?? row.importance ?? 0),
+      source: String(row.source || ''),
+    }}))
+    .filter(row => row.feature)
+    .sort((a, b) => Math.abs(b.importance) - Math.abs(a.importance))
+    .slice(0, 8);
+}}
+function modelDriverUnit(drivers) {{
+  const sources = new Set((drivers || []).map(row => String(row.source || '')));
+  if (sources.has('coefficient')) {{
+    return {{
+      source: 'coefficient',
+      label: 'Коэффициент Ridge',
+      note: 'Коэффициенты Ridge показаны со знаком на масштабированных признаках; это не проценты и не доля важности.',
+    }};
+  }}
+  if (sources.has('permutation_importance')) {{
+    return {{
+      source: 'permutation_importance',
+      label: 'Пермутационная важность',
+      note: 'Пермутационная важность показывает изменение ошибки MAE в рублях при перемешивании признака; это не процент.',
+    }};
+  }}
+  if (sources.has('model_feature_importance')) {{
+    return {{
+      source: 'model_feature_importance',
+      label: 'Доля важности',
+      note: 'Для Random Forest показана доля feature_importances_ в процентах от общей важности признаков.',
+    }};
+  }}
+  return {{
+    source: '',
+    label: 'Важность признака',
+    note: 'Факторы показаны из метаданных выбранной модели; единица зависит от источника в артефакте.',
+  }};
+}}
+function formatSignedRub(raw) {{
+  const value = Number(raw || 0);
+  if (!Number.isFinite(value)) return '—';
+  const sign = value > 0 ? '+' : '';
+  return `${{sign}}${{Math.round(value).toLocaleString('ru-RU')}} ₽`;
+}}
+function formatModelDriverValue(row, unit = null) {{
+  const source = String(row?.source || unit?.source || '');
+  if (source === 'coefficient') return formatSignedRub(row?.coefficient ?? row?.importance);
+  if (source === 'permutation_importance') return fmtRub(Math.abs(Number(row?.importance || 0)));
+  let value = Math.abs(Number(row?.importance || 0));
+  if (!Number.isFinite(value)) return '—';
+  if (value <= 1) value *= 100;
+  return `${{value.toLocaleString('ru-RU', {{ maximumFractionDigits:1 }})}}%`;
+}}
+function modelDriverRows(featureImportanceOverride = null, options = {{}}) {{
+  const useFallback = options?.useFallback !== false;
   const labels = {{
     total_area_m2:'Площадь', rooms:'Комнатность', floor:'Этаж', floors_total:'Этажей в доме',
     building_year:'Год постройки', latitude:'Широта', longitude:'Долгота',
@@ -3024,21 +3197,66 @@ function modelDriverRows(featureImportanceOverride = null) {{
     osm_missing:'Городские объекты не указаны', property_type_apartment:'Квартира',
     transport_count_1000m:'Транспорт 1 км', healthcare_count_1000m:'Медицина'
   }};
-  const rows = model?.featureNames?.length && model?.coefficients?.length
-    ? model.featureNames.map((name, index) => ({{
-        name: labels[name] || 'Признак модели',
-        value: Math.abs(Number(model.coefficients[index] || 0)),
+  const localRows = data.localModel?.featureNames?.length && data.localModel?.coefficients?.length
+    ? data.localModel.featureNames.map((name, index) => ({{
+        feature: name,
+        importance: Math.abs(Number(data.localModel.coefficients[index] || 0)),
+        coefficient: Number(data.localModel.coefficients[index] || 0),
+        source: 'coefficient',
       }}))
-    : apiImportance.map(row => ({{
-        name: labels[row.feature] || row.feature || 'Признак модели',
-        value: Number(row.importance ?? Math.abs(Number(row.coefficient || 0))),
-      }}));
-  const topRows = rows.filter(row => row.value > 0).sort((a, b) => b.value - a.value).slice(0, 5);
-  if (!topRows.length) return `<div class="empty">Сведения о факторах модели не найдены.</div>`;
-  const note = model
-    ? 'Это постоянные веса обученной модели. Расчет цены меняется от параметров формы, а не от фильтров таблиц.'
-    : 'Факторы получены из метаданных модели сервиса; расчет цены выполняется через контракт оценки.';
-  return topRows.map(row => `<div class="metric-line"><span>${{esc(row.name)}}</span><strong>${{row.value.toLocaleString('ru-RU', {{ maximumFractionDigits:0 }})}}</strong></div>`).join('') + `<div class="chart-note">${{note}}</div>`;
+    : [];
+  const drivers = normalizeModelDrivers(
+    featureImportanceOverride
+    || (useFallback ? data.model?.feature_importance : null)
+    || (useFallback ? data.modelMetadata?.feature_importance : null)
+    || (useFallback ? localRows : [])
+    || []
+  );
+  if (!drivers.length) return `<div class="empty compact">Нет данных о факторах для выбранной модели.</div>`;
+  const unit = modelDriverUnit(drivers);
+  const provenance = featureImportanceOverride || (useFallback && (data.model?.feature_importance || data.modelMetadata?.feature_importance))
+    ? 'Факторы получены из метаданных выбранной модели сервиса; расчет цены выполняется через контракт оценки.'
+    : 'Это постоянные веса обученной локальной модели. Расчет цены меняется от параметров формы, а не от фильтров таблиц.';
+  return `<div class="chart-note">${{unit.label}}</div>` + drivers.map(row => `<div class="metric-line"><span>${{esc(labels[row.feature] || row.feature || 'Признак модели')}}</span><strong title="${{esc(unit.label)}}">${{formatModelDriverValue(row, unit)}}</strong></div>`).join('') + `<div class="chart-note">${{unit.note}} ${{provenance}}</div>`;
+}}
+function modelDriversLoading() {{
+  return `<div class="empty compact">Факторы модели пересчитываются для выбранного алгоритма…</div>`;
+}}
+function modelDriversPendingSelection() {{
+  return `<div class="empty compact">Выберите параметры и нажмите «Рассчитать стоимость», чтобы обновить факторы выбранной модели.</div>`;
+}}
+function renderPredictionDrivers(payload) {{
+  const rows = payload ? (payload.feature_importance || payload.model_metadata?.feature_importance || null) : null;
+  const candidate = payload ? (payload.selected_candidate || selectedValuationModel()) : selectedValuationModel();
+  const body = modelDriverRows(rows, {{ useFallback: false }});
+  const note = candidate ? `<div class="chart-note">Показаны факторы для модели: ${{modelCandidateName(candidate)}}.</div>` : '';
+  return body + note;
+}}
+function renderInvalidPredictionModel(detail = {{}}, selectedCandidate = null) {{
+  const candidate = detail?.selected_candidate || detail?.model_candidate || selectedCandidate;
+  const candidateLabel = candidate ? modelCandidateName(candidate) : 'выбранная модель';
+  const metrics = detail?.metrics_summary || {{}};
+  const featureRows = Array.isArray(detail?.feature_importance) ? detail.feature_importance : [];
+  const metricText = metrics.mae ? ` MAE модели: ${{fmtMln(metrics.mae)}}.` : '';
+  return {{
+    result: 'Прогноз вне допустимого диапазона',
+    hint: `Артефакт модели «${{candidateLabel}}» загружен, но для текущих параметров модель вернула неположительную цену. RealtyScope не подставляет медиану вместо прогноза.${{metricText}}`,
+    drivers: modelDriverRows(featureRows, {{ useFallback: false }}) + `<div class="chart-note">Факторы показаны из ответа модели, но цена не выводится, потому что прогноз для этих параметров не является положительным.</div>`,
+  }};
+}}
+function renderUnavailableModel(detail = {{}}, selectedCandidate = null) {{
+  if (detail?.reason === 'non_positive_prediction') return renderInvalidPredictionModel(detail, selectedCandidate);
+  const candidate = detail?.model_candidate || selectedCandidate;
+  const available = Array.isArray(detail?.available_candidates) ? detail.available_candidates : [];
+  const candidateLabel = candidate ? modelCandidateName(candidate) : 'выбранная модель';
+  const availableLabel = available.length
+    ? available.map(item => modelCandidateName(item)).join(', ')
+    : 'нет доступных артефактов';
+  return {{
+    result: 'Модель недоступна',
+    hint: `Артефакт модели «${{candidateLabel}}» не загружен в оценочный сервис. Доступно: ${{availableLabel}}.`,
+    drivers: modelDriverRows([], {{ useFallback: false }}) + `<div class="chart-note">Факторы не показаны, потому что для выбранной модели нет загруженного артефакта.</div>`,
+  }};
 }}
 function osmFeatureLabel(name) {{
   const labels = {{
@@ -3119,36 +3337,39 @@ function requirementsAudit() {{
 function valuation() {{
   const d = data.valuationDefaults || {{}};
   const initialFeatures = {{ ...d, rooms: state.room, total_area_m2: Number(d.total_area_m2 || 60), property_type_apartment:1 }};
-  const initialPrediction = localModelPrediction(initialFeatures);
-  const initialResult = initialPrediction ? 'Расчет модели: ' + fmtRub(initialPrediction) : 'Параметры готовы к расчету';
+  const initialPrediction = data.connected ? null : localModelPrediction(initialFeatures);
+  const initialResult = initialPrediction ? 'Расчет модели: ' + fmtPredictionRub(initialPrediction) : 'Параметры готовы к расчету';
   const initialHint = initialPrediction
     ? 'Предварительный расчет выполнен локально по сохраненной модели RealtyScope и параметрам формы.'
-    : 'Нажмите кнопку расчета, чтобы получить оценку через доступный сервис или честный ориентир по медиане текущей базы.';
+    : 'Нажмите кнопку расчета, чтобы получить оценку через доступный обученный artifact модели RealtyScope.';
   const metrics = activeValuationMetrics();
   return `<div class="kicker">ОЦЕНКА СТОИМОСТИ</div><section class="grid12">
-    <article class="card span5"><div class="card-title">Параметры квартиры <span class="material-symbols-outlined">calculate</span></div>
+    <article class="card span5 valuation-form compact"><div class="card-title">Параметры квартиры <span class="material-symbols-outlined">calculate</span></div>
       <div class="form-section"><div class="section-label">Базовые параметры</div><div class="mini-grid">
-        ${{stepInput('areaInput', 'Площадь, м²', d.total_area_m2 || 60, 10, 250, 1)}}
-        <div class="field"><label class="label">Комнат</label><select id="roomsInput"><option value="0" ${{state.room===0?'selected':''}}>Студия</option><option value="1" ${{state.room===1?'selected':''}}>1</option><option value="2" ${{state.room===2?'selected':''}}>2</option><option value="3" ${{state.room===3?'selected':''}}>3</option><option value="4" ${{state.room===4?'selected':''}}>4</option><option value="5" ${{state.room>=5?'selected':''}}>5+</option></select></div>
+        ${{stepInput('areaInput', 'Площадь, м²', d.total_area_m2 || 60, 10, 1200, 1)}}
+        ${{stepInput('roomsSelect', 'Комнат', Number.isFinite(Number(state.room)) ? state.room : (d.rooms || 2), 0, 20, 1)}}
         ${{stepInput('floorInput', 'Этаж', d.floor || 5, 1, 100, 1)}}
         ${{stepInput('floorsTotalInput', 'Этажей в доме', d.floors_total || 20, 1, 100, 1)}}
-        ${{stepInput('yearInput', 'Год постройки', d.building_year || 2018, 1800, 2035, 1)}}
-        ${{stepInput('transportDistanceInput', 'Ближайший транспорт, м', d.nearest_transport_m || 0, 0, 5000, 50)}}
       </div></div>
-      <div class="form-section"><div class="section-label">Локация и окружение</div><div class="mini-grid">
-        ${{stepInput('latInput', 'Широта', d.latitude || 55.75, 54.5, 56.5, 0.01)}}
-        ${{stepInput('lonInput', 'Долгота', d.longitude || 37.61, 36.5, 38.8, 0.01)}}
-        ${{stepInput('schoolsInput', 'Школы 1 км', d.schools_count_1000m || 0, 0, 30, 1)}}
-        ${{stepInput('parksInput', 'Парки 1 км', d.parks_count_1000m || 0, 0, 30, 1)}}
-        ${{stepInput('shopsInput', 'Магазины 1 км', d.shops_count_1000m || 0, 0, 80, 1)}}
-        ${{stepInput('transportInput', 'Транспорт 500 м', d.transport_count_500m || 0, 0, 50, 1)}}
-      </div><div class="sub">Поля окружения соответствуют признакам OpenStreetMap. Если точные значения неизвестны, оставьте нули и считайте результат базовой оценкой без подтвержденной инфраструктуры.</div></div>
+      <div class="valuation-primary-controls">
+        <div class="field"><label class="label">Модель оценки</label><select id="modelCandidateSelect">${{modelCandidateOptions()}}</select></div>
+        <div class="valuation-action-bar"><button class="primary-btn" id="runValuationBtn">Рассчитать стоимость</button></div>
+      </div>
+      <details class="form-section advanced-valuation-fields"><summary>Локация и окружение</summary><div class="mini-grid">
+        ${{stepInput('buildingYearInput', 'Год постройки', d.building_year || 2018, 1800, 2035, 1)}}
+        ${{stepInput('transportInput', 'Ближайший транспорт, м', d.nearest_transport_m || 0, 0, 5000, 50)}}
+        ${{stepInput('latitudeInput', 'Широта', d.latitude || 55.75, 54.5, 56.5, 0.01)}}
+        ${{stepInput('longitudeInput', 'Долгота', d.longitude || 37.61, 36.5, 38.8, 0.01)}}
+        ${{stepInput('schoolsInput', 'Школы 1 км', d.schools_count_1000m || 0, 0, 150, 1)}}
+        ${{stepInput('parksInput', 'Парки 1 км', d.parks_count_1000m || 0, 0, 1800, 1)}}
+        ${{stepInput('shopsInput', 'Магазины 1 км', d.shops_count_1000m || 0, 0, 1100, 1)}}
+        ${{stepInput('transport500Input', 'Транспорт 500 м', d.transport_count_500m || 0, 0, 150, 1)}}
+        ${{stepInput('transport1000Input', 'Транспорт 1 км', d.transport_count_1000m || 0, 0, 300, 1)}}
+      </div><label class="check-row"><input id="buildingKnownInput" type="checkbox" checked> Год постройки известен</label><label class="check-row"><input id="coordinatesKnownInput" type="checkbox"> Координаты и окружение известны</label><div class="sub">Если координаты или окружение не подтверждены, RealtyScope передает флаги отсутствия и не выдает базовые значения за известные пользователю.</div></details>
       <div class="form-section"><div class="section-label">Быстрый выбор комнат</div><div class="segmented">${{roomButtons()}}</div></div>
-      <div class="form-section"><div class="field"><label class="label">Модель оценки</label><select id="modelCandidateSelect">${{modelCandidateOptions()}}</select></div><div class="sub">Авто использует лучший опубликованный артефакт; ручной выбор доступен для обученных кандидатов.</div></div>
-      <button class="primary-btn" id="calcBtn" style="width:100%;margin-top:16px">Рассчитать стоимость</button>
     </article>
     <article class="card span7"><div class="card-title">Итоговая оценка <span class="material-symbols-outlined">analytics</span></div>
-      <div class="valuation-hero"><div class="value" id="valuationResult">${{initialResult}}</div><div class="sub" id="valuationHint">${{initialHint}}</div></div>
+      <div class="valuation-hero"><div class="value" id="valuationResult">${{initialResult}}</div><div class="sub" id="valuationHint">${{initialHint}}</div><div class="sub valuation-input-echo" id="valuationInputEcho">${{valuationInputSummary(initialFeatures, data.localModel?.targetVariable, initialPrediction)}}</div></div>
       <div class="valuation-facts" id="valuationMetrics">${{valuationMetrics(initialPrediction)}}</div>
     </article>
     <article class="card span12"><div class="card-title">Сопоставимые объявления</div><div id="valuationComparables">${{valuationComparables(initialPrediction)}}</div></article>
@@ -3162,7 +3383,7 @@ function deals() {{
   const pageRows = pagedRows(rows);
   return `<div class="kicker">ВЫГОДНЫЕ ПРЕДЛОЖЕНИЯ</div><section class="grid12">
     <article class="card span4"><div class="card-title">Фильтры предложений <span class="material-symbols-outlined">tune</span></div>${{filterControls()}}<button class="primary-btn" id="applyFilters" style="width:100%">Применить</button></article>
-    <article class="card span8"><div class="card-title">Скоринг ниже медианы сегмента <span><span class="source-badge neutral">${{fmtInt(rows.length)}} найдено</span> <button class="ghost-btn" id="refreshBtn">Обновить</button></span></div><div class="chart-note">Оценка использует реальную цену за м², медиану комнатного сегмента, MAD-отклонение и квантиль внутри текущей выборки.</div>${{rows.length ? dealTable(pageRows) + pager(rows.length) : '<div class="empty">В текущей выборке нет объявлений ниже медианы сегмента с достаточной выборкой.</div>'}}</article>
+    <article class="card span8"><div class="card-title">Скоринг ниже медианы сегмента <span><span class="source-badge neutral">${{fmtInt(rows.length)}} найдено</span> <button class="ghost-btn" id="refreshBtn">Обновить</button></span></div><div class="chart-note">Скидка — это отклонение цены за м² от медианы сегмента по комнатности и площади; это аналитическая оценка, не заявленная продавцом скидка. Оценка использует реальную цену за м², медиану комнатного сегмента, MAD-отклонение и квантиль внутри текущей выборки.</div>${{rows.length ? dealTable(pageRows) + pager(rows.length) : '<div class="empty">В текущей выборке нет объявлений ниже медианы сегмента с достаточной выборкой.</div>'}}</article>
     </section>`;
 }}
 function dealTable(rows) {{
@@ -3217,7 +3438,7 @@ function districtComparisonPanel() {{
   if (!rows.length) return districtReadinessPanel();
   const readiness = data.districtReadiness || {{}};
   const body = rows.map(row => `<tr><td>${{esc(row.district_name)}}</td><td>${{fmtInt(row.listings)}}</td><td>${{fmtM2(row.median_price_per_m2)}}</td><td>${{fmtMln(row.median_price_rub)}}</td><td>${{fmtInt(row.source_count)}}</td></tr>`).join('');
-  return `<table><thead><tr><th>Район</th><th>Объявлений</th><th>Медиана за м²</th><th>Медианная цена</th><th>Источников</th></tr></thead><tbody>${{body}}</tbody></table><div class="chart-note">Районные агрегаты построены из реальных объявлений. Источник районов: ${{esc(readiness.extraction_source || 'не найден')}}; по границам сопоставлено ${{fmtInt(readiness.boundary_matched_rows || 0)}} объявлений. Покрытие: ${{fmtInt(readiness.listings_with_district || 0)}} из ${{fmtInt(data.stats?.listings_total || 0)}} объявлений (${{fmtPct(readiness.coverage_pct || null)}}).</div>`;
+  return `<table><thead><tr><th>Район</th><th>Объявлений</th><th>Медиана за м²</th><th>Медианная цена</th><th>Источников</th></tr></thead><tbody>${{body}}</tbody></table><div class="chart-note">В этой таблице районные агрегаты пересчитываются от текущих фильтров и не являются фиксированным справочником цен. Источников — число площадок данных в районе, например ЦИАН и Домклик. Источник районов: ${{esc(readiness.extraction_source || 'не найден')}}; по границам сопоставлено ${{fmtInt(readiness.boundary_matched_rows || 0)}} объявлений. Покрытие: ${{fmtInt(readiness.listings_with_district || 0)}} из ${{fmtInt(data.stats?.listings_total || 0)}} объявлений (${{fmtPct(readiness.coverage_pct || null)}}).</div>`;
 }}
 function districtClusterPanel() {{
   const rows = data.districtClusters || [];
@@ -3289,13 +3510,53 @@ function addressSuggestions() {{
   return [...new Set((data.listings || []).map(row => String(row.address_text || '').split(',').slice(0, 3).join(',').trim()).filter(Boolean).slice(0, 80))]
     .map(value => `<option value="${{esc(value)}}"></option>`).join('');
 }}
+function currentDataRows() {{
+  return state.sort.data?.key ? sortRows(filteredRows('data'), 'data') : latestFirstRows(filteredRows('data'));
+}}
+function listingDetailHtml(row) {{
+  const fields = [
+    ['Адрес', listingLink(row)],
+    ['Источник', sourceBadge(row)],
+    ['Комнат', fmtInt(row.rooms)],
+    ['Площадь', `${{fmtInt(row.total_area_m2)}} м²`],
+    ['Этаж', floorText(row)],
+    ['Цена', fmtRub(row.price_rub)],
+    ['Цена за м²', fmtM2(row.price_per_m2)],
+    ['Дата наблюдения', tableDate(row.observed_at || row.observed_date || row.created_at)],
+    ['Район', esc(row.district || row.district_name || 'не указан')],
+    ['Координаты', row.latitude && row.longitude ? `${{row.latitude}}, ${{row.longitude}}` : 'нет'],
+    ['Ссылка', row.source_url ? `<a href="${{esc(row.source_url)}}" target="_blank" rel="noreferrer">Открыть источник</a>` : 'нет'],
+  ];
+  return `<div class="detail-modal-backdrop" data-action="close-detail"></div><div class="detail-modal-panel" role="dialog" aria-modal="true" tabindex="-1"><div class="drawer-head"><strong>Полная карточка объявления</strong><button class="ghost-btn" id="closeListingDetail" data-action="close-detail">Закрыть</button></div><div class="metric-list">${{fields.map(([label, value]) => `<div class="metric-line"><span>${{label}}</span><strong>${{value}}</strong></div>`).join('')}}</div></div>`;
+}}
+function closeListingDetail() {{
+  const drawer = document.getElementById('listingDetailDrawer');
+  if (!drawer) return;
+  drawer.classList.remove('open');
+  drawer.setAttribute('aria-hidden', 'true');
+  drawer.innerHTML = '';
+}}
+function openListingDetail(index) {{
+  const drawer = document.getElementById('listingDetailDrawer');
+  const rows = currentDataRows();
+  const row = rows.find(item => String(item.id ?? '') === String(index)) || rows[Number(index)];
+  if (!row || !drawer) return;
+  drawer.innerHTML = listingDetailHtml(row);
+  drawer.setAttribute('aria-hidden', 'false');
+  drawer.classList.add('open');
+  drawer.querySelectorAll('[data-action="close-detail"]').forEach(node => {{
+    node.onclick = closeListingDetail;
+  }});
+  const panel = drawer.querySelector('.detail-modal-panel');
+  if (panel) panel.focus();
+}}
 function dataPage() {{
-  const rows = state.sort.data?.key ? sortRows(filteredRows('data'), 'data') : latestFirstRows(filteredRows('data'));
+  const rows = currentDataRows();
   const pageRows = pagedRows(rows);
   return `<div class="kicker">ДАННЫЕ ОБЪЯВЛЕНИЙ</div><section class="grid12"><article class="card span4"><div class="card-title">Фильтры данных <span class="material-symbols-outlined">filter_list</span></div>
     ${{filterControls()}}
     <button class="primary-btn" id="applyFilters" style="width:100%">Применить</button></article>
-    <article class="card span8"><div class="card-title">Текущая выборка <span><button class="ghost-btn" id="refreshBtn">Обновить</button> <button class="ghost-btn" id="downloadBtn">Скачать отчет</button></span></div><div id="dataRows">${{rowsTable(pageRows)}}</div>${{pager(rows.length)}}</article></section>`;
+    <article class="card span8"><div class="card-title">Текущая выборка <span><button class="ghost-btn" id="refreshBtn">Обновить</button> <button class="ghost-btn" id="downloadBtn">Скачать отчет</button></span></div><div id="dataRows">${{rowsTable(pageRows)}}</div>${{pager(rows.length)}}</article></section><aside id="listingDetailDrawer" class="detail-drawer" aria-hidden="true"></aside>`;
 }}
 function sourceValue(label) {{ return label === 'ЦИАН' ? 'cian' : (label === 'Домклик' ? 'domclick' : ''); }}
 function mapFilteredPoints() {{
@@ -3341,7 +3602,17 @@ function modelSelectionLabel(mode, reason) {{
   return reasonLabel ? `${{modeLabel}} · ${{reasonLabel}}` : modeLabel;
 }}
 function modelCandidateText(model) {{
-  const count = Array.isArray(model.model_candidates) ? model.model_candidates.length : 0;
+  const rows = Array.isArray(model.training_candidates) ? model.training_candidates : [];
+  const available = Array.isArray(model.available_candidates) ? model.available_candidates : [];
+  const names = [];
+  for (const row of rows) {{
+    const name = String(row.candidate_name || '');
+    if (!name || names.includes(name)) continue;
+    if (available.length && !available.includes(name)) continue;
+    names.push(name);
+  }}
+  if (model.selected_candidate && (!available.length || available.includes(model.selected_candidate)) && !names.includes(model.selected_candidate)) names.push(model.selected_candidate);
+  const count = names.length;
   if (!count) return 'нет списка';
   const word = count === 1 ? 'кандидат' : (count > 1 && count < 5 ? 'кандидата' : 'кандидатов');
   return `${{fmtInt(count)}} ${{word}}`;
@@ -3357,14 +3628,16 @@ function modelCandidateOptions() {{
   const model = data.model || {{}};
   const selected = model.selected_candidate || '';
   const rows = Array.isArray(model.training_candidates) ? model.training_candidates : [];
+  const available = Array.isArray(model.available_candidates) ? model.available_candidates : [];
   const names = [];
   for (const row of rows) {{
     const name = String(row.candidate_name || '');
     if (!name || names.includes(name)) continue;
+    if (available.length && !available.includes(name)) continue;
     names.push(name);
   }}
-  if (selected && !names.includes(selected)) names.push(selected);
-  const candidateOptions = names.map(name => `<option value="${{esc(name)}}">${{modelCandidateName(name)}}</option>`).join('');
+  if (selected && (!available.length || available.includes(selected)) && !names.includes(selected)) names.push(selected);
+  const candidateOptions = names.map(name => `<option value="${{esc(name)}}" ${{name === selected ? 'selected' : ''}}>${{modelCandidateName(name)}}</option>`).join('');
   return `<option value="">Авто</option>${{candidateOptions}}`;
 }}
 function modelFreshnessRows(model, metrics) {{
@@ -3495,13 +3768,14 @@ function monitoring() {{
   </section><section class="grid12"><article class="card span4"><div class="card-title">Загруженные источники</div>${{sourceRows()}}</article><article class="card span8"><div class="card-title">Статус контуров</div>${{serviceStatusTable()}}</article><article class="card span4"><div class="card-title">Качество данных</div>${{dataQualityTable()}}</article><article class="card span4"><div class="card-title">Качество модели</div>${{modelMetricsTable()}}</article><article class="card span4"><div class="card-title">Контур модели</div>${{modelProvenancePanel()}}</article><article class="card span4"><div class="card-title">Инфраструктура района</div>${{infrastructureStatus()}}</article><article class="card span4"><div class="card-title">Готовность прогноза экспозиции</div>${{exposureReadinessPanel()}}</article><article class="card span4"><div class="card-title">Готовность тренда</div>${{trendReadinessPanel()}}</article><article class="card span8"><div class="card-title">Аудит требований проекта</div>${{requirementsAudit()}}</article><article class="card span12"><div class="card-title">Системный журнал <button class="ghost-btn" id="refreshBtn">Обновить</button></div>${{logTable()}}</article></section>`;
 }}
 function logTable() {{
-  const rows = monitoringLogRows();
+  const maxLogRows = 40;
+  const rows = monitoringLogRows().slice(0, maxLogRows);
   const totalPages = Math.max(1, Math.ceil(rows.length / state.logPageSize));
   state.logPage = Math.min(Math.max(1, state.logPage), totalPages);
   const start = (state.logPage - 1) * state.logPageSize;
   const pageRows = rows.slice(start, start + state.logPageSize);
-  const levelClass = level => String(level || '').toLowerCase().includes('ош') || String(level || '').toLowerCase().includes('error') ? 'error' : (String(level || '').toLowerCase().includes('warn') ? 'warn' : '');
-  return `<div class="log-shell"><table><thead><tr><th>Уровень</th><th>Событие</th><th>Сообщение</th></tr></thead><tbody>` + pageRows.map(r => `<tr><td><span class="log-level ${{levelClass(r[0])}}">${{esc(r[0])}}</span></td><td>${{esc(r[1])}}</td><td>${{esc(r[2])}}</td></tr>`).join('') + `</tbody></table><div class="log-footer"><span>Показано ${{fmtInt(start + 1)}}–${{fmtInt(Math.min(rows.length, start + state.logPageSize))}} из ${{fmtInt(rows.length)}}</span><div class="pager-actions"><button class="ghost-btn" data-log-step="-1" ${{state.logPage <= 1 ? 'disabled' : ''}}>Назад</button><span>${{fmtInt(state.logPage)}} / ${{fmtInt(totalPages)}}</span><button class="ghost-btn" data-log-step="1" ${{state.logPage >= totalPages ? 'disabled' : ''}}>Вперед</button></div></div></div>`;
+  const from = rows.length ? start + 1 : 0;
+  return `<div class="log-shell"><table><thead><tr><th>Уровень</th><th>Время</th><th>Событие</th><th>Сообщение</th></tr></thead><tbody>` + pageRows.map(r => `<tr><td>${{statusBadge(r.level, r.level || 'инфо')}}</td><td>${{shortDate(r.created_at)}}</td><td>${{esc(r.event_type || r.event || 'событие')}}</td><td>${{esc(r.message || 'Сообщение не указано')}}</td></tr>`).join('') + `</tbody></table><div class="log-footer"><span>Показано ${{fmtInt(from)}}–${{fmtInt(Math.min(rows.length, start + state.logPageSize))}} из ${{fmtInt(rows.length)}}; лимит ${{fmtInt(maxLogRows)}}</span><div class="pager-actions"><button class="ghost-btn" data-log-step="-1" ${{state.logPage <= 1 ? 'disabled' : ''}}>Назад</button><span>${{fmtInt(state.logPage)}} / ${{fmtInt(totalPages)}}</span><button class="ghost-btn" data-log-step="1" ${{state.logPage >= totalPages ? 'disabled' : ''}}>Вперед</button></div></div></div>`;
 }}
 function statusText(value) {{
   const normalized = String(value || '').toLowerCase();
@@ -3512,43 +3786,52 @@ function statusText(value) {{
   return value || 'статус не указан';
 }}
 function monitoringLogRows() {{
+  const apiLogs = Array.isArray(data.monitoring?.recent_logs) ? data.monitoring.recent_logs : [];
+  if (apiLogs.length) {{
+    return apiLogs.slice(0, 40).map(r => ({{
+      level: r.level || 'info',
+      created_at: r.created_at,
+      event_type: r.event_type || r.event || 'Событие мониторинга',
+      message: r.message || 'Сообщение не указано',
+    }}));
+  }}
   const report = data.stats?.latest_collection_report || {{}};
   const latest = data.latestRun || {{}};
   const countSource = data.dataCountProvenance || {{}};
   const rows = [
-    ['инфо', 'Режим данных', data.mode === 'snapshot' ? 'Используются реальные локальные снимки объявлений' : 'Подключение к сервису данных активно'],
-    ['инфо', 'Источник счетчика', countSource.detail || 'Источник счетчика не подтвержден'],
-    ['инфо', 'Источники', data.primarySourceLabel || 'Источник не подтвержден'],
-    ['инфо', 'Витрина интерфейса', `${{fmtInt(data.stats?.loaded_snapshot_listings || data.stats?.listings_total)}} объявлений · координаты: ${{fmtInt(data.stats?.coordinate_listings)}}`],
+    {{ level:'инфо', created_at: latest.finished_at || latest.started_at || report.finished_at || report.started_at, event_type:'Режим данных', message: data.mode === 'snapshot' ? 'Используются реальные локальные снимки объявлений' : 'Подключение к сервису данных активно' }},
+    {{ level:'инфо', created_at: latest.finished_at || latest.started_at || report.finished_at || report.started_at, event_type:'Источник счетчика', message: countSource.detail || 'Источник счетчика не подтвержден' }},
+    {{ level:'инфо', created_at: latest.finished_at || latest.started_at || report.finished_at || report.started_at, event_type:'Источники', message: data.primarySourceLabel || 'Источник не подтвержден' }},
+    {{ level:'инфо', created_at: latest.finished_at || latest.started_at || report.finished_at || report.started_at, event_type:'Витрина интерфейса', message: `${{fmtInt(data.stats?.loaded_snapshot_listings || data.stats?.listings_total)}} объявлений · координаты: ${{fmtInt(data.stats?.coordinate_listings)}}` }},
   ];
   if (report.run_id || latest.id) {{
-    rows.push(['инфо', 'Последний сбор', `${{statusText(report.status || latest.status)}} · ${{report.run_id ? 'сбор Домклик' : ('запуск №' + latest.id)}}`]);
+    rows.push({{ level:'инфо', created_at: report.finished_at || latest.finished_at || report.started_at || latest.started_at, event_type:'Последний сбор', message: `${{statusText(report.status || latest.status)}} · ${{report.run_id ? 'сбор Домклик' : ('запуск №' + latest.id)}}` }});
   }}
   if (report.started_at || latest.started_at || report.finished_at || latest.finished_at) {{
-    rows.push(['инфо', 'Время сбора', `${{shortDate(report.started_at || latest.started_at)}} — ${{shortDate(report.finished_at || latest.finished_at)}}`]);
+    rows.push({{ level:'инфо', created_at: report.finished_at || latest.finished_at || report.started_at || latest.started_at, event_type:'Время сбора', message: `${{shortDate(report.started_at || latest.started_at)}} — ${{shortDate(report.finished_at || latest.finished_at)}}` }});
   }}
   if (report.records_seen || latest.records_seen) {{
-    rows.push(['инфо', 'Получено записей', `${{fmtInt(report.records_seen || latest.records_seen)}} из ${{fmtInt(report.raw_listings || latest.raw_count || report.records_seen || latest.records_seen)}}`]);
+    rows.push({{ level:'инфо', created_at: report.finished_at || latest.finished_at, event_type:'Получено записей', message: `${{fmtInt(report.records_seen || latest.records_seen)}} из ${{fmtInt(report.raw_listings || latest.raw_count || report.records_seen || latest.records_seen)}}` }});
   }}
   if (report.normalized_listings || latest.normalized_count) {{
-    rows.push(['инфо', 'Нормализация', `${{fmtInt(report.normalized_listings || latest.normalized_count)}} объявлений · отклонено: ${{fmtInt(report.rejected_listings || latest.rejected_count || 0)}}`]);
+    rows.push({{ level:'инфо', created_at: report.finished_at || latest.finished_at, event_type:'Нормализация', message: `${{fmtInt(report.normalized_listings || latest.normalized_count)}} объявлений · отклонено: ${{fmtInt(report.rejected_listings || latest.rejected_count || 0)}}` }});
   }}
   if (report.listings_created !== undefined || latest.inserted_count !== undefined) {{
-    rows.push(['инфо', 'Запись в базу', `создано: ${{fmtInt(report.listings_created || latest.inserted_count || 0)}} · обновлено: ${{fmtInt(report.listings_updated || latest.updated_count || 0)}} · наблюдений: ${{fmtInt(report.observations_inserted)}}`]);
+    rows.push({{ level:'инфо', created_at: report.finished_at || latest.finished_at, event_type:'Запись в базу', message: `создано: ${{fmtInt(report.listings_created || latest.inserted_count || 0)}} · обновлено: ${{fmtInt(report.listings_updated || latest.updated_count || 0)}} · наблюдений: ${{fmtInt(report.observations_inserted)}}` }});
   }}
   if (report.files_written) {{
-    rows.push(['инфо', 'Файлы снимка', `${{fmtInt(report.files_written)}} файлов сохранено`]);
+    rows.push({{ level:'инфо', created_at: report.finished_at || latest.finished_at, event_type:'Файлы снимка', message: `${{fmtInt(report.files_written)}} файлов сохранено` }});
   }}
   if (data.localModel) {{
-    rows.push(['инфо', 'Модель', 'Сохраненная локальная модель доступна']);
+    rows.push({{ level:'инфо', created_at: latest.finished_at || latest.started_at, event_type:'Модель', message:'Сохраненная локальная модель доступна' }});
   }}
   if (data.osmCoverage?.featureContract) {{
     const coverage = data.osmCoverage.coverageRows === null || data.osmCoverage.coverageRows === undefined
       ? 'массовое покрытие не подтверждено'
       : `${{fmtInt(data.osmCoverage.coverageRows)}} строк инфраструктуры`;
-    rows.push(['предупр.', 'Инфраструктура района', `OpenStreetMap-признаки есть в модели; ${{coverage}}`]);
+    rows.push({{ level:'предупр.', created_at: latest.finished_at || latest.started_at, event_type:'Инфраструктура района', message:`OpenStreetMap-признаки есть в модели; ${{coverage}}` }});
   }}
-  rows.push(['предупр.', 'Незавершенные аналитики', 'Полные районные границы, OSM-кластеры и прогноз срока экспозиции требуют отдельных backend-артефактов и не показаны как готовые результаты']);
+  rows.push({{ level:'предупр.', created_at: latest.finished_at || latest.started_at, event_type:'Незавершенные аналитики', message:'Полные районные границы, OSM-кластеры и прогноз срока экспозиции требуют отдельных backend-артефактов и не показаны как готовые результаты' }});
   const levelText = level => {{
     const normalized = String(level || '').toUpperCase();
     if (normalized === 'ERROR') return 'ошибка';
@@ -3556,19 +3839,11 @@ function monitoringLogRows() {{
     if (normalized === 'INFO') return 'инфо';
     return level || 'инфо';
   }};
-  const apiLogs = Array.isArray(data.monitoring?.recent_logs) ? data.monitoring.recent_logs : [];
-  apiLogs.slice(0, 6).forEach(r => rows.push([
-    levelText(r.level),
-    r.event_type || 'Событие мониторинга',
-    `${{shortDate(r.created_at)}} · ${{r.message || 'Сообщение не указано'}}`,
-  ]));
-  if (!apiLogs.length) {{
-    const errors = data.monitoring?.recent_errors || [];
-    errors.slice(0, 4).forEach(r => rows.push([levelText(r.level), r.event_type || 'Событие мониторинга', 'Событие требует проверки в журнале сервиса']));
-  }}
+  const errors = data.monitoring?.recent_errors || [];
+  errors.slice(0, 4).forEach(r => rows.push({{ level:levelText(r.level), created_at:r.created_at, event_type:r.event_type || 'Событие мониторинга', message:'Событие требует проверки в журнале сервиса' }}));
   (data.recentReports || []).slice(0, 5).forEach(reportRow => {{
     const when = reportRow.finished_at || reportRow.started_at;
-    rows.push(['инфо', 'История сборов', `${{shortDate(when)}} · ${{statusText(reportRow.status)}} · ${{fmtInt(reportRow.normalized_count)}} из ${{fmtInt(reportRow.records_seen)}}`]);
+    rows.push({{ level:'инфо', created_at:when, event_type:'История сборов', message:`${{statusText(reportRow.status)}} · ${{fmtInt(reportRow.normalized_count)}} из ${{fmtInt(reportRow.records_seen)}}` }});
   }});
   return rows;
 }}
@@ -3578,7 +3853,19 @@ function render() {{
   document.getElementById('content').innerHTML = views[state.page]();
   normalizeIcons();
   document.querySelectorAll('[data-go]').forEach(btn => btn.onclick = () => setPage(btn.dataset.go));
-  document.querySelectorAll('[data-room]').forEach(btn => btn.onclick = () => {{ state.room = Number(btn.dataset.room); render(); }});
+  document.querySelectorAll('[data-room]').forEach(btn => btn.onclick = () => {{
+    state.room = Number(btn.dataset.room);
+    const roomsSelect = document.getElementById('roomsSelect');
+    const quickValuation = document.getElementById('quickValuation');
+    if (roomsSelect) roomsSelect.value = btn.dataset.roomPreset || btn.dataset.room || roomsSelect.value;
+    if (state.page === 'valuation' || quickValuation) {{
+      document.querySelectorAll('[data-room]').forEach(node => node.classList.remove('active'));
+      btn.classList.add('active');
+      scheduleValuationRecalculation();
+      return;
+    }}
+    render();
+  }});
   document.querySelectorAll('[data-layer]').forEach(btn => btn.onclick = () => {{ state.mapLayer = btn.dataset.layer; render(); }});
   document.querySelectorAll('[data-map-source]').forEach(btn => btn.onclick = () => {{ state.mapSource = btn.dataset.mapSource; state.selectedMapIndex = null; render(); }});
   document.querySelectorAll('[data-map-point]').forEach(btn => btn.onclick = () => {{ const index = Number(btn.dataset.mapPoint); state.selectedMapIndex = state.selectedMapIndex === index ? null : index; render(); }});
@@ -3611,17 +3898,30 @@ function render() {{
     render();
   }});
   bindMapSliders();
-  const calc = document.getElementById('calcBtn') || document.getElementById('quickValuation');
+  const roomsSelect = document.getElementById('roomsSelect');
+  if (roomsSelect) roomsSelect.onchange = () => {{
+    const value = Number(roomsSelect.value);
+    if (Number.isFinite(value)) state.room = value;
+    scheduleValuationRecalculation();
+  }};
+  const calc = document.getElementById('runValuationBtn') || document.getElementById('quickValuation');
   if (calc) calc.onclick = calculate;
   const modelCandidateSelect = document.getElementById('modelCandidateSelect');
-  if (modelCandidateSelect) modelCandidateSelect.onchange = () => {{ void calculate(); }};
+  if (modelCandidateSelect) modelCandidateSelect.onchange = () => {{
+    const qualityTarget = document.getElementById('valuationModelQuality');
+    const driversTarget = document.getElementById('valuationModelDrivers');
+    if (qualityTarget) qualityTarget.innerHTML = renderValuationModelQuality();
+    if (driversTarget) driversTarget.innerHTML = modelDriversPendingSelection();
+    scheduleValuationRecalculation();
+  }};
   const down = document.getElementById('downloadBtn');
   if (down) down.onclick = downloadReport;
-  const refresh = document.getElementById('refreshBtn');
-  if (refresh) refresh.onclick = () => {{
-    refresh.textContent = 'Обновление…';
-    window.location.reload();
-  }};
+  document.querySelectorAll('#refreshBtn, [data-action="refresh"]').forEach(refresh => {{
+    refresh.onclick = refreshCurrentData;
+  }});
+  document.querySelectorAll('[data-action="detail"]').forEach(btn => {{
+    btn.onclick = () => openListingDetail(btn.dataset.listingIndex);
+  }});
   const filters = document.getElementById('applyFilters');
   if (filters) filters.onclick = applyFilters;
   document.querySelectorAll('[data-sort]').forEach(btn => btn.onclick = () => {{
@@ -3633,6 +3933,8 @@ function render() {{
   document.querySelectorAll('[data-filter-preset]').forEach(btn => btn.onclick = () => applyFilterPreset(btn.dataset.filterPreset));
   bindStepInputs();
   bindRangeInputs();
+  bindValuationAutoRecalculation();
+  if (state.page === 'valuation' && data.connected) scheduleValuationRecalculation(0);
   bindDraggableMaps();
   drawHeatmaps();
 }}
@@ -3902,8 +4204,8 @@ function bindDraggableMaps() {{
   }});
 }}
 async function calculate() {{
-  const area = Number((document.getElementById('areaInput') || document.getElementById('quickArea'))?.value || 0);
-  const median = Number(data.stats?.median_price_per_m2 || 0);
+  const form = readValuationForm();
+  const area = form.total_area_m2;
   const target = document.getElementById('valuationResult') || document.getElementById('quickResult');
   const hint = document.getElementById('valuationHint');
   const metricsTarget = document.getElementById('valuationMetrics');
@@ -3911,55 +4213,103 @@ async function calculate() {{
   const comparablesTarget = document.getElementById('valuationComparables');
   const qualityTarget = document.getElementById('valuationModelQuality');
   const driversTarget = document.getElementById('valuationModelDrivers');
+  const inputEchoTarget = document.getElementById('valuationInputEcho');
   if (!area || area <= 0) {{ target.textContent = 'Укажите корректную площадь квартиры.'; return; }}
-  const features = valuationFeatures(area);
-  const selectedCandidate = document.getElementById('modelCandidateSelect')?.value || '';
+  const requestSeq = ++valuationRequestSeq;
+  if (activeValuationController) activeValuationController.abort();
+  const features = valuationFeaturesFromForm(form);
+  features.rooms = form.rooms;
+  const selectedCandidate = selectedValuationModel();
   target.textContent = 'Расчет выполняется…';
+  if (inputEchoTarget) inputEchoTarget.textContent = valuationInputSummary(features);
+  if (driversTarget) driversTarget.innerHTML = modelDriversLoading();
   if (data.connected) {{
+    const controller = new AbortController();
+    activeValuationController = controller;
+    const timeout = setTimeout(() => controller.abort(), VALUATION_REQUEST_TIMEOUT_MS);
     try {{
-      const requestBody = selectedCandidate ? {{ features, model_candidate: selectedCandidate }} : {{ features }};
-      const response = await fetch(data.apiBaseUrl.replace(/\\/$/, '') + '/predict', {{
+      const requestBody = selectedCandidate ? {{ features, model_candidate: selectedCandidate, candidate_model: selectedCandidate }} : {{ features }};
+      const response = await fetch(clientApiBaseUrl() + '/predict', {{
         method:'POST',
         headers:{{'Content-Type':'application/json'}},
-        body:JSON.stringify(requestBody)
+        body:JSON.stringify(requestBody),
+        signal: controller.signal
       }});
+      if (requestSeq !== valuationRequestSeq) return;
+      if (response.status === 422) {{
+        let detail = {{}};
+        try {{
+          const errorPayload = await response.json();
+          detail = errorPayload?.detail || {{}};
+        }} catch (error) {{}}
+        const unavailable = renderUnavailableModel(detail, selectedCandidate);
+        target.textContent = unavailable.result;
+        if (hint) hint.textContent = unavailable.hint;
+        const candidateMetrics = detail?.metrics_summary || (selectedCandidate ? trainingCandidateMetrics(selectedCandidate) : null);
+        if (metricsTarget) metricsTarget.innerHTML = valuationMetrics(null, candidateMetrics);
+        if (scenarioTarget) scenarioTarget.innerHTML = valuationScenarioChart(null, candidateMetrics);
+        if (comparablesTarget) comparablesTarget.innerHTML = valuationComparables(null);
+        if (qualityTarget) qualityTarget.innerHTML = renderValuationModelQuality(candidateMetrics || {{}});
+        if (driversTarget) driversTarget.innerHTML = unavailable.drivers;
+        return;
+      }}
       if (response.ok) {{
         const payload = await response.json();
         if (payload.predicted_price_rub) {{
-          target.textContent = 'Расчет сервиса: ' + fmtRub(payload.predicted_price_rub);
-          if (hint) hint.textContent = 'Результат получен из оценочного сервиса RealtyScope. Модель: ' + modelCandidateName(payload.selected_candidate) + '.';
+          const changeNote = valuationChangeNote(payload.predicted_price_rub, payload.selected_candidate);
+          target.textContent = 'Расчет сервиса: ' + fmtPredictionRub(payload.predicted_price_rub);
+          if (hint) hint.textContent = 'Результат получен из оценочного сервиса RealtyScope. Модель: ' + modelCandidateName(payload.selected_candidate) + '.' + changeNote;
           if (metricsTarget) metricsTarget.innerHTML = valuationMetrics(payload.predicted_price_rub, payload.metrics_summary);
           if (scenarioTarget) scenarioTarget.innerHTML = valuationScenarioChart(payload.predicted_price_rub, payload.metrics_summary);
           if (comparablesTarget) comparablesTarget.innerHTML = valuationComparables(payload.predicted_price_rub);
           if (qualityTarget) qualityTarget.innerHTML = renderValuationModelQuality(payload.metrics_summary);
-          if (driversTarget) driversTarget.innerHTML = modelDriverRows(payload.feature_importance);
+          if (driversTarget) driversTarget.innerHTML = renderPredictionDrivers(payload);
+          if (inputEchoTarget) inputEchoTarget.textContent = valuationInputSummary(
+            payload.input_features_echo || features,
+            payload.target_variable,
+            payload.predicted_price_rub,
+          );
           return;
         }}
       }}
-    }} catch (error) {{}}
+    }} catch (error) {{
+      if (requestSeq !== valuationRequestSeq) return;
+      const aborted = error?.name === 'AbortError';
+      if (hint) {{
+        hint.textContent = aborted
+          ? 'Сервис оценки не ответил за отведенное время. Показан резервный расчет, чтобы экран не зависал.'
+          : 'Сервис оценки временно недоступен. Показан резервный расчет по локальной модели или медиане базы.';
+      }}
+    }} finally {{
+      clearTimeout(timeout);
+      if (activeValuationController === controller) activeValuationController = null;
+    }}
   }}
+  if (requestSeq !== valuationRequestSeq) return;
   const localPrediction = localModelPrediction(features);
   if (localPrediction) {{
-    target.textContent = 'Расчет модели: ' + fmtRub(localPrediction);
-    if (hint) hint.textContent = 'Результат рассчитан локально по сохраненной модели RealtyScope и текущим параметрам квартиры.';
+    const changeNote = valuationChangeNote(localPrediction, selectedCandidate || 'local');
+    target.textContent = 'Расчет модели: ' + fmtPredictionRub(localPrediction);
+    if (hint) hint.textContent = 'Результат рассчитан локально по сохраненной модели RealtyScope и текущим параметрам квартиры.' + changeNote;
     if (metricsTarget) metricsTarget.innerHTML = valuationMetrics(localPrediction);
     if (scenarioTarget) scenarioTarget.innerHTML = valuationScenarioChart(localPrediction);
     if (comparablesTarget) comparablesTarget.innerHTML = valuationComparables(localPrediction);
     if (qualityTarget) qualityTarget.innerHTML = renderValuationModelQuality();
     if (driversTarget) driversTarget.innerHTML = modelDriverRows();
+    if (inputEchoTarget) inputEchoTarget.textContent = valuationInputSummary(
+      features,
+      data.localModel?.targetVariable,
+      localPrediction,
+    );
     return;
   }}
-  if (median) {{
-    target.textContent = 'Ориентир по базе: ' + fmtRub(area * median);
-    if (hint) hint.textContent = 'Модель недоступна, поэтому показан расчет по медиане текущей базы объявлений.';
-    if (metricsTarget) metricsTarget.innerHTML = valuationMetrics(area * median);
-    if (scenarioTarget) scenarioTarget.innerHTML = valuationScenarioChart(area * median);
-    if (comparablesTarget) comparablesTarget.innerHTML = valuationComparables(area * median);
-    if (qualityTarget) qualityTarget.innerHTML = renderValuationModelQuality();
-    if (driversTarget) driversTarget.innerHTML = modelDriverRows();
-    return;
-  }}
-  target.textContent = 'Для расчета нужны загруженные объявления с ценой за м².';
+  target.textContent = 'Прогноз не выполнен: обученная модель недоступна.';
+  if (hint) hint.textContent = 'RealtyScope не подставляет медиану рынка вместо прогноза. Нужен доступный обученный artifact модели или сервис /predict.';
+  if (metricsTarget) metricsTarget.innerHTML = valuationMetrics(null);
+  if (scenarioTarget) scenarioTarget.innerHTML = valuationScenarioChart(null);
+  if (comparablesTarget) comparablesTarget.innerHTML = valuationComparables(null);
+  if (qualityTarget) qualityTarget.innerHTML = renderValuationModelQuality();
+  if (driversTarget) driversTarget.innerHTML = modelDriverRows([], {{ useFallback: false }});
 }}
 function localModelPrediction(features) {{
   const model = data.localModel;
@@ -3973,35 +4323,133 @@ function localModelPrediction(features) {{
     const coef = Number(model.coefficients?.[i] ?? 0);
     predicted += ((raw - mean) / scale) * coef;
   }}
+  if (model.targetVariable === 'price_per_m2') {{
+    const area = Number(features.total_area_m2);
+    if (!Number.isFinite(area) || area <= 0) return null;
+    predicted *= area;
+  }}
   return Number.isFinite(predicted) && predicted > 0 ? predicted : null;
 }}
-function num(id, fallback) {{ return Number(document.getElementById(id)?.value || fallback || 0); }}
-function valuationFeatures(area) {{
+function getNumber(id, fallback = 0) {{
+  const el = document.getElementById(id);
+  const value = Number(el?.value);
+  return Number.isFinite(value) ? value : fallback;
+}}
+function selectedValuationModel() {{
+  const value = document.getElementById('modelCandidateSelect')?.value || '';
+  return value && value !== 'auto' ? value : null;
+}}
+function valuationChangeNote(predictedPrice, selectedCandidate = null) {{
+  const candidate = selectedCandidate || selectedModelCandidateName() || 'auto';
+  const previous = lastValuationSnapshot;
+  lastValuationSnapshot = {{ predictedPrice:Number(predictedPrice), candidate }};
+  if (!previous || previous.candidate !== candidate || !Number.isFinite(previous.predictedPrice)) return '';
+  const delta = Number(predictedPrice) - previous.predictedPrice;
+  if (!Number.isFinite(delta)) return '';
+  if (Math.abs(delta) < 10_000) return ' Изменение к предыдущему расчету меньше 0,01 млн ₽: модель почти не реагирует на эти параметры.';
+  return ` Изменение к предыдущему расчету: ${{fmtDeltaMln(delta)}}.`;
+}}
+function scheduleValuationRecalculation(delay = 300) {{
+  if (state.page !== 'valuation' && !document.getElementById('quickValuation')) return;
+  if (valuationRecalcTimer) clearTimeout(valuationRecalcTimer);
+  valuationRecalcTimer = setTimeout(() => {{
+    valuationRecalcTimer = null;
+    calculate();
+  }}, delay);
+}}
+function markValuationKnownInputForChange(id) {{
+  const locationInputs = new Set([
+    'transportInput', 'latitudeInput', 'longitudeInput', 'schoolsInput', 'parksInput',
+    'shopsInput', 'transport500Input', 'transport1000Input',
+  ]);
+  if (locationInputs.has(id)) {{
+    const coordinatesKnownInput = document.getElementById('coordinatesKnownInput');
+    if (coordinatesKnownInput) coordinatesKnownInput.checked = true;
+  }}
+  if (id === 'buildingYearInput') {{
+    const buildingKnownInput = document.getElementById('buildingKnownInput');
+    if (buildingKnownInput) buildingKnownInput.checked = true;
+  }}
+}}
+function bindValuationAutoRecalculation() {{
+  if (state.page !== 'valuation' && !document.getElementById('quickValuation')) return;
+  const ids = [
+    'quickArea', 'areaInput', 'roomsSelect', 'floorInput', 'floorsTotalInput', 'buildingYearInput',
+    'transportInput', 'latitudeInput', 'longitudeInput', 'schoolsInput', 'parksInput',
+    'shopsInput', 'transport500Input', 'transport1000Input', 'buildingKnownInput', 'coordinatesKnownInput',
+    'modelCandidateSelect',
+  ];
+  ids.forEach(id => {{
+    const el = document.getElementById(id);
+    if (!el || el.dataset.valuationBound === '1') return;
+    el.dataset.valuationBound = '1';
+    const handler = () => {{
+      markValuationKnownInputForChange(id);
+      scheduleValuationRecalculation();
+    }};
+    el.addEventListener('input', handler);
+    el.addEventListener('change', handler);
+  }});
+}}
+function readValuationForm() {{
   const d = data.valuationDefaults || {{}};
+  const roomFallback = Number.isFinite(Number(state.room)) ? Number(state.room) : Number(d.rooms || 2);
+  const rooms = getNumber('roomsSelect', roomFallback);
+  const coordinatesKnown = Boolean(document.getElementById('coordinatesKnownInput')?.checked);
+  const buildingKnownInput = document.getElementById('buildingKnownInput');
+  const buildingKnown = buildingKnownInput ? Boolean(buildingKnownInput.checked) : true;
+  const transport500 = getNumber('transport500Input', 0);
+  const transport1000 = getNumber('transport1000Input', Math.max(transport500, Number(d.transport_count_1000m || 0)));
   return {{
-    building_year: num('yearInput', d.building_year),
-    building_year_missing: 0,
-    coordinates_missing: 0,
-    floor: num('floorInput', d.floor),
-    floor_missing: 0,
-    floors_total: num('floorsTotalInput', d.floors_total),
-    floors_total_missing: 0,
+    total_area_m2: getNumber('areaInput', getNumber('quickArea', d.total_area_m2 || 60)),
+    rooms,
+    floor: getNumber('floorInput', d.floor || 5),
+    floors_total: getNumber('floorsTotalInput', d.floors_total || 20),
+    building_year: getNumber('buildingYearInput', d.building_year || 2018),
+    nearest_transport_m: getNumber('transportInput', 0),
+    latitude: coordinatesKnown ? getNumber('latitudeInput', d.latitude || 55.75) : 55.75,
+    longitude: coordinatesKnown ? getNumber('longitudeInput', d.longitude || 37.61) : 37.61,
+    coordinatesKnown,
+    buildingKnown,
+    schools_count_1000m: getNumber('schoolsInput', 0),
+    parks_count_1000m: getNumber('parksInput', 0),
+    shops_count_1000m: getNumber('shopsInput', 0),
+    transport_count_500m: transport500,
+    transport_count_1000m: transport1000,
+  }};
+}}
+function valuationFeatures(area) {{
+  return valuationFeaturesFromForm({{ ...readValuationForm(), total_area_m2: area }});
+}}
+function valuationFeaturesFromForm(form) {{
+  const d = data.valuationDefaults || {{}};
+  if (!form.coordinatesKnown) {{
+    form = {{ ...form, latitude: 55.75, longitude: 37.61 }};
+  }}
+  return {{
+    building_year: form.buildingKnown ? form.building_year : 0,
+    building_year_missing: form.buildingKnown ? 0 : 1,
+    coordinates_missing: form.coordinatesKnown ? 0 : 1,
+    floor: form.floor,
+    floor_missing: form.floor ? 0 : 1,
+    floors_total: form.floors_total,
+    floors_total_missing: form.floors_total ? 0 : 1,
     healthcare_count_1000m: Number(d.healthcare_count_1000m || 0),
-    latitude: num('latInput', d.latitude),
-    longitude: num('lonInput', d.longitude),
-    nearest_transport_m: num('transportDistanceInput', d.nearest_transport_m),
-    nearest_transport_m_missing: 0,
-    observation_count: 1,
-    observation_missing: 0,
-    osm_missing: 0,
-    parks_count_1000m: num('parksInput', d.parks_count_1000m),
+    latitude: form.latitude,
+    longitude: form.longitude,
+    nearest_transport_m: form.nearest_transport_m,
+    nearest_transport_m_missing: form.nearest_transport_m ? 0 : 1,
+    observation_count: Number(d.observation_count || 1),
+    observation_missing: Number(d.observation_missing || 0),
+    osm_missing: form.coordinatesKnown ? 0 : 1,
+    parks_count_1000m: form.parks_count_1000m,
     property_type_apartment: 1,
-    rooms: Math.max(0, num('roomsInput', state.room)),
-    schools_count_1000m: num('schoolsInput', d.schools_count_1000m),
-    shops_count_1000m: num('shopsInput', d.shops_count_1000m),
-    total_area_m2: area,
-    transport_count_1000m: Number(d.transport_count_1000m || 0),
-    transport_count_500m: num('transportInput', d.transport_count_500m),
+    rooms: Math.max(0, form.rooms),
+    schools_count_1000m: form.schools_count_1000m,
+    shops_count_1000m: form.shops_count_1000m,
+    total_area_m2: form.total_area_m2,
+    transport_count_1000m: Math.max(Number(form.transport_count_1000m || 0), Number(form.transport_count_500m || 0)),
+    transport_count_500m: form.transport_count_500m,
   }};
 }}
 function filterNumber(value) {{
@@ -4128,39 +4576,23 @@ function downloadReport() {{
   a.href = URL.createObjectURL(blob); a.download = 'otchet-realtyscope.json'; a.click();
   URL.revokeObjectURL(a.href);
 }}
-function monitoringRefreshSignature(payload) {{
-  const quality = payload.data_quality || payload.stats || {{}};
-  const latest = payload.latest_successful_ingestion_run || payload.latest_ingestion_run || payload.latestRun || {{}};
-  return JSON.stringify([
-    quality.listings_total || 0,
-    quality.observations_total || 0,
-    latest.id || '',
-    latest.finished_at || '',
-  ]);
-}}
-function scheduleAutoRefresh() {{
-  if (!data.connected || data.mode !== 'api') return;
-  const initialSignature = monitoringRefreshSignature({{
-    data_quality: data.stats || {{}},
-    latest_successful_ingestion_run: data.latestRun || {{}},
+function refreshCurrentData() {{
+  const refreshButtons = Array.from(document.querySelectorAll('#refreshBtn, [data-action="refresh"]'));
+  refreshButtons.forEach(btn => {{
+    btn.textContent = 'Обновление...';
+    btn.disabled = true;
   }});
-  const baseUrl = String(data.apiBaseUrl || '').replace(/\\/$/, '');
-  if (!baseUrl) return;
-  setInterval(async () => {{
-    if (document.hidden) return;
-    try {{
-      const response = await fetch(baseUrl + '/monitoring/status', {{ cache:'no-store' }});
-      if (!response.ok) return;
-      const payload = await response.json();
-      const nextSignature = monitoringRefreshSignature(payload);
-      if (nextSignature && nextSignature !== initialSignature) window.location.reload();
-    }} catch (error) {{}}
-  }}, 60000);
+  document.querySelectorAll('[data-action="detail"]').forEach(btn => {{
+    btn.onclick = () => openListingDetail(btn.dataset.listingIndex);
+  }});
+  window.location.assign(window.location.href);
 }}
 document.getElementById('collapseBtn').onclick = () => document.body.classList.toggle('collapsed');
 document.getElementById('themeBtn').onclick = () => document.body.classList.toggle('light');
+document.addEventListener('keydown', event => {{
+  if (event.key === 'Escape') closeListingDetail();
+}});
 render();
-scheduleAutoRefresh();
 </script>
 </body>
 </html>

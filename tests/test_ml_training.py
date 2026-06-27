@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from realtyscope.database.base import Base
 from realtyscope.database.models import Listing, ListingObservation, RawListingRecord, Source
 from realtyscope.ml.features import FEATURE_VERSION, FeatureRow
-from realtyscope.ml.train import main, train_baseline_model, train_selected_model
+from realtyscope.ml.train import _candidate_model, main, train_baseline_model, train_selected_model
 
 NON_LEAKY_FEATURE_VERSION = "ml_features_v2_non_leaky"
 
@@ -150,6 +150,33 @@ def test_train_selected_model_records_candidate_metrics_and_selected_artifact(
     }
     assert artifact["candidate_metrics"] == result.candidate_metrics
     assert artifact["metrics"]["candidate_count"] == 3
+
+
+def test_train_selected_model_records_train_validation_gap_metrics(
+    tmp_path: Path,
+) -> None:
+    feature_rows = _tiny_feature_rows(
+        feature_version=NON_LEAKY_FEATURE_VERSION,
+        include_latest_price_feature=False,
+    )
+
+    result = train_selected_model(feature_rows=feature_rows, output_dir=tmp_path)
+
+    for row in result.candidate_metrics:
+        assert "train_r2" in row
+        assert "train_mae" in row
+        assert "r2_generalization_gap" in row
+    artifact = joblib.load(result.artifact_path)
+    assert "train_r2" in artifact["metrics"]
+    assert "r2_generalization_gap" in artifact["metrics"]
+
+
+def test_hist_gradient_boosting_candidate_uses_regularized_leaf_size() -> None:
+    model = _candidate_model("hist_gradient_boosting")
+
+    assert model.min_samples_leaf == 20
+    assert model.l2_regularization == 0.10
+    assert model.learning_rate == 0.06
 
 
 def test_train_selected_model_records_selected_feature_importance(
