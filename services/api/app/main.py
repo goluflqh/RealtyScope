@@ -1,11 +1,12 @@
 import json
+import math
 from collections.abc import Iterator, Mapping
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from functools import lru_cache
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Annotated, Any
 
 import joblib
@@ -76,6 +77,7 @@ class ArtifactPredictionModel:
         selected_candidate: str | None = None,
         feature_importance: list[dict[str, Any]] | None = None,
         training_candidates: list[dict[str, Any]] | None = None,
+        target_variable: str = "price_rub",
     ) -> None:
         self.artifact_path = artifact_path
         self.feature_names = feature_names
@@ -87,6 +89,7 @@ class ArtifactPredictionModel:
         self.selected_candidate = selected_candidate
         self._feature_importance = feature_importance or []
         self.training_candidates = training_candidates or []
+        self.target_variable = target_variable
 
     @property
     def feature_importance(self) -> list[dict[str, float | str]]:
@@ -144,20 +147,31 @@ class ArtifactPredictionModel:
             selected_candidate=artifact.get("selected_candidate"),
             feature_importance=artifact.get("feature_importance") or [],
             training_candidates=artifact.get("candidate_metrics") or [],
+            target_variable=artifact.get("target_variable", "price_rub"),
         )
 
     def predict(self, features: dict[str, float]) -> float:
         row = [[features[name] for name in self.feature_names]]
-        return float(self.model.predict(row)[0])
+        pred = float(self.model.predict(row)[0])
+        if self.target_variable == "price_per_m2":
+            area = features.get("total_area_m2")
+            if area is None:
+                raise ValueError("total_area_m2 is required to scale price_per_m2 predictions")
+            return pred * area
+        return pred
 
     def available_candidate_names(self) -> list[str]:
-        names = [
+        names = {
             str(row["candidate_name"])
             for row in self.training_candidates
             if row.get("candidate_name") and row.get("candidate_artifact_path")
-        ]
-        if self.selected_candidate and self.selected_candidate not in names:
-            names.append(self.selected_candidate)
+        }
+        for row in self.training_candidates:
+            candidate_name = str(row.get("candidate_name") or "")
+            if candidate_name and self._selection_artifact_path_for_candidate(candidate_name):
+                names.add(candidate_name)
+        if self.selected_candidate:
+            names.add(self.selected_candidate)
         return sorted(names)
 
     def candidate_model(self, candidate_name: str) -> "ArtifactPredictionModel":
@@ -172,15 +186,66 @@ class ArtifactPredictionModel:
             artifact_path_value = row.get("candidate_artifact_path")
             if not artifact_path_value:
                 break
-            artifact_path = Path(str(artifact_path_value))
-            if not artifact_path.exists() and self.artifact_path is not None:
-                sibling_path = self.artifact_path.parent / artifact_path.name
-                if sibling_path.exists():
-                    artifact_path = sibling_path
-            if not artifact_path.exists():
+            artifact_path = self._candidate_artifact_path_from_value(artifact_path_value)
+            if artifact_path is None:
                 break
-            return ArtifactPredictionModel.from_artifact(artifact_path, selection=self.selection)
+            model = ArtifactPredictionModel.from_artifact(artifact_path, selection=self.selection)
+            if not model.selected_candidate:
+                model.selected_candidate = requested
+            return model
+        selection_artifact_path = self._selection_artifact_path_for_candidate(requested)
+        if selection_artifact_path:
+            model = ArtifactPredictionModel.from_artifact(
+                selection_artifact_path,
+                selection=self.selection,
+            )
+            if not model.selected_candidate:
+                model.selected_candidate = requested
+            return model
         raise KeyError(candidate_name)
+
+    def _candidate_artifact_path_from_value(self, artifact_path_value: Any) -> Path | None:
+        raw_value = str(artifact_path_value)
+        artifact_path = Path(raw_value)
+        if artifact_path.exists():
+            return artifact_path
+        if self.artifact_path is None:
+            return None
+        candidate_names = (artifact_path.name, PureWindowsPath(raw_value).name)
+        for candidate_name in candidate_names:
+            if not candidate_name:
+                continue
+            sibling_path = self.artifact_path.parent / candidate_name
+            if sibling_path.exists():
+                return sibling_path
+        return None
+
+    def _selection_artifact_path_for_candidate(self, candidate_name: str) -> Path | None:
+        if self.selection is None:
+            return None
+        requested = candidate_name.strip().lower()
+        if not requested:
+            return None
+        for candidate in self.selection.candidates:
+            selected_candidate = str(candidate.get("selected_candidate") or "").strip().lower()
+            if selected_candidate != requested:
+                continue
+            artifact_path = self._candidate_artifact_path_from_value(candidate.get("artifact_path"))
+            if artifact_path is not None:
+                return artifact_path
+        for candidate in self.selection.candidates:
+            artifact_path_value = candidate.get("artifact_path")
+            if not artifact_path_value:
+                continue
+            haystack = " ".join(
+                str(candidate.get(key) or "") for key in ("artifact_path", "model_version")
+            ).lower()
+            if requested not in haystack:
+                continue
+            artifact_path = self._candidate_artifact_path_from_value(artifact_path_value)
+            if artifact_path is not None:
+                return artifact_path
+        return None
 
 
 @asynccontextmanager
@@ -340,6 +405,7 @@ def _model_artifact_candidate(path: Path) -> dict[str, Any]:
         "artifact_path": str(path),
         "model_version": artifact["model_version"],
         "feature_version": artifact.get("feature_version"),
+        "selected_candidate": artifact.get("selected_candidate"),
         "r2": _float_metric(metrics.get("r2")),
         "mae": _float_metric(metrics.get("mae")),
         "rows_total": _int_metric(metrics.get("rows_total")),
@@ -1235,7 +1301,11 @@ def predict_price(
     request: PredictionRequest,
     prediction_model: Annotated[ArtifactPredictionModel, Depends(get_prediction_model)],
 ) -> PredictionResponse:
-    active_model = _prediction_model_for_request(prediction_model, request.model_candidate)
+    requested_candidate = request.model_candidate or request.candidate_model
+    active_model = _prediction_model_for_request(
+        prediction_model,
+        requested_candidate,
+    )
     missing_features, unexpected_features = _feature_contract_diff(
         expected=active_model.feature_names,
         actual=request.features,
@@ -1249,13 +1319,34 @@ def predict_price(
             },
         )
 
+    predicted_price = active_model.predict(request.features)
+    if not math.isfinite(predicted_price) or predicted_price <= 0:
+        selected_candidate = getattr(active_model, "selected_candidate", None)
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "model_candidate": requested_candidate or selected_candidate,
+                "reason": "non_positive_prediction",
+                "available_candidates": _available_model_candidates(prediction_model),
+                "model_version": active_model.model_version,
+                "feature_version": active_model.feature_version,
+                "metrics_summary": active_model.metrics,
+                "feature_names": list(active_model.feature_names),
+                "selected_candidate": selected_candidate,
+                "feature_importance": [
+                    dict(item) for item in getattr(active_model, "feature_importance", [])
+                ],
+            },
+        )
+
     return PredictionResponse(
-        predicted_price_rub=active_model.predict(request.features),
+        predicted_price_rub=predicted_price,
         model_version=active_model.model_version,
         feature_version=active_model.feature_version,
         metrics_summary=active_model.metrics,
         input_features_echo=request.features,
         feature_names=list(active_model.feature_names),
+        target_variable=getattr(active_model, "target_variable", "price_rub"),
         selected_candidate=getattr(active_model, "selected_candidate", None),
         feature_importance=[dict(item) for item in getattr(active_model, "feature_importance", [])],
         caveat=BASELINE_PREDICTION_CAVEAT,
@@ -1579,12 +1670,15 @@ def _model_metadata_payload(model: ArtifactPredictionModel | None) -> dict[str, 
             "model_selection_mode": settings.model_selection_mode,
             "model_selection_reason": "unavailable",
             "model_candidates": [],
+            "model_artifact_scan_candidates": [],
+            "available_candidates": [],
             "selected_candidate": None,
             "training_candidates": [],
             "model_version": None,
             "feature_version": None,
             "feature_names": [],
             "feature_count": 0,
+            "target_variable": None,
             "metrics_summary": {},
             "feature_importance": [],
             "selected_model": selected_model,
@@ -1600,18 +1694,54 @@ def _model_metadata_payload(model: ArtifactPredictionModel | None) -> dict[str, 
         "artifact_path": str(artifact_path or settings.active_model_artifact_path),
         "model_selection_mode": selection.mode if selection else settings.model_selection_mode,
         "model_selection_reason": selection.reason if selection else "dependency_override",
-        "model_candidates": list(selection.candidates) if selection else [],
+        "model_candidates": _prediction_model_candidate_rows(model),
+        "model_artifact_scan_candidates": list(selection.candidates) if selection else [],
+        "available_candidates": _available_model_candidates(model),
         "selected_candidate": getattr(model, "selected_candidate", None),
         "training_candidates": list(getattr(model, "training_candidates", [])),
         "model_version": model.model_version,
         "feature_version": model.feature_version,
         "feature_names": list(model.feature_names),
         "feature_count": len(model.feature_names),
+        "target_variable": getattr(model, "target_variable", "price_rub"),
         "metrics_summary": model.metrics,
         "feature_importance": [dict(item) for item in feature_importance],
         "selected_model": selected_model,
         "error": None,
     }
+
+
+def _prediction_model_candidate_rows(model: ArtifactPredictionModel) -> list[dict[str, Any]]:
+    available_candidates = set(_available_model_candidates(model))
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for candidate in getattr(model, "training_candidates", []):
+        if not isinstance(candidate, dict):
+            continue
+        candidate_name = str(candidate.get("candidate_name") or "").strip()
+        if not candidate_name or candidate_name in seen:
+            continue
+        if available_candidates and candidate_name not in available_candidates:
+            continue
+        row = dict(candidate)
+        row["candidate_name"] = candidate_name
+        if not row.get("candidate_artifact_path"):
+            selected_candidate = str(getattr(model, "selected_candidate", "") or "")
+            artifact_path = getattr(model, "artifact_path", None)
+            if candidate_name == selected_candidate and artifact_path is not None:
+                row["candidate_artifact_path"] = str(artifact_path)
+        rows.append(row)
+        seen.add(candidate_name)
+    if rows:
+        return rows
+    selected_candidate = str(getattr(model, "selected_candidate", "") or "").strip()
+    if selected_candidate:
+        row = {"candidate_name": selected_candidate}
+        artifact_path = getattr(model, "artifact_path", None)
+        if artifact_path is not None:
+            row["candidate_artifact_path"] = str(artifact_path)
+        return [row]
+    return []
 
 
 def _model_data_freshness(
@@ -1707,7 +1837,7 @@ def _recent_error_payloads(session: Session, *, limit: int = 10) -> list[dict[st
     return [_app_log_payload(row, include_context=True) for row in rows]
 
 
-def _recent_log_payloads(session: Session, *, limit: int = 12) -> list[dict[str, Any]]:
+def _recent_log_payloads(session: Session, *, limit: int = 40) -> list[dict[str, Any]]:
     rows = session.scalars(
         select(AppLog).order_by(AppLog.created_at.desc(), AppLog.id.desc()).limit(limit)
     ).all()

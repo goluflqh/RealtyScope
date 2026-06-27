@@ -97,6 +97,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    volumes:
+      - ./data/external:/app/data/external:ro
 
   trainer:
     profiles: ["tools"]

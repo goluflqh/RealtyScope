@@ -1,5 +1,6 @@
 import json
 import warnings
+from types import SimpleNamespace
 
 import pandas as pd
 from services.streamlit import app as streamlit_app
@@ -22,6 +23,7 @@ from services.streamlit.app import (
     _osm_coverage_payload,
     _service_status_rows,
     _source_observation_detail,
+    _source_rows,
     _workstation_html,
 )
 
@@ -159,6 +161,35 @@ def test_local_model_payload_ignores_unloadable_fallback_artifact(monkeypatch, t
     assert streamlit_app._local_model_payload() is None
 
 
+def test_local_model_payload_exposes_price_per_m2_target(monkeypatch, tmp_path) -> None:
+    model_path = tmp_path / "selected_price_model_v1_non_leaky__ridge.joblib"
+    model_path.write_bytes(b"fixture")
+    pipeline = SimpleNamespace(
+        named_steps={
+            "scaler": SimpleNamespace(mean_=[2.0, 60.0], scale_=[1.0, 20.0]),
+            "regressor": SimpleNamespace(coef_=[-10_000.0, 20_000.0], intercept_=500_000.0),
+        }
+    )
+    monkeypatch.setattr(streamlit_app, "_local_model_path", lambda: model_path)
+    monkeypatch.setattr(
+        streamlit_app.joblib,
+        "load",
+        lambda _path: {
+            "model": pipeline,
+            "feature_names": ["rooms", "total_area_m2"],
+            "model_version": "selected_price_model_v1_non_leaky",
+            "feature_version": "ml_features_v2_non_leaky",
+            "target_variable": "price_per_m2",
+            "metrics": {"r2": 0.8},
+        },
+    )
+
+    payload = streamlit_app._local_model_payload()
+
+    assert payload is not None
+    assert payload["targetVariable"] == "price_per_m2"
+
+
 def test_build_payload_keeps_local_model_fallback_with_api_model_metadata(monkeypatch) -> None:
     local_model = {
         "featureNames": ["rooms", "total_area_m2"],
@@ -288,8 +319,9 @@ def test_build_payload_uses_full_analytics_rows_for_districts(monkeypatch) -> No
         monitoring=MonitoringData(status={"status": "ok"}, model_metadata={}, errors=[]),
     )
 
-    assert [row["id"] for row in payload["listings"]] == [1]
-    assert payload["listings"][0]["address_text"] == preview_rows[0]["address_text"]
+    assert [row["id"] for row in payload["listings"]] == list(range(1, 16))
+    assert payload["listings"][0]["address_text"] == analytics_rows[0]["address_text"]
+    assert {row["source_name"] for row in payload["listings"]} == {"domclick", "cian"}
     assert len(payload["districtComparison"]) == 3
     assert {row["district_name"] for row in payload["districtComparison"]} == {
         "Раменки",
@@ -303,6 +335,121 @@ def test_build_payload_uses_full_analytics_rows_for_districts(monkeypatch) -> No
     assert all(
         row["feature_source"] == "districtComparison+osm" for row in payload["districtClusters"]
     )
+
+
+def test_build_payload_uses_full_api_listing_rows_for_visible_ui(monkeypatch) -> None:
+    monkeypatch.setattr(streamlit_app, "_local_model_payload", lambda: None)
+    first_page_rows = [
+        {
+            "id": 1,
+            "address_text": "Moscow, Domclick first page",
+            "rooms": 2,
+            "total_area_m2": 60.0,
+            "price_rub": 24_000_000,
+            "price_per_m2": 400_000,
+            "source_name": "domclick",
+            "source_label": "Домклик",
+            "latitude": 55.75,
+            "longitude": 37.61,
+        }
+    ]
+    full_rows = [
+        *first_page_rows,
+        {
+            "id": 1001,
+            "address_text": "Moscow, Cian after first page",
+            "rooms": 1,
+            "total_area_m2": 42.0,
+            "price_rub": 19_000_000,
+            "price_per_m2": 452_381,
+            "source_name": "cian",
+            "source_label": "ЦИАН",
+            "latitude": 55.76,
+            "longitude": 37.62,
+        },
+    ]
+
+    payload = _build_payload(
+        data=DashboardData(
+            stats={"listings_total": 2, "source_counts": {"domclick": 1, "cian": 1}},
+            listings=first_page_rows,
+            analytics_listings=full_rows,
+            listings_total=2,
+            errors=[],
+        ),
+        monitoring=MonitoringData(status={"status": "ok"}, model_metadata={}, errors=[]),
+    )
+
+    assert [row["source_name"] for row in payload["listings"]] == ["domclick", "cian"]
+    assert {row["source_name"] for row in payload["mapPoints"]} == {"domclick", "cian"}
+    assert payload["sourceRows"] == [
+        {
+            "name": "ЦИАН",
+            "status": "Подключено",
+            "detail": "Подтверждено данными",
+            "count": 1,
+            "icon": "database",
+        },
+        {
+            "name": "Домклик",
+            "status": "Подключено",
+            "detail": "Подтверждено данными",
+            "count": 1,
+            "icon": "database",
+        },
+    ]
+
+
+def test_source_rows_keep_cian_when_snapshot_source_counts_are_missing() -> None:
+    rows = _source_rows(
+        stats={"listings_total": 2, "latest_successful_ingestion_run": {"source_name": "cian"}},
+        source={"detail": "snapshot fallback"},
+        snapshot=True,
+    )
+
+    assert rows[0]["name"] == "ЦИАН"
+
+
+def test_build_payload_derives_source_counts_from_full_rows_when_stats_lack_counts(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(streamlit_app, "_local_model_payload", lambda: None)
+    full_rows = [
+        {
+            "id": 1,
+            "address_text": "Moscow, Domclick",
+            "rooms": 2,
+            "total_area_m2": 60.0,
+            "price_rub": 24_000_000,
+            "price_per_m2": 400_000,
+            "source_name": "domclick",
+            "source_label": "Домклик",
+        },
+        {
+            "id": 2,
+            "address_text": "Moscow, Cian",
+            "rooms": 1,
+            "total_area_m2": 42.0,
+            "price_rub": 19_000_000,
+            "price_per_m2": 452_381,
+            "source_name": "cian",
+            "source_label": "ЦИАН",
+        },
+    ]
+
+    payload = _build_payload(
+        data=DashboardData(
+            stats={"listings_total": 2},
+            listings=full_rows[:1],
+            analytics_listings=full_rows,
+            listings_total=2,
+            errors=[],
+        ),
+        monitoring=MonitoringData(status={"status": "ok"}, model_metadata={}, errors=[]),
+    )
+
+    assert payload["stats"]["source_counts"] == {"domclick": 1, "cian": 1}
+    assert {row["name"] for row in payload["sourceRows"]} == {"Домклик", "ЦИАН"}
 
 
 def test_build_payload_keeps_api_observation_trend_series(monkeypatch) -> None:
@@ -1059,6 +1206,14 @@ def test_workstation_html_renders_model_provenance_and_baseline_caveat() -> None
     assert "не заявляется как финальный промышленный оценщик" in html
 
 
+def test_workstation_html_counts_ui_model_candidates_from_selected_artifact() -> None:
+    html = _workstation_html({})
+
+    assert "model.training_candidates" in html
+    assert "model.available_candidates" in html
+    assert "model.model_candidates.length" not in html
+
+
 def test_workstation_html_renders_recent_operational_logs() -> None:
     html = _workstation_html(
         {
@@ -1095,21 +1250,30 @@ def test_workstation_html_prefers_api_model_metrics_over_local_fallback() -> Non
     assert "data.localModel?.metrics || data.model?.metrics" not in html
 
 
-def test_workstation_html_auto_refreshes_when_api_monitoring_signature_changes() -> None:
+def test_workstation_html_does_not_auto_reload_during_user_interaction() -> None:
     html = _workstation_html({"mode": "api", "connected": True, "apiBaseUrl": "http://api.test"})
 
-    assert "scheduleAutoRefresh" in html
-    assert "setInterval" in html
-    assert "/monitoring/status" in html
-    assert "document.hidden" in html
-    assert "window.location.reload()" in html
+    assert "setInterval(async ()" not in html
+    assert "window.location.reload()" not in html
+    assert "function refreshCurrentData()" in html
+    assert 'id="refreshBtn"' in html
 
 
-def test_workstation_html_recalculates_when_model_candidate_changes() -> None:
+def test_workstation_html_keeps_manual_refresh_button() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "Обновление" in html
+    assert "refreshCurrentData" in html
+
+
+def test_workstation_html_uses_selected_model_candidate_when_calculating() -> None:
     html = _workstation_html({})
 
     assert "modelCandidateSelect.onchange" in html
-    assert "void calculate()" in html
+    assert "calc.onclick = calculate" in html
+    assert "const selectedCandidate = selectedValuationModel()" in html
+    assert "candidate_model: selectedCandidate" in html
+    assert "renderPredictionDrivers(payload)" in html
 
 
 def test_workstation_html_updates_valuation_model_blocks_from_prediction_payload() -> None:
@@ -1124,7 +1288,314 @@ def test_workstation_html_updates_valuation_model_blocks_from_prediction_payload
     assert "valuationMetrics(payload.predicted_price_rub, payload.metrics_summary)" in html
     assert "valuationScenarioChart(payload.predicted_price_rub, payload.metrics_summary)" in html
     assert "renderValuationModelQuality(payload.metrics_summary)" in html
-    assert "modelDriverRows(payload.feature_importance)" in html
+    assert "renderPredictionDrivers(payload)" in html
+
+
+def test_workstation_html_valuation_shows_precise_prediction_and_delta() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "function fmtPredictionRub" in html
+    assert "function valuationChangeNote" in html
+    assert "lastValuationSnapshot" in html
+    assert "fmtPredictionRub(payload.predicted_price_rub)" in html
+    assert "valuationChangeNote(payload.predicted_price_rub" in html
+    assert "maximumFractionDigits:2" in html
+
+
+def test_workstation_html_echoes_backend_valuation_inputs_and_uses_canonical_api() -> None:
+    html = _workstation_html(
+        {"mode": "api", "connected": True, "apiBaseUrl": "https://api.example.test"}
+    )
+
+    assert 'id="valuationInputEcho"' in html
+    assert "function valuationInputSummary" in html
+    assert "payload.input_features_echo" in html
+    assert "payload.target_variable" in html
+    assert "state.page === 'valuation' && data.connected" in html
+    assert "scheduleValuationRecalculation(0)" in html
+    assert "model.targetVariable === 'price_per_m2'" in html
+
+
+def test_workstation_html_rewrites_docker_internal_api_base_for_browser_fetch() -> None:
+    html = _workstation_html({"mode": "api", "connected": True, "apiBaseUrl": "http://api:8000"})
+
+    assert "function clientApiBaseUrl()" in html
+    assert "function browserApiOrigin" in html
+    assert "url.hostname === 'api'" in html
+    assert "window.location.protocol}//${window.location.hostname" not in html
+    assert "const locations = [parentLocation, window.location]" in html
+    assert "protocol === 'http:' || protocol === 'https:'" in html
+    assert "fetch(clientApiBaseUrl() + '/predict'" in html
+
+
+def test_workstation_html_valuation_rooms_drive_prediction_features() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "function readValuationForm()" in html
+    assert "roomsSelect" in html
+    assert "features.rooms" in html
+    assert "candidate_model" in html
+    assert "selectedValuationModel()" in html
+    assert "Number.isFinite(Number(state.room)) ? state.room : (d.rooms || 2)" in html
+    assert "const roomFallback = Number.isFinite(Number(state.room))" in html
+    assert "stepInput('roomsSelect', 'Комнат'" in html
+    assert '<select id="roomsSelect">' not in html
+
+
+def test_workstation_html_valuation_feature_ranges_cover_training_distribution() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "stepInput('areaInput', 'Площадь, м²', d.total_area_m2 || 60, 10, 1200, 1)" in html
+    assert "stepInput('quickArea', 'Площадь, м²', 60, 10, 1200, 1)" in html
+    assert "stepInput('schoolsInput', 'Школы 1 км', d.schools_count_1000m || 0, 0, 150, 1)" in html
+    assert "stepInput('parksInput', 'Парки 1 км', d.parks_count_1000m || 0, 0, 1800, 1)" in html
+    assert "stepInput('shopsInput', 'Магазины 1 км', d.shops_count_1000m || 0, 0, 1100, 1)" in html
+    assert (
+        "stepInput('transport500Input', 'Транспорт 500 м', d.transport_count_500m || 0, 0, 150, 1)"
+    ) in html
+    assert (
+        "stepInput('transport1000Input', 'Транспорт 1 км', d.transport_count_1000m || 0, 0, 300, 1)"
+    ) in html
+
+
+def test_workstation_html_valuation_unknown_coordinates_are_explicit() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "coordinatesKnownInput" in html
+    assert "coordinates_missing" in html
+    assert "if (!form.coordinatesKnown)" in html
+    assert (
+        "latitude: coordinatesKnown ? getNumber('latitudeInput', d.latitude || 55.75) : 55.75"
+        in html
+    )
+    assert (
+        "longitude: coordinatesKnown ? getNumber('longitudeInput', d.longitude || 37.61) : 37.61"
+        in html
+    )
+    assert "form.latitude = 0" not in html
+    assert "form.longitude = 0" not in html
+    assert "buildingKnownInput" in html
+    assert "building_year_missing: form.buildingKnown ? 0 : 1" in html
+
+
+def test_workstation_html_valuation_building_year_default_matches_missing_flag() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert 'id="buildingKnownInput" type="checkbox" checked' in html
+    assert "const buildingKnownInput = document.getElementById('buildingKnownInput')" in html
+    assert (
+        "const buildingKnown = buildingKnownInput ? Boolean(buildingKnownInput.checked) : true"
+        in html
+    )
+    assert "building_year: form.buildingKnown ? form.building_year : 0" in html
+    assert (
+        "building_year: form.buildingKnown ? form.building_year : Number(d.building_year || 2018)"
+        not in html
+    )
+
+
+def test_workstation_html_model_factors_handle_prediction_feature_importance() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "function normalizeModelDrivers" in html
+    assert "function formatModelDriverValue" in html
+    assert "payload.feature_importance" in html
+    assert "payload.model_metadata?.feature_importance" in html
+    assert "Нет данных о факторах" in html
+
+
+def test_workstation_html_model_factors_label_importances_and_coefficients() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "function modelDriverUnit" in html
+    assert "function formatSignedRub" in html
+    assert "model_feature_importance" in html
+    assert "permutation_importance" in html
+    assert "coefficient" in html
+    assert "Доля важности" in html
+    assert "Пермутационная важность" in html
+    assert "Коэффициент Ridge" in html
+    assert "масштабированных признаках" in html
+
+
+def test_workstation_html_valuation_clears_and_rerenders_model_drivers_per_prediction() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "function renderPredictionDrivers" in html
+    assert "driversTarget.innerHTML = modelDriversLoading()" in html
+    assert "renderPredictionDrivers(payload)" in html
+    assert "payload.selected_candidate" in html
+
+
+def test_workstation_html_valuation_handles_unavailable_model_without_stale_drivers() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "function renderUnavailableModel" in html
+    assert "response.status === 422" in html
+    assert "available_candidates" in html
+    assert "modelDriverRows([], { useFallback: false })" in html
+
+
+def test_workstation_html_distinguishes_non_positive_prediction_from_missing_model() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "non_positive_prediction" in html
+    assert "function renderInvalidPredictionModel" in html
+    assert "detail?.reason === 'non_positive_prediction'" in html
+    assert "detail?.feature_importance" in html
+    assert "detail?.metrics_summary" in html
+
+
+def test_workstation_html_never_uses_market_median_as_model_prediction() -> None:
+    html = _workstation_html(
+        {
+            "apiBaseUrl": "http://api.test",
+            "connected": False,
+            "stats": {"median_price_per_m2": 500_000},
+        }
+    )
+
+    assert "localModelPrediction(features)" in html
+    assert "area * median" not in html
+    assert "Ориентир по базе" not in html
+    assert "честный ориентир по медиане" not in html
+
+
+def test_workstation_html_valuation_comparables_follow_rooms_select() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "document.getElementById('roomsSelect')" in html
+    assert "document.getElementById('roomsInput')" not in html
+
+
+def test_workstation_html_valuation_model_and_input_changes_schedule_recalculation() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "const VALUATION_REQUEST_TIMEOUT_MS" in html
+    assert "function scheduleValuationRecalculation" in html
+    assert "function bindValuationAutoRecalculation" in html
+    assert "modelCandidateSelect.onchange = () => {" in html
+    assert "scheduleValuationRecalculation()" in html
+    assert "AbortController" in html
+    assert "setTimeout(() => controller.abort()" in html
+    assert "calc.onclick = calculate" in html
+
+
+def test_workstation_html_advanced_valuation_edits_mark_known_fields() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "function markValuationKnownInputForChange" in html
+    assert "coordinatesKnownInput.checked = true" in html
+    assert "buildingKnownInput.checked = true" in html
+    assert "markValuationKnownInputForChange(id)" in html
+
+
+def test_workstation_html_valuation_exposes_transport_1000m_feature() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "transport1000Input" in html
+    assert "transport_count_1000m: transport1000" in html
+    assert (
+        "Math.max(Number(form.transport_count_1000m || 0), Number(form.transport_count_500m || 0))"
+    ) in html
+    assert "Number(d.transport_count_1000m || form.transport_count_500m)" not in html
+
+
+def test_workstation_html_dashboard_quick_valuation_recalculates_from_real_inputs() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert 'id="quickValuation"' in html
+    assert "document.getElementById('quickValuation')" in html
+    assert "state.page !== 'valuation' && !document.getElementById('quickValuation')" in html
+    assert "'quickArea'" in html
+    assert "if (state.page === 'valuation' || quickValuation)" in html
+
+
+def test_workstation_html_model_dropdown_uses_available_prediction_candidates() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "model.available_candidates" in html
+    assert "const available = Array.isArray(model.available_candidates)" in html
+    assert "if (available.length && !available.includes(name)) continue" in html
+
+
+def test_workstation_html_valuation_uses_compact_form_and_sticky_action() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "valuation-form compact" in html
+    assert "valuation-primary-controls" in html
+    assert "advanced-valuation-fields" in html
+    assert "valuation-action-bar" in html
+    assert 'id="runValuationBtn"' in html
+    assert html.index("valuation-action-bar") < html.index("advanced-valuation-fields")
+
+
+def test_workstation_html_places_trend_after_new_listings_in_wide_dashboard_area() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "dashboard-trend-wide" in html
+    assert html.index("Новые поступления") < html.index("Тренд медианы за м²")
+
+
+def test_workstation_html_explains_deal_discount_is_segment_median_gap() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "Скидка — это отклонение цены за м² от медианы сегмента" in html
+    assert "не заявленная продавцом скидка" in html
+
+
+def test_workstation_html_explains_district_source_count() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "Источников — число площадок" in html
+    assert "районные агрегаты пересчитываются от текущих фильтров" in html
+
+
+def test_workstation_html_data_page_exposes_fullscreen_listing_detail_modal() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert 'id="listingDetailDrawer"' in html
+    assert "detail-modal-backdrop" in html
+    assert "detail-modal-panel" in html
+    assert "function openListingDetail" in html
+    assert "function closeListingDetail" in html
+    assert "data-listing-index" in html
+    assert "document.querySelectorAll('[data-action=\"detail\"]')" in html
+    assert "openListingDetail(btn.dataset.listingIndex)" in html
+    assert "event.key === 'Escape'" in html
+    assert "Полная карточка объявления" in html
+
+
+def test_workstation_html_monitoring_status_badges_have_semantic_classes() -> None:
+    html = _workstation_html({"apiBaseUrl": "http://api.test", "stats": {}})
+
+    assert "status-badge status-ok" in html
+    assert "status-badge status-partial" in html
+    assert "status-badge status-missing" in html
+    assert "monitoring-card-structured" in html
+
+
+def test_workstation_html_system_journal_renders_timestamp_and_40_limit() -> None:
+    html = _workstation_html(
+        {
+            "apiBaseUrl": "http://api.test",
+            "stats": {},
+            "monitoring": {
+                "recent_logs": [
+                    {
+                        "level": "info",
+                        "event_type": "batch",
+                        "message": "ok",
+                        "created_at": "2026-06-26T08:00:00+00:00",
+                    }
+                ]
+            },
+        }
+    )
+
+    assert "const maxLogRows = 40" in html
+    assert "created_at" in html
+    assert "Время" in html
 
 
 def test_workstation_html_keeps_real_map_tile_fallbacks() -> None:

@@ -57,6 +57,7 @@ class TrainingResult(BaseModel):
     split: dict[str, Any]
     candidate_metrics: list[dict[str, Any]] = Field(default_factory=list)
     feature_importance: list[dict[str, Any]] = Field(default_factory=list)
+    target_variable: str = "price_rub"
 
 
 def train_baseline_model(
@@ -66,6 +67,7 @@ def train_baseline_model(
     model_version: str | None = None,
     mlflow_tracking_uri: str | None = None,
     mlflow_registered_model_name: str | None = None,
+    target_variable: str = "price_rub",
 ) -> TrainingResult:
     if len(feature_rows) < 4:
         raise ValueError("at least 4 feature rows are required for baseline training")
@@ -78,8 +80,14 @@ def train_baseline_model(
     train_rows, test_rows, split = _split_feature_rows(feature_rows)
     x_train = [[row.features[name] for name in feature_names] for row in train_rows]
     x_test = [[row.features[name] for name in feature_names] for row in test_rows]
-    y_train = [row.target_price_rub for row in train_rows]
-    y_test = [row.target_price_rub for row in test_rows]
+
+    if target_variable == "price_per_m2":
+        y_train = [row.target_price_rub / row.features["total_area_m2"] for row in train_rows]
+        y_test = [row.target_price_rub / row.features["total_area_m2"] for row in test_rows]
+    else:
+        y_train = [row.target_price_rub for row in train_rows]
+        y_test = [row.target_price_rub for row in test_rows]
+
     model = Pipeline(
         [
             ("scaler", StandardScaler()),
@@ -89,19 +97,37 @@ def train_baseline_model(
     model.fit(x_train, y_train)
 
     predictions = model.predict(x_test)
-    naive_prediction = _median(y_train)
+    naive_prediction = _median([row.target_price_rub for row in train_rows])
     naive_predictions = [naive_prediction for _ in y_test]
-    metrics = _metrics(
-        y_true=y_test,
-        y_pred=[float(value) for value in predictions],
-        naive_pred=naive_predictions,
-        rows_total=len(feature_rows),
-        train_rows=len(y_train),
-        test_rows=len(y_test),
-        feature_count=len(feature_names),
-        train_listing_groups=len(split["train_listing_ids"]),
-        test_listing_groups=len(split["test_listing_ids"]),
-    )
+
+    if target_variable == "price_per_m2":
+        areas_test = [row.features["total_area_m2"] for row in test_rows]
+        pred_price = [float(val) * area for val, area in zip(predictions, areas_test, strict=True)]
+        actual_price = [row.target_price_rub for row in test_rows]
+        metrics = _metrics(
+            y_true=actual_price,
+            y_pred=pred_price,
+            naive_pred=naive_predictions,
+            rows_total=len(feature_rows),
+            train_rows=len(y_train),
+            test_rows=len(y_test),
+            feature_count=len(feature_names),
+            train_listing_groups=len(split["train_listing_ids"]),
+            test_listing_groups=len(split["test_listing_ids"]),
+        )
+    else:
+        metrics = _metrics(
+            y_true=y_test,
+            y_pred=[float(value) for value in predictions],
+            naive_pred=naive_predictions,
+            rows_total=len(feature_rows),
+            train_rows=len(y_train),
+            test_rows=len(y_test),
+            feature_count=len(feature_names),
+            train_listing_groups=len(split["train_listing_ids"]),
+            test_listing_groups=len(split["test_listing_ids"]),
+        )
+
     artifact_path = output_dir / f"{model_version}.joblib"
     artifact = {
         "feature_names": feature_names,
@@ -110,6 +136,7 @@ def train_baseline_model(
         "model": model,
         "model_version": model_version,
         "split": split,
+        "target_variable": target_variable,
     }
     joblib.dump(artifact, artifact_path)
     mlflow_result = _log_mlflow_if_enabled(
@@ -130,6 +157,7 @@ def train_baseline_model(
         mlflow_registered_model_name=mlflow_result.registered_model_name,
         mlflow_model_uri=mlflow_result.model_uri,
         split=split,
+        target_variable=target_variable,
     )
 
 
@@ -141,6 +169,7 @@ def train_selected_model(
     model_version: str | None = None,
     mlflow_tracking_uri: str | None = None,
     mlflow_registered_model_name: str | None = None,
+    target_variable: str = "price_rub",
 ) -> TrainingResult:
     if len(feature_rows) < 4:
         raise ValueError("at least 4 feature rows are required for selected model training")
@@ -155,9 +184,15 @@ def train_selected_model(
     train_rows, test_rows, split = _split_feature_rows(feature_rows)
     x_train = [[row.features[name] for name in feature_names] for row in train_rows]
     x_test = [[row.features[name] for name in feature_names] for row in test_rows]
-    y_train = [row.target_price_rub for row in train_rows]
-    y_test = [row.target_price_rub for row in test_rows]
-    naive_prediction = _median(y_train)
+
+    if target_variable == "price_per_m2":
+        y_train = [row.target_price_rub / row.features["total_area_m2"] for row in train_rows]
+        y_test = [row.target_price_rub / row.features["total_area_m2"] for row in test_rows]
+    else:
+        y_train = [row.target_price_rub for row in train_rows]
+        y_test = [row.target_price_rub for row in test_rows]
+
+    naive_prediction = _median([row.target_price_rub for row in train_rows])
     naive_predictions = [naive_prediction for _ in y_test]
 
     trained_candidates: list[dict[str, Any]] = []
@@ -165,17 +200,59 @@ def train_selected_model(
         model = _candidate_model(candidate_name)
         model.fit(x_train, y_train)
         predictions = model.predict(x_test)
-        metrics = _metrics(
-            y_true=y_test,
-            y_pred=[float(value) for value in predictions],
-            naive_pred=naive_predictions,
-            rows_total=len(feature_rows),
-            train_rows=len(y_train),
-            test_rows=len(y_test),
-            feature_count=len(feature_names),
-            train_listing_groups=len(split["train_listing_ids"]),
-            test_listing_groups=len(split["test_listing_ids"]),
+        train_predictions = model.predict(x_train)
+
+        if target_variable == "price_per_m2":
+            areas_test = [row.features["total_area_m2"] for row in test_rows]
+            pred_price = [
+                float(val) * area for val, area in zip(predictions, areas_test, strict=True)
+            ]
+            actual_price = [row.target_price_rub for row in test_rows]
+            metrics = _metrics(
+                y_true=actual_price,
+                y_pred=pred_price,
+                naive_pred=naive_predictions,
+                rows_total=len(feature_rows),
+                train_rows=len(y_train),
+                test_rows=len(y_test),
+                feature_count=len(feature_names),
+                train_listing_groups=len(split["train_listing_ids"]),
+                test_listing_groups=len(split["test_listing_ids"]),
+            )
+            areas_train = [row.features["total_area_m2"] for row in train_rows]
+            train_pred_price = [
+                float(val) * area for val, area in zip(train_predictions, areas_train, strict=True)
+            ]
+            train_eval_metrics = _quality_metrics(
+                y_true=[row.target_price_rub for row in train_rows],
+                y_pred=train_pred_price,
+            )
+        else:
+            metrics = _metrics(
+                y_true=y_test,
+                y_pred=[float(value) for value in predictions],
+                naive_pred=naive_predictions,
+                rows_total=len(feature_rows),
+                train_rows=len(y_train),
+                test_rows=len(y_test),
+                feature_count=len(feature_names),
+                train_listing_groups=len(split["train_listing_ids"]),
+                test_listing_groups=len(split["test_listing_ids"]),
+            )
+            train_eval_metrics = _quality_metrics(
+                y_true=y_train,
+                y_pred=[float(value) for value in train_predictions],
+            )
+        metrics.update(
+            {
+                "train_mae": train_eval_metrics["mae"],
+                "train_mape": train_eval_metrics["mape"],
+                "train_r2": train_eval_metrics["r2"],
+                "train_rmse": train_eval_metrics["rmse"],
+                "r2_generalization_gap": train_eval_metrics["r2"] - float(metrics["r2"]),
+            }
         )
+
         trained_candidates.append(
             {
                 "candidate_name": candidate_name,
@@ -215,6 +292,7 @@ def train_selected_model(
         "model_version": model_version,
         "selected_candidate": selected_candidate,
         "split": split,
+        "target_variable": target_variable,
     }
     for candidate in trained_candidates:
         candidate_name = str(candidate["candidate_name"])
@@ -242,6 +320,7 @@ def train_selected_model(
             "model_version": model_version,
             "selected_candidate": candidate_name,
             "split": split,
+            "target_variable": target_variable,
         }
         joblib.dump(candidate_artifact, candidate_artifact_path)
     joblib.dump(artifact, artifact_path)
@@ -265,6 +344,7 @@ def train_selected_model(
         split=split,
         candidate_metrics=candidate_metrics,
         feature_importance=feature_importance,
+        target_variable=target_variable,
     )
 
 
@@ -278,6 +358,7 @@ def train_from_database(
     trainer: str = "selected",
     mlflow_tracking_uri: str | None = None,
     mlflow_registered_model_name: str | None = None,
+    target_variable: str = "price_per_m2",
 ) -> TrainingResult:
     engine = create_database_engine(database_url)
     from sqlalchemy.orm import Session
@@ -295,6 +376,7 @@ def train_from_database(
             model_version=model_version,
             mlflow_tracking_uri=mlflow_tracking_uri,
             mlflow_registered_model_name=mlflow_registered_model_name,
+            target_variable=target_variable,
         )
     if trainer == "baseline":
         return train_baseline_model(
@@ -303,6 +385,7 @@ def train_from_database(
             model_version=model_version,
             mlflow_tracking_uri=mlflow_tracking_uri,
             mlflow_registered_model_name=mlflow_registered_model_name,
+            target_variable=target_variable,
         )
     raise ValueError(f"unsupported trainer: {trainer}")
 
@@ -324,11 +407,11 @@ def _candidate_model(candidate_name: str) -> Any:
         )
     if candidate_name == "hist_gradient_boosting":
         return HistGradientBoostingRegressor(
-            l2_regularization=0.05,
-            learning_rate=0.08,
-            max_iter=180,
+            l2_regularization=0.10,
+            learning_rate=0.06,
+            max_iter=240,
             max_leaf_nodes=31,
-            min_samples_leaf=2,
+            min_samples_leaf=20,
             random_state=RANDOM_STATE,
         )
     raise ValueError(f"unsupported model candidate: {candidate_name}")
@@ -451,6 +534,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=os.environ.get("ACTIVE_MODEL_NAME"),
         help="Optional MLflow registered model name for sklearn model registration.",
     )
+    parser.add_argument(
+        "--target-variable",
+        choices=("price_rub", "price_per_m2"),
+        default="price_per_m2",
+        help="Target variable to train on (price_rub or price_per_m2).",
+    )
     parser.add_argument("--json", action="store_true", help="Print JSON output.")
     args = parser.parse_args(argv)
 
@@ -466,6 +555,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         trainer=args.trainer,
         mlflow_tracking_uri=args.mlflow_tracking_uri,
         mlflow_registered_model_name=args.mlflow_registered_model_name,
+        target_variable=args.target_variable,
     )
     payload = _result_payload(result)
     if args.json:
@@ -510,7 +600,22 @@ def _metrics(
     }
 
 
-def _mape(y_true: Sequence[int], y_pred: Sequence[float]) -> float:
+def _quality_metrics(
+    *,
+    y_true: Sequence[int | float],
+    y_pred: Sequence[float],
+) -> dict[str, float]:
+    mae = mean_absolute_error(y_true, y_pred)
+    rmse = math.sqrt(mean_squared_error(y_true, y_pred))
+    return {
+        "mae": float(mae),
+        "mape": _mape(y_true, y_pred),
+        "r2": float(r2_score(y_true, y_pred)) if len(y_true) > 1 else 0.0,
+        "rmse": float(rmse),
+    }
+
+
+def _mape(y_true: Sequence[int | float], y_pred: Sequence[float]) -> float:
     values = [
         abs(actual - predicted) / actual
         for actual, predicted in zip(y_true, y_pred, strict=True)
@@ -643,6 +748,7 @@ def _result_payload(result: TrainingResult) -> dict[str, Any]:
         "model_version": result.model_version,
         "split": result.split,
         "candidate_metrics": result.candidate_metrics,
+        "target_variable": result.target_variable,
     }
 
 

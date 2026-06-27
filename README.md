@@ -1,281 +1,231 @@
 # RealtyScope
 
-RealtyScope — учебный data-service проект уровня Grade 5 для анализа и оценки стоимости квартир в Москве. Проект объединяет сбор данных Domclick/CIAN, хранение в PostgreSQL, FastAPI, Redis-кэширование, MLflow-артефакты моделей и Streamlit-панель для аналитики, оценки, мониторинга и демонстрации качества модели.
+RealtyScope is a Grade-5 educational data-service project for Moscow apartment analytics and sale-price prediction. It combines real estate ingestion data, PostgreSQL storage, OSM-derived infrastructure features, FastAPI, Redis, MLflow-compatible model artifacts, Docker Compose, and a Streamlit dashboard.
 
-Текущий релиз находится в ветке `main` и был интегрирован через PR #3: `Final Grade-5 RealtyScope integration`.
+Current validated release date: 2026-06-27.
 
-## Текущий статус
+## What the project does
 
-Актуальная проверенная среда на 2026-06-26:
+- Collects and normalizes apartment listings from Domclick/CIAN-derived data.
+- Stores listings, observations, data-quality evidence, logs, and OSM features in PostgreSQL.
+- Serves operational and analytic APIs through FastAPI.
+- Runs a Streamlit dashboard for market overview, data exploration, maps, deal candidates, districts, monitoring, and price valuation.
+- Predicts apartment price from a full feature vector, not from a fixed demo default.
 
-- Docker API: `http://127.0.0.1:8000`
-- Streamlit UI: `http://127.0.0.1:8501`
-- MLflow: `http://127.0.0.1:5000`
-- Объявлений: `17,287`
-- Источники: `14,851` Domclick, `2,436` CIAN
-- Наблюдений: `45,764`
-- Дней наблюдений: `23`, с `2026-05-14` по `2026-06-26`
-- Покрытие OSM-признаками: `17,046 / 17,287` объявлений (`98.61%`)
-- Активная модель: `selected_price_model_v1_non_leaky`, кандидат `random_forest`
-- Строк в обучающем срезе модели: `17,046`
-- Статус свежести модели: валидированный snapshot; модель не переобучается автоматически после каждого ежедневного сбора
+## Current verified runtime
 
-Важное ограничение: модель цены является валидированным учебным appraisal snapshot, а не production-grade оценщиком. Появление новых строк в базе не означает, что ежедневное переобучение обязательно улучшит качество. Переобучение должно проходить только через workflow сравнения кандидатов и promotion gate.
+The local Docker/PostgreSQL runtime used for the final model contains:
 
-## Архитектура
+| Item | Value |
+| --- | ---: |
+| Listings | 17,287 |
+| ML-ready listings | 17,287 |
+| Listing observations | 45,764 |
+| Observation days | 23 |
+| Date range | 2026-05-14 to 2026-06-26 |
+| OSM feature rows | 17,046 |
+| Active model artifact | `selected_price_model_v1_non_leaky.joblib` |
+| Selected candidate | `hist_gradient_boosting` |
+| Target variable | `price_per_m2` |
+| Runtime price output | predicted `price_per_m2 × user total_area_m2` |
+
+## Architecture
 
 ```text
-Domclick / CIAN raw data
-        |
-        v
-Ingestion and normalization
-        |
-        v
+Raw listing data
+    |
+    v
+Normalization / ingestion
+    |
+    v
 PostgreSQL + SQLAlchemy + Alembic
-        |
-        +--> FastAPI API
-        |       +--> Redis cached reads
-        |       +--> /data, /predict, /model/metadata, /monitoring/status
-        |
-        +--> ML feature snapshots
-        |       +--> model training and MLflow evidence
-        |
-        +--> Streamlit dashboard
-                +--> overview, data, valuation, map, trends, monitoring
+    |
+    +--> FastAPI
+    |       +--> /health
+    |       +--> /data, /listings
+    |       +--> /predict
+    |       +--> /model/metadata
+    |       +--> /monitoring/status
+    |
+    +--> ML feature snapshot
+    |       +--> non-leaky model artifacts
+    |
+    +--> Streamlit dashboard
+            +--> overview, data, valuation, map, deals, districts, monitoring
 ```
 
-Основные сервисы:
+## Price prediction model
 
-- `db`: PostgreSQL 16
-- `redis`: кэш для read-path API
-- `mlflow`: evidence по экспериментам и registry
-- `api`: FastAPI backend
-- `streamlit`: пользовательская dashboard-панель
-- `trainer`: опциональный контейнер для обучения модели
+The current model is trained on `ml_features_v2_non_leaky`. This feature version intentionally excludes direct price-observation leakage fields such as `latest_observation_price_rub` and `latest_observation_price_per_m2`.
 
-## Структура репозитория
+Feature inputs include:
 
-```text
-services/api/             FastAPI сервис
-services/streamlit/       Streamlit dashboard и static audit HTML builder
-services/trainer/         Docker trainer entrypoint
-src/realtyscope/          Основной пакет: ingestion, database, enrichment, ML, analysis
-alembic/                  Миграции базы данных
-docs/                     Документация курса, операций, demo, readiness и design
-scripts/                  Runtime и audit helper scripts
-tests/                    API, ML, ingestion, UI payload и Docker contract tests
-data/                     Локальные data-директории, в основном ignored/generated
-```
+- apartment parameters: area, rooms, floor, floors total, building year;
+- missing-value flags: floor/building/coordinates/OSM/transport flags;
+- coordinates: latitude and longitude;
+- OSM infrastructure: nearest transport distance, transport counts, schools, parks, shops, healthcare;
+- observation metadata: observation count and availability flag;
+- property type flag.
 
-## API
+The model target is `price_per_m2`; the API and UI multiply the predicted per-square-meter value by the user-provided `total_area_m2`. Therefore `60 m²` is only an initial form value, not a fixed model assumption.
 
-Полезные endpoint после запуска Docker Compose:
+### Final model metrics
 
-- `GET /health`: проверка сервиса
-- `GET /docs`: Swagger/OpenAPI
-- `GET /data`: таблица объявлений с фильтрами и пагинацией
-- `GET /listings`: кэшируемый read-path
-- `POST /predict`: прогноз цены через активный model artifact
-- `GET /model/metadata`: версия модели, метрики кандидатов, feature importance, freshness
-- `GET /stats/data-quality`: статистика данных и наблюдений
-- `GET /stats/observation-trend`: тренд по наблюдениям
-- `GET /stats/exposure-forecast`: inferred lifecycle forecast по observation gaps
-- `GET /monitoring/status`: статус сервисов, ingestion, модели, данных и последних логов
-
-Примеры:
-
-```bash
-curl -sS "http://localhost:8000/data?limit=3&offset=0&rooms=2" | python -m json.tool
-curl -sS "http://localhost:8000/model/metadata" | python -m json.tool
-curl -sS "http://localhost:8000/monitoring/status" | python -m json.tool
-```
-
-## Dashboard
-
-Streamlit dashboard включает:
-
-- KPI overview
-- фильтры и пагинацию Data Explorer
-- таблицу объявлений
-- форму оценки стоимости с выбором model candidate
-- comparable listings и model feature drivers
-- карту и районную аналитику
-- readiness для observation trend
-- readiness для inferred exposure forecast
-- monitoring cards, service status, model freshness и recent logs
-
-Локальный адрес:
-
-```text
-http://localhost:8501
-```
-
-## Data Pipeline
-
-Ежедневный Domclick pipeline ограничен по объему и учитывает состояние источника:
-
-- Chrome/CDP capture сохраняет raw payloads в `data/raw/domclick/YYYY-MM-DD-bulk`.
-- Scheduled ingestion нормализует payloads и записывает успешные runs в PostgreSQL.
-- Ошибки вроде QRATOR/CAPTCHA/source blocking записываются в `app_logs` и попадают в monitoring.
-- Scheduler не должен делать агрессивные retry loops; source blocking нужно сначала проверить вручную.
-
-Основные команды:
-
-```powershell
-python -m realtyscope.ingestion.domclick_chrome_capture --output-root data/raw/domclick --capture-runtime cdp --json
-python -m realtyscope.ingestion.domclick_scheduled_batch run --source-path data/raw/domclick/2026-06-26-bulk --commit --json
-python -m realtyscope.ingestion.domclick_scheduled_batch status --json
-```
-
-На Windows Scheduled Task должен указывать на:
-
-```text
-scripts/run_domclick_scheduled_batch.ps1
-```
-
-## Machine Learning
-
-Текущий активный artifact:
+Final selected artifact:
 
 ```text
 data/processed/models/phase5/selected_price_model_v1_non_leaky.joblib
 ```
 
-Текущий выбранный кандидат:
+Grouped random holdout metrics from the artifact:
 
-- candidate: `random_forest`
-- model version: `selected_price_model_v1_non_leaky`
-- feature version: `ml_features_v2_non_leaky`
-- training rows: `17,046`
-- validation R2: `0.8653`
-- MAE: примерно `7.64M` RUB
-- candidate count: `3` (`random_forest`, `hist_gradient_boosting`, `ridge`)
+| Metric | Value |
+| --- | ---: |
+| Rows | 17,287 |
+| Train rows | 13,829 |
+| Test rows | 3,458 |
+| Candidate count | 3 |
+| Selected candidate | `hist_gradient_boosting` |
+| Validation R² | 0.9314 |
+| Train R² | 0.9595 |
+| R² generalization gap | 0.0281 |
+| MAE | 4.81M RUB |
+| RMSE | 14.94M RUB |
+| MAPE | 11.04% |
 
-Границы честных утверждений:
+Candidate comparison on the same grouped split:
 
-- Результат XGBoost не заявляется.
-- Модель является validated snapshot, а не ежедневно автоматически переобучаемой моделью.
-- В текущей базе `17,287` объявлений, поэтому UI показывает model freshness delta.
-- Подтвержденные terminal sale/removal lifecycle rows отсутствуют; exposure forecast построен по inferred observation gaps.
+| Candidate | R² | MAE | MAPE | Train R² | Gap |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| HistGradientBoosting | 0.9314 | 4.81M | 11.04% | 0.9595 | 0.0281 |
+| RandomForest | 0.8936 | 6.76M | 16.00% | 0.9372 | 0.0437 |
+| Ridge | -0.9874 | 12.71M | 27.74% | 0.5157 | 1.5032 |
 
-## Локальная разработка
+### Overfitting audit conclusion
 
-Установка зависимостей через `uv`:
+The old HGB result around R² `0.9295` was not evidence of target leakage, because the non-leaky feature set has no direct price fields. However, a random listing split is optimistic for real estate because nearby properties and same-period listings are correlated.
 
-```bash
-python -m pip install uv==0.11.3
-UV_LINK_MODE=copy uv sync --frozen --extra dev --extra data --extra api --extra streamlit
+The final regularized HGB model was therefore audited with stricter holdouts:
+
+| Audit split | Test R² | MAE | MAPE | Interpretation |
+| --- | ---: | ---: | ---: | --- |
+| Random listing holdout | 0.9345 | 4.87M | 11.10% | Best headline validation, but optimistic |
+| Spatial grid holdout | 0.8882 | 6.94M | 17.94% | Stronger test of neighborhood generalization |
+| Latest-20% temporal holdout | 0.8503 | 7.04M | 12.83% | Stronger test of recency drift |
+
+Conclusion for defense: the model is acceptable as a validated educational appraisal snapshot, but the honest quality claim is not only “R² 0.93”. The professional claim is: non-leaky HGB reaches R² `0.9314` on grouped random validation, while stress validation remains positive at about `0.85–0.89`; production-grade deployment would add temporal/spatial promotion gates before automatic retraining.
+
+## Valuation UI behavior
+
+The valuation page sends the same canonical feature vector to `/predict` that the model was trained on. The UI exposes editable controls for:
+
+- area from 10 to 1200 m²;
+- rooms from 0 to 20;
+- floor and total floors;
+- building year and known/missing flag;
+- coordinates and known/missing flag;
+- nearest transport distance;
+- schools, parks, shops, and transport counts at 500 m / 1000 m.
+
+When coordinates or OSM surroundings are unknown, the UI sets explicit missing flags instead of pretending default infrastructure values are known.
+
+## Local development
+
+Install dependencies:
+
+```powershell
+python -m pip install -e ".[dev,data,api,streamlit,ml]"
 ```
 
-Проверки:
-
-```bash
-uv run ruff check .
-uv run ruff format --check .
-uv run pytest --cov=realtyscope --cov=services --cov-report=term-missing --cov-fail-under=50
-```
-
-Эквивалентные команды, использованные при release verification на Windows:
+Run checks:
 
 ```powershell
 python -m ruff check .
-python -m ruff format --check .
-python -m pytest -p no:cacheprovider --cov=realtyscope --cov=services --cov-report=term-missing --cov-fail-under=50
+python -m pytest -p no:cacheprovider --basetemp=output/pytest-tmp
+```
+
+Train the selected model against a local PostgreSQL database:
+
+```powershell
+$env:PYTHONPATH = (Resolve-Path .\src).Path
+python -m realtyscope.ml.train `
+  --database-url postgresql+psycopg://realtyscope:realtyscope@localhost:5432/realtyscope `
+  --output-dir data/processed/models/phase5 `
+  --feature-version ml_features_v2_non_leaky `
+  --trainer selected `
+  --target-variable price_per_m2 `
+  --json
+```
+
+Run API locally:
+
+```powershell
+$env:PYTHONPATH = (Resolve-Path .\src).Path
+$env:DATABASE_URL = "postgresql+psycopg://realtyscope:realtyscope@localhost:5432/realtyscope"
+python -m uvicorn services.api.app.main:app --host 127.0.0.1 --port 8000
+```
+
+Run Streamlit locally:
+
+```powershell
+$env:PYTHONPATH = (Resolve-Path .\src).Path
+$env:API_BASE_URL = "http://127.0.0.1:8000"
+streamlit run services/streamlit/app.py --server.port 8501
 ```
 
 ## Docker Compose
 
-Для Docker Compose рекомендуется WSL2 или Linux host. Из корня репозитория:
+Docker is expected to run from WSL2/Linux:
 
 ```bash
-docker compose -p realtyscope up --build -d
+docker compose -p realtyscope up -d --build
 docker compose -p realtyscope ps
 ```
 
-Ожидаемые сервисы:
+Service URLs:
 
-- `db` healthy
-- `redis` healthy
-- `api` healthy на порту `8000`
-- `streamlit` healthy на порту `8501`
-- `mlflow` up на порту `5000`
+- FastAPI: `http://localhost:8000`
+- Streamlit: `http://localhost:8501`
+- MLflow: `http://localhost:5000`
 
-Быстрый smoke test:
+Smoke checks:
 
 ```bash
-curl -sS http://localhost:8000/health
-curl -sS http://localhost:8501/_stcore/health
-curl -sS http://localhost:8000/monitoring/status | python -m json.tool
+curl -fsS http://localhost:8000/health
+curl -fsS http://localhost:8501/_stcore/health
+curl -fsS http://localhost:8000/model/metadata | python -m json.tool
+curl -fsS http://localhost:8000/monitoring/status | python -m json.tool
 ```
 
-Для static audit против live Docker API при холодной базе лучше увеличить timeout:
+## VPS deployment
 
-```powershell
-$env:API_BASE_URL="http://127.0.0.1:8000"
-$env:STREAMLIT_API_TIMEOUT_SECONDS="30"
-python scripts\playwright\generate_static_audit.py
-Remove-Item Env:API_BASE_URL
-Remove-Item Env:STREAMLIT_API_TIMEOUT_SECONDS
-```
+Production deployment uses:
 
-## Развертывание
+- `docker-compose.prod.yml`;
+- Caddy reverse proxy;
+- `model_artifacts` Docker volume for trained artifacts;
+- PostgreSQL volume restored from the local runtime bundle;
+- tracked static assets such as `data/external/moscow_district_boundaries.geojson`.
 
-Проект подготовлен к VPS deployment на Linux через Docker Compose. Для production-запуска добавлены отдельные файлы:
-
-- `docker-compose.prod.yml`: изолированный production Compose без публичных портов PostgreSQL, Redis и MLflow.
-- `.env.production.example`: шаблон переменных окружения для VPS.
-- `scripts/deployment/export_local_runtime_bundle.sh`: экспорт проверенного локального состояния PostgreSQL и model artifacts.
-- `scripts/deployment/restore_vps_runtime_bundle.sh`: восстановление runtime bundle на VPS с smoke checks.
-- `deploy/caddy/Caddyfile`: reverse proxy для `realtyscope.bond` и `api.realtyscope.bond` с HTTPS.
-- `docs/deployment/vps-digitalocean-cloudflare.ru.md`: пошаговый runbook для DigitalOcean, Termius, Cloudflare и nicnames.
-
-Базовая production-команда после настройки `.env`:
+Export local runtime artifacts:
 
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env up --build -d
-docker compose -f docker-compose.prod.yml --env-file .env ps
+bash scripts/deployment/export_local_runtime_bundle.sh ../realtyscope-vps-transfer
 ```
 
-Рекомендуемый production flow:
+Restore on VPS:
 
-1. Создать VPS с Docker, Docker Compose и firewall.
-2. Настроить DNS records для домена и при необходимости отдельного API subdomain.
-3. Склонировать репозиторий с GitHub на сервер.
-4. Создать production `.env` на основе `.env.production.example`.
-5. Запустить базовый Compose и Caddy, чтобы создать persistent Docker volumes.
-6. Перенести runtime bundle: PostgreSQL dump и `data/processed/models/phase5`.
-7. Восстановить bundle через `scripts/deployment/restore_vps_runtime_bundle.sh`; `data/external` монтируется из Git checkout, model artifacts - из Docker volume.
-8. Проверить `/health`, `/_stcore/health`, `/monitoring/status`, наличие mount points и dashboard rendering.
-9. Проверить `robots.txt`: основной домен разрешает индексацию dashboard, API-домен закрыт от crawler indexing.
-10. Настроить backup базы до включения scheduled ingestion.
+```bash
+cd /opt/realtyscope
+bash scripts/deployment/restore_vps_runtime_bundle.sh
+```
 
-Ограничения deployment:
+See [VPS deployment runbook](docs/deployment/vps-digitalocean-cloudflare.ru.md) for the full server procedure.
 
-- Нельзя коммитить реальные secrets.
-- Domclick collection может блокироваться QRATOR/CAPTCHA; доступ к источнику является operational dependency.
-- Windows Scheduled Task не переносится на VPS; на Linux нужен cron или systemd timer.
-- Переобучение модели должно запускаться отдельным promotion workflow, а не автоматически после ingestion.
-- GitHub не хранит runtime database dump и generated model artifacts; для полного production parity нужен отдельный restore bundle.
+## Important honesty boundaries
 
-## Подтверждение качества
-
-Последняя release verification после merge PR #3:
-
-- GitHub Actions CI: passing для PR и push.
-- Local merged-main pytest: `241 passed`, coverage `80.84%`, fail-under `50%`.
-- Local `ruff check .`: passed.
-- Local `ruff format --check .`: passed.
-- Docker/WSL runtime smoke: API, Streamlit, PostgreSQL, Redis healthy; MLflow up.
-- Static audit с Docker API и `STREAMLIT_API_TIMEOUT_SECONDS=30`: `api 17287 {'cian': 2436, 'domclick': 14851}`.
-
-Дополнительные материалы:
-
-- `docs/project-status.md`
-- `docs/demo-script.md`
-- `docs/demo-script.vi.md`
-- `docs/final-readiness/2026-06-25-completion-audit.md`
-- `docs/course-guidance/realtyscope-user-story-traceability.md`
-
-## Лицензия и примечание о данных
-
-Проект является учебным. При сборе и деплое real-estate данных необходимо соблюдать условия источников, robots policies, rate limits, требования OpenStreetMap attribution и применимые правила защиты данных.
+- No XGBoost result is claimed; XGBoost is not part of the locked runtime.
+- The price model is a validated snapshot, not an always-on automatic retraining system.
+- Temporal and spatial validation are reported because random listing validation is optimistic.
+- Exposure/lifecycle forecast remains inferred from observation gaps, not confirmed sale/removal events.
+- PostgreSQL, Redis, and MLflow must not be exposed directly to the public internet.

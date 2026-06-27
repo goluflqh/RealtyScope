@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import tomllib
 from pathlib import Path
 
 DOCKERFILES = [
@@ -7,6 +9,15 @@ DOCKERFILES = [
     Path("services/streamlit/Dockerfile"),
     Path("services/trainer/Dockerfile"),
 ]
+PYPROJECTS = [
+    Path("pyproject.toml"),
+    Path("docker/build/deps/pyproject.toml"),
+]
+LOCKFILES = [
+    Path("uv.lock"),
+    Path("docker/build/deps/uv.lock"),
+]
+TRAINED_ARTIFACT_SKLEARN_VERSION = "1.6.1"
 
 
 def test_service_dockerfiles_cache_dependency_sync_before_copying_source() -> None:
@@ -22,6 +33,28 @@ def test_service_dockerfiles_cache_dependency_sync_before_copying_source() -> No
         assert "--no-deps ." in content, dockerfile_path
 
 
+def test_runtime_dependencies_pin_sklearn_to_trained_artifact_version() -> None:
+    expected = f"scikit-learn=={TRAINED_ARTIFACT_SKLEARN_VERSION}"
+    for pyproject_path in PYPROJECTS:
+        pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+
+        assert expected in pyproject["project"]["dependencies"], pyproject_path
+
+
+def test_uv_locks_resolve_sklearn_to_trained_artifact_version() -> None:
+    for lockfile_path in LOCKFILES:
+        content = lockfile_path.read_text(encoding="utf-8")
+        match = re.search(
+            r'name = "scikit-learn"\s+version = "([^"]+)"',
+            content,
+            flags=re.MULTILINE,
+        )
+
+        assert match, lockfile_path
+        assert match.group(1) == TRAINED_ARTIFACT_SKLEARN_VERSION, lockfile_path
+        assert 'specifier = "==1.6.1"' in content, lockfile_path
+
+
 def test_streamlit_image_installs_database_dependencies_used_by_app_imports() -> None:
     content = Path("services/streamlit/Dockerfile").read_text(encoding="utf-8")
 
@@ -35,6 +68,14 @@ def test_production_compose_mounts_runtime_assets_used_by_streamlit() -> None:
     assert "API_BASE_URL: ${STREAMLIT_API_BASE_URL:-http://api:8000}" in content
     assert "./data/external:/app/data/external:ro" in content
     assert "model_artifacts:/app/data/processed/models:ro" in content
+
+
+def test_dev_compose_mounts_district_boundary_assets_used_by_streamlit() -> None:
+    content = Path("docker-compose.yml").read_text(encoding="utf-8")
+
+    streamlit_section = content[content.index("  streamlit:") : content.index("  trainer:")]
+
+    assert "./data/external:/app/data/external:ro" in streamlit_section
 
 
 def test_production_env_points_streamlit_to_public_api_domain() -> None:
