@@ -90,6 +90,18 @@ PostgreSQL + SQLAlchemy + Alembic
 
 В проекте используются реальные записи объявлений и repeated observations. Это позволяет не только показать текущую витрину рынка, но и строить осторожные аналитические выводы по динамике наблюдений.
 
+### Парсинг и ingestion
+
+Парсинг в RealtyScope сделан как контролируемый bounded batch, а не как бесконечный scraper. Для Domclick основной путь такой:
+
+1. Chrome/CDP открывает ограниченное число страниц поиска квартир Москвы и сохраняет компактный SSR JSON (`window.__SSR_STATE__`) в `data/raw/domclick/YYYY-MM-DD-bulk/`.
+2. Parser читает сохранённые JSON/HTML snapshot-файлы, нормализует объявления в Pydantic/SQLAlchemy-структуры и отделяет rejected rows.
+3. Inspect gate проверяет `records_seen` и `normalized_listings`; если чистых строк меньше порога, PostgreSQL не меняется.
+4. Commit mode записывает raw payloads, canonical listings, source links, observations, ingestion run и report в PostgreSQL.
+5. Reports и raw snapshots лежат в `data/raw/` и `data/processed/`, эти каталоги исключены из Git.
+
+Такой подход покрывает требование по парсингу и остаётся воспроизводимым: код parser-а тестируется на snapshot fixtures, а live source access описан отдельно, потому что Domclick может вернуть QRATOR/CAPTCHA/login wall. CIAN используется как дополнительный подготовленный поток данных; OSM/2GIS-подобные POI-признаки являются enrichment, а не основным источником объявлений.
+
 Признаки для ML-модели включают:
 
 - параметры квартиры: площадь, комнаты, этаж, этажность дома, год постройки;
@@ -297,6 +309,7 @@ Production deployment использует:
 - Caddy reverse proxy;
 - Docker volume для артефактов модели;
 - PostgreSQL volume, восстановленный из runtime bundle;
+- Dockerized `ingestor` job для периодического разбора bounded Domclick snapshot на VPS;
 - tracked static assets, включая `data/external/moscow_district_boundaries.geojson`.
 
 Экспорт локальных runtime-артефактов:
@@ -315,6 +328,14 @@ bash scripts/deployment/restore_vps_runtime_bundle.sh
 Подробная инструкция: [docs/deployment/vps-digitalocean-cloudflare.ru.md](docs/deployment/vps-digitalocean-cloudflare.ru.md).
 
 Важно: база данных и joblib-артефакты модели не коммитятся в Git. Для полного запуска на VPS нужен не только `git pull`, но и восстановление runtime bundle.
+
+Для регулярного обновления на VPS production Compose содержит job service:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env --profile jobs run --rm ingestor
+```
+
+Этот job парсит и коммитит уже доступный snapshot из `DOMCLICK_SOURCE_PATH`. Если требуется, чтобы сам VPS делал live Chrome/CDP capture, сначала нужно подтвердить Chrome/headless и доступ к Domclick на этом VPS; Docker Compose не обходит QRATOR/CAPTCHA автоматически.
 
 ## Проверенная связка backend ↔ UI
 

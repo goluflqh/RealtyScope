@@ -70,6 +70,25 @@ def test_production_compose_mounts_runtime_assets_used_by_streamlit() -> None:
     assert "model_artifacts:/app/data/processed/models:ro" in content
 
 
+def test_production_compose_defines_dockerized_ingestor_job() -> None:
+    content = Path("docker-compose.prod.yml").read_text(encoding="utf-8")
+
+    assert "  ingestor:" in content
+    assert 'profiles: ["jobs"]' in content
+    assert "python -m realtyscope.ingestion.domclick_scheduled_batch" in content
+    assert "./data/raw:/app/data/raw" in content
+    assert "./data/processed:/app/data/processed" in content
+
+
+def test_gitignore_excludes_local_databases_and_runtime_transfer_bundles() -> None:
+    content = Path(".gitignore").read_text(encoding="utf-8")
+
+    assert "data/*.db" in content
+    assert "data/*.sqlite" in content
+    assert "realtyscope-db-*.dump" in content
+    assert "realtyscope-model-artifacts-*.tar.gz" in content
+
+
 def test_dev_compose_mounts_district_boundary_assets_used_by_streamlit() -> None:
     content = Path("docker-compose.yml").read_text(encoding="utf-8")
 

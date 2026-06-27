@@ -32,10 +32,12 @@ from services.streamlit.dashboard_charts import (
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 API_TIMEOUT_SECONDS = float(os.environ.get("STREAMLIT_API_TIMEOUT_SECONDS", "5.0"))
+INITIAL_LISTING_ROW_LIMIT = int(os.environ.get("STREAMLIT_INITIAL_LISTING_ROW_LIMIT", "1000"))
+INITIAL_MAP_POINT_LIMIT = int(os.environ.get("STREAMLIT_INITIAL_MAP_POINT_LIMIT", "1000"))
 REQUEST_PREDICTION_REF = request_prediction
 LOCAL_SNAPSHOT_LIMIT = 50_000
 LOCAL_SNAPSHOT_CACHE_VERSION = 2
-LOCAL_UI_PAYLOAD_CACHE_VERSION = 17
+LOCAL_UI_PAYLOAD_CACHE_VERSION = 18
 LOCAL_UI_PAYLOAD_CACHE_PATH = Path("output/cache/streamlit_ui_payload.json")
 MOSCOW_LATITUDE_BOUNDS = (54.5, 56.5)
 MOSCOW_LONGITUDE_BOUNDS = (36.5, 38.8)
@@ -160,15 +162,22 @@ def _build_payload(*, data: DashboardData, monitoring: MonitoringData) -> dict[s
     if cached_payload is not None:
         return cached_payload
     snapshot = _local_snapshot_data() if use_snapshot else None
-    listings = snapshot["listings"] if snapshot else data.analytics_listings or data.listings
-    analytics_listings = snapshot["listings"] if snapshot else data.analytics_listings or listings
-    chart_frame = _chart_frame_with_metadata(listings)
+    source_listings = snapshot["listings"] if snapshot else data.listings or data.analytics_listings
+    analytics_listings = (
+        snapshot["listings"] if snapshot else data.analytics_listings or source_listings
+    )
+    visible_listings = _limit_rows(source_listings, INITIAL_LISTING_ROW_LIMIT)
+    chart_frame = _chart_frame_with_metadata(visible_listings)
     analytics_frame = _chart_frame_with_metadata(analytics_listings)
-    room_summary = room_summary_frame(chart_frame)
-    price_bands = price_band_frame(chart_frame)
+    room_summary = room_summary_frame(analytics_frame)
+    price_bands = price_band_frame(analytics_frame)
     stats_source = snapshot["stats"] if snapshot else data.stats or {}
-    stats = _stats_with_listing_fallback(stats_source, listings=listings, chart_frame=chart_frame)
-    stats.update(_map_quality_stats(chart_frame))
+    stats = _stats_with_listing_fallback(
+        stats_source,
+        listings=analytics_listings,
+        chart_frame=analytics_frame,
+    )
+    stats.update(_map_quality_stats(analytics_frame))
     monitoring_status = (
         monitoring.status or snapshot.get("monitoring", {}) if snapshot else monitoring.status or {}
     )
@@ -199,7 +208,7 @@ def _build_payload(*, data: DashboardData, monitoring: MonitoringData) -> dict[s
         district_rows=district_rows,
     )
     exposure_readiness = _exposure_readiness_payload(
-        chart_frame,
+        analytics_frame,
         source=source,
         stats=stats,
         exposure_forecast=data.exposure_forecast,
@@ -221,13 +230,19 @@ def _build_payload(*, data: DashboardData, monitoring: MonitoringData) -> dict[s
             ),
             "latestRun": stats.get("latest_successful_ingestion_run")
             or stats.get("latest_ingestion_run"),
+            "payloadMeta": {
+                "visible_listing_rows": len(visible_listings),
+                "analytics_listing_rows": len(analytics_listings),
+                "initial_listing_row_limit": INITIAL_LISTING_ROW_LIMIT,
+                "initial_map_point_limit": INITIAL_MAP_POINT_LIMIT,
+            },
             "listings": _listing_rows(chart_frame),
             "priceBands": price_bands.to_dict(orient="records"),
             "rooms": room_summary.to_dict(orient="records"),
-            "mapPoints": _map_point_rows(chart_frame),
-            "deals": _deal_rows(chart_frame),
+            "mapPoints": _map_point_rows(analytics_frame, limit=INITIAL_MAP_POINT_LIMIT),
+            "deals": _deal_rows(analytics_frame),
             "comparables": _comparable_rows(
-                chart_frame,
+                analytics_frame,
                 target_rooms=BASELINE_FEATURE_DEFAULTS["rooms"],
                 target_area_m2=BASELINE_FEATURE_DEFAULTS["total_area_m2"],
                 target_price_per_m2=stats.get("median_price_per_m2"),
@@ -267,6 +282,12 @@ def _build_payload(*, data: DashboardData, monitoring: MonitoringData) -> dict[s
     if snapshot:
         _write_ui_payload_cache(ui_cache_key, payload)
     return payload
+
+
+def _limit_rows(rows: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    if limit <= 0:
+        return []
+    return rows[:limit]
 
 
 def _data_count_provenance(
@@ -1995,7 +2016,7 @@ def _service_status_rows(
     return rows
 
 
-def _map_point_rows(chart_frame: pd.DataFrame) -> list[dict[str, Any]]:
+def _map_point_rows(chart_frame: pd.DataFrame, *, limit: int | None = None) -> list[dict[str, Any]]:
     _coordinates, valid = _moscow_coordinate_frames(chart_frame, require_price=True)
     if valid.empty:
         return []
@@ -2014,6 +2035,8 @@ def _map_point_rows(chart_frame: pd.DataFrame) -> list[dict[str, Any]]:
     ]
     points = valid.rename(columns={"latitude": "lat", "longitude": "lon"})
     points["listing_index"] = points.index.astype(int)
+    if limit is not None:
+        points = points.head(max(0, int(limit)))
     columns = [column for column in columns if column in points]
     return points[columns].to_dict(orient="records")
 

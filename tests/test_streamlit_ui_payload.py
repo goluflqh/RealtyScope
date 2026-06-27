@@ -319,9 +319,10 @@ def test_build_payload_uses_full_analytics_rows_for_districts(monkeypatch) -> No
         monitoring=MonitoringData(status={"status": "ok"}, model_metadata={}, errors=[]),
     )
 
-    assert [row["id"] for row in payload["listings"]] == list(range(1, 16))
-    assert payload["listings"][0]["address_text"] == analytics_rows[0]["address_text"]
-    assert {row["source_name"] for row in payload["listings"]} == {"domclick", "cian"}
+    assert [row["id"] for row in payload["listings"]] == [1]
+    assert payload["listings"][0]["address_text"] == preview_rows[0]["address_text"]
+    assert payload["payloadMeta"]["visible_listing_rows"] == 1
+    assert payload["payloadMeta"]["analytics_listing_rows"] == 15
     assert len(payload["districtComparison"]) == 3
     assert {row["district_name"] for row in payload["districtComparison"]} == {
         "Раменки",
@@ -380,8 +381,10 @@ def test_build_payload_uses_full_api_listing_rows_for_visible_ui(monkeypatch) ->
         monitoring=MonitoringData(status={"status": "ok"}, model_metadata={}, errors=[]),
     )
 
-    assert [row["source_name"] for row in payload["listings"]] == ["domclick", "cian"]
+    assert [row["source_name"] for row in payload["listings"]] == ["domclick"]
     assert {row["source_name"] for row in payload["mapPoints"]} == {"domclick", "cian"}
+    assert payload["payloadMeta"]["visible_listing_rows"] == 1
+    assert payload["payloadMeta"]["analytics_listing_rows"] == 2
     assert payload["sourceRows"] == [
         {
             "name": "ЦИАН",
@@ -398,6 +401,61 @@ def test_build_payload_uses_full_api_listing_rows_for_visible_ui(monkeypatch) ->
             "icon": "database",
         },
     ]
+
+
+def test_build_payload_caps_initial_browser_rows_but_keeps_analytics_metadata(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(streamlit_app, "_local_model_payload", lambda: None)
+    monkeypatch.setattr(streamlit_app, "INITIAL_LISTING_ROW_LIMIT", 2, raising=False)
+    monkeypatch.setattr(streamlit_app, "INITIAL_MAP_POINT_LIMIT", 3, raising=False)
+    preview_rows = [
+        {
+            "id": index,
+            "address_text": f"Moscow preview {index}",
+            "rooms": 2,
+            "total_area_m2": 60.0,
+            "price_rub": 24_000_000 + index,
+            "price_per_m2": 400_000 + index,
+            "source_name": "domclick",
+            "source_label": "Domclick",
+            "latitude": 55.70 + index / 1000,
+            "longitude": 37.50 + index / 1000,
+        }
+        for index in range(1, 6)
+    ]
+    analytics_rows = [
+        {
+            "id": index,
+            "address_text": f"Moscow analytics {index}",
+            "rooms": 2,
+            "total_area_m2": 60.0,
+            "price_rub": 24_000_000 + index,
+            "price_per_m2": 400_000 + index,
+            "source_name": "domclick" if index <= 4 else "cian",
+            "source_label": "Domclick" if index <= 4 else "Cian",
+            "latitude": 55.70 + index / 1000,
+            "longitude": 37.50 + index / 1000,
+        }
+        for index in range(1, 8)
+    ]
+
+    payload = _build_payload(
+        data=DashboardData(
+            stats={"listings_total": 7},
+            listings=preview_rows,
+            analytics_listings=analytics_rows,
+            listings_total=7,
+            errors=[],
+        ),
+        monitoring=MonitoringData(status={"status": "ok"}, model_metadata={}, errors=[]),
+    )
+
+    assert [row["id"] for row in payload["listings"]] == [1, 2]
+    assert len(payload["mapPoints"]) == 3
+    assert payload["payloadMeta"]["visible_listing_rows"] == 2
+    assert payload["payloadMeta"]["analytics_listing_rows"] == 7
+    assert payload["stats"]["source_counts"] == {"domclick": 4, "cian": 3}
 
 
 def test_source_rows_keep_cian_when_snapshot_source_counts_are_missing() -> None:

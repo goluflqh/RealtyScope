@@ -16,13 +16,20 @@ venv/
 .env
 .env.*
 !.env.example
+!.env.production.example
 
 # Data and artifacts
+data/*.db
+data/*.sqlite
+data/*.sqlite3
 data/raw/
 data/processed/
 data/cache/
 artifacts/
 mlruns/
+realtyscope-db-*.dump
+realtyscope-model-artifacts-*.tar.gz
+backups/
 
 # Jupyter
 .ipynb_checkpoints/
