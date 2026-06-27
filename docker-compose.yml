@@ -87,6 +87,9 @@ services:
         app_src: src
     environment:
       API_BASE_URL: http://api:8000
+      BROWSER_API_BASE_URL: http://localhost:8000
+      STREAMLIT_INITIAL_LISTING_ROW_LIMIT: 20000
+      STREAMLIT_INITIAL_MAP_POINT_LIMIT: 20000
     ports:
       - "8501:8501"
     depends_on:

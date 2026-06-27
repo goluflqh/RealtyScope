@@ -30,10 +30,19 @@ from services.streamlit.dashboard_charts import (
     room_summary_frame,
 )
 
+FULL_UI_ROW_LIMIT_FLOOR = 20_000
+
+
+def _full_ui_row_limit(env_name: str) -> int:
+    configured = int(os.environ.get(env_name, str(FULL_UI_ROW_LIMIT_FLOOR)))
+    return max(configured, FULL_UI_ROW_LIMIT_FLOOR)
+
+
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
+BROWSER_API_BASE_URL = os.environ.get("BROWSER_API_BASE_URL", API_BASE_URL)
 API_TIMEOUT_SECONDS = float(os.environ.get("STREAMLIT_API_TIMEOUT_SECONDS", "5.0"))
-INITIAL_LISTING_ROW_LIMIT = int(os.environ.get("STREAMLIT_INITIAL_LISTING_ROW_LIMIT", "1000"))
-INITIAL_MAP_POINT_LIMIT = int(os.environ.get("STREAMLIT_INITIAL_MAP_POINT_LIMIT", "1000"))
+INITIAL_LISTING_ROW_LIMIT = _full_ui_row_limit("STREAMLIT_INITIAL_LISTING_ROW_LIMIT")
+INITIAL_MAP_POINT_LIMIT = _full_ui_row_limit("STREAMLIT_INITIAL_MAP_POINT_LIMIT")
 REQUEST_PREDICTION_REF = request_prediction
 LOCAL_SNAPSHOT_LIMIT = 50_000
 LOCAL_SNAPSHOT_CACHE_VERSION = 2
@@ -162,7 +171,7 @@ def _build_payload(*, data: DashboardData, monitoring: MonitoringData) -> dict[s
     if cached_payload is not None:
         return cached_payload
     snapshot = _local_snapshot_data() if use_snapshot else None
-    source_listings = snapshot["listings"] if snapshot else data.listings or data.analytics_listings
+    source_listings = snapshot["listings"] if snapshot else data.analytics_listings or data.listings
     analytics_listings = (
         snapshot["listings"] if snapshot else data.analytics_listings or source_listings
     )
@@ -217,7 +226,7 @@ def _build_payload(*, data: DashboardData, monitoring: MonitoringData) -> dict[s
 
     payload = _clean_json(
         {
-            "apiBaseUrl": API_BASE_URL,
+            "apiBaseUrl": BROWSER_API_BASE_URL,
             "connected": not api_errors,
             "mode": "snapshot" if snapshot else ("api" if not api_errors else "offline"),
             "source": source,

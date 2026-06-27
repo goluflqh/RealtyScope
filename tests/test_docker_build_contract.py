@@ -65,7 +65,18 @@ def test_streamlit_image_installs_database_dependencies_used_by_app_imports() ->
 def test_production_compose_mounts_runtime_assets_used_by_streamlit() -> None:
     content = Path("docker-compose.prod.yml").read_text(encoding="utf-8")
 
-    assert "API_BASE_URL: ${STREAMLIT_API_BASE_URL:-http://api:8000}" in content
+    assert "API_BASE_URL: http://api:8000" in content
+    assert (
+        "BROWSER_API_BASE_URL: ${STREAMLIT_API_BASE_URL:?set STREAMLIT_API_BASE_URL in .env}"
+        in content
+    )
+    assert (
+        "STREAMLIT_INITIAL_LISTING_ROW_LIMIT: ${STREAMLIT_INITIAL_LISTING_ROW_LIMIT:-20000}"
+        in content
+    )
+    assert (
+        "STREAMLIT_INITIAL_MAP_POINT_LIMIT: ${STREAMLIT_INITIAL_MAP_POINT_LIMIT:-20000}" in content
+    )
     assert "./data/external:/app/data/external:ro" in content
     assert "model_artifacts:/app/data/processed/models:ro" in content
 
@@ -94,6 +105,10 @@ def test_dev_compose_mounts_district_boundary_assets_used_by_streamlit() -> None
 
     streamlit_section = content[content.index("  streamlit:") : content.index("  trainer:")]
 
+    assert "API_BASE_URL: http://api:8000" in streamlit_section
+    assert "BROWSER_API_BASE_URL: http://localhost:8000" in streamlit_section
+    assert "STREAMLIT_INITIAL_LISTING_ROW_LIMIT: 20000" in streamlit_section
+    assert "STREAMLIT_INITIAL_MAP_POINT_LIMIT: 20000" in streamlit_section
     assert "./data/external:/app/data/external:ro" in streamlit_section
 
 
@@ -101,6 +116,8 @@ def test_production_env_points_streamlit_to_public_api_domain() -> None:
     content = Path(".env.production.example").read_text(encoding="utf-8")
 
     assert "STREAMLIT_API_BASE_URL=https://api.realtyscope.bond" in content
+    assert "STREAMLIT_INITIAL_LISTING_ROW_LIMIT=20000" in content
+    assert "STREAMLIT_INITIAL_MAP_POINT_LIMIT=20000" in content
 
 
 def test_production_caddy_serves_site_and_api_robots_txt() -> None:

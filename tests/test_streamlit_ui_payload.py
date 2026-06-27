@@ -78,6 +78,54 @@ def test_streamlit_api_timeout_default_allows_live_api_cold_start() -> None:
     assert streamlit_app.API_TIMEOUT_SECONDS >= 5.0
 
 
+def test_streamlit_default_ui_row_limits_cover_current_full_dataset() -> None:
+    assert streamlit_app.INITIAL_LISTING_ROW_LIMIT >= 20_000
+    assert streamlit_app.INITIAL_MAP_POINT_LIMIT >= 20_000
+
+
+def test_streamlit_ui_row_limit_ignores_stale_low_env_cap(monkeypatch) -> None:
+    monkeypatch.setenv("STREAMLIT_INITIAL_LISTING_ROW_LIMIT", "1000")
+
+    assert streamlit_app._full_ui_row_limit("STREAMLIT_INITIAL_LISTING_ROW_LIMIT") >= 20_000
+
+
+def test_build_payload_exposes_browser_api_url_instead_of_internal_docker_host(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(streamlit_app, "API_BASE_URL", "http://api:8000", raising=False)
+    monkeypatch.setattr(
+        streamlit_app,
+        "BROWSER_API_BASE_URL",
+        "https://api.example.test",
+        raising=False,
+    )
+    monkeypatch.setattr(streamlit_app, "_local_model_payload", lambda: None)
+
+    payload = _build_payload(
+        data=DashboardData(
+            stats={"listings_total": 1, "source_counts": {"domclick": 1}},
+            listings=[
+                {
+                    "id": 1,
+                    "address_text": "Moscow, Domclick",
+                    "rooms": 2,
+                    "total_area_m2": 60.0,
+                    "price_rub": 24_000_000,
+                    "price_per_m2": 400_000,
+                    "source_name": "domclick",
+                    "latitude": 55.75,
+                    "longitude": 37.61,
+                }
+            ],
+            listings_total=1,
+            errors=[],
+        ),
+        monitoring=MonitoringData(status={"status": "ok"}, model_metadata={}, errors=[]),
+    )
+
+    assert payload["apiBaseUrl"] == "https://api.example.test"
+
+
 def test_data_count_provenance_separates_api_and_snapshot_counts() -> None:
     api = _data_count_provenance(
         stats={"listings_total": 17_046},
@@ -319,9 +367,9 @@ def test_build_payload_uses_full_analytics_rows_for_districts(monkeypatch) -> No
         monitoring=MonitoringData(status={"status": "ok"}, model_metadata={}, errors=[]),
     )
 
-    assert [row["id"] for row in payload["listings"]] == [1]
-    assert payload["listings"][0]["address_text"] == preview_rows[0]["address_text"]
-    assert payload["payloadMeta"]["visible_listing_rows"] == 1
+    assert [row["id"] for row in payload["listings"]] == list(range(1, 16))
+    assert payload["listings"][0]["address_text"] == analytics_rows[0]["address_text"]
+    assert payload["payloadMeta"]["visible_listing_rows"] == 15
     assert payload["payloadMeta"]["analytics_listing_rows"] == 15
     assert len(payload["districtComparison"]) == 3
     assert {row["district_name"] for row in payload["districtComparison"]} == {
@@ -381,9 +429,9 @@ def test_build_payload_uses_full_api_listing_rows_for_visible_ui(monkeypatch) ->
         monitoring=MonitoringData(status={"status": "ok"}, model_metadata={}, errors=[]),
     )
 
-    assert [row["source_name"] for row in payload["listings"]] == ["domclick"]
+    assert [row["source_name"] for row in payload["listings"]] == ["domclick", "cian"]
     assert {row["source_name"] for row in payload["mapPoints"]} == {"domclick", "cian"}
-    assert payload["payloadMeta"]["visible_listing_rows"] == 1
+    assert payload["payloadMeta"]["visible_listing_rows"] == 2
     assert payload["payloadMeta"]["analytics_listing_rows"] == 2
     assert payload["sourceRows"] == [
         {
