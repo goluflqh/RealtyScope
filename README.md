@@ -1,41 +1,50 @@
 # RealtyScope
 
-RealtyScope is a Grade-5 educational data-service project for Moscow apartment analytics and sale-price prediction. It combines real estate ingestion data, PostgreSQL storage, OSM-derived infrastructure features, FastAPI, Redis, MLflow-compatible model artifacts, Docker Compose, and a Streamlit dashboard.
+**RealtyScope** — учебный data-driven веб-сервис для анализа рынка квартир Москвы и оценки стоимости объекта по набору признаков. Проект объединяет сбор и нормализацию объявлений, PostgreSQL-хранилище, OSM-признаки городской инфраструктуры, FastAPI, Redis, MLflow-совместимые артефакты моделей, Docker Compose и интерактивный Streamlit-интерфейс.
 
-Current validated release date: 2026-06-27.
+Актуальная проверенная версия: **27 июня 2026 г.**
 
-## What the project does
+## Требования к сдаче
 
-- Collects and normalizes apartment listings from Domclick/CIAN-derived data.
-- Stores listings, observations, data-quality evidence, logs, and OSM features in PostgreSQL.
-- Serves operational and analytic APIs through FastAPI.
-- Runs a Streamlit dashboard for market overview, data exploration, maps, deal candidates, districts, monitoring, and price valuation.
-- Predicts apartment price from a full feature vector, not from a fixed demo default.
+| Требование | Реализация в проекте |
+| --- | --- |
+| Описание проекта | См. [Описание проекта.html](<./Описание проекта.html>) и этот README |
+| Git проекта | Репозиторий: [github.com/goluflqh/RealtyScope](https://github.com/goluflqh/RealtyScope) |
+| Основная презентация через ПК | Локальный/серверный Streamlit UI: `http://127.0.0.1:8501` или домен VPS |
 
-## Current verified runtime
+## Что делает система
 
-The local Docker/PostgreSQL runtime used for the final model contains:
+- собирает и нормализует объявления о продаже квартир из подготовленных потоков Domclick/CIAN;
+- хранит объявления, наблюдения, качество данных, логи и признаки инфраструктуры в PostgreSQL;
+- предоставляет REST API через FastAPI;
+- показывает интерактивный dashboard: обзор рынка, таблицу объектов, карту, кандидаты на выгодные сделки, районы/кластеры, мониторинг и страницу оценки квартиры;
+- рассчитывает стоимость квартиры по полному вектору признаков, а не по фиксированному демонстрационному значению.
 
-| Item | Value |
+## Текущий проверенный runtime
+
+Финальный локальный Docker/PostgreSQL runtime использовался для обучения модели и smoke-тестов.
+
+| Показатель | Значение |
 | --- | ---: |
-| Listings | 17,287 |
-| ML-ready listings | 17,287 |
-| Listing observations | 45,764 |
-| Observation days | 23 |
-| Date range | 2026-05-14 to 2026-06-26 |
-| OSM feature rows | 17,046 |
-| Active model artifact | `selected_price_model_v1_non_leaky.joblib` |
-| Selected candidate | `hist_gradient_boosting` |
-| Target variable | `price_per_m2` |
-| Runtime price output | predicted `price_per_m2 × user total_area_m2` |
+| Объявления | 17 287 |
+| ML-ready объявления | 17 287 |
+| Наблюдения объявлений | 45 764 |
+| Дней наблюдений | 23 |
+| Период наблюдений | 2026-05-14 — 2026-06-26 |
+| Строки OSM-признаков | 17 046 |
+| Покрытие OSM-признаками | 98,61% |
+| Активный артефакт модели | `selected_price_model_v1_non_leaky.joblib` |
+| Выбранный алгоритм | `hist_gradient_boosting` |
+| Целевая переменная модели | `price_per_m2` |
+| Итоговая цена в UI/API | `predicted price_per_m2 × total_area_m2 пользователя` |
 
-## Architecture
+## Архитектура
 
 ```text
-Raw listing data
+Источники объявлений
     |
     v
-Normalization / ingestion
+Сбор / нормализация / проверка качества
     |
     v
 PostgreSQL + SQLAlchemy + Alembic
@@ -51,100 +60,142 @@ PostgreSQL + SQLAlchemy + Alembic
     |       +--> non-leaky model artifacts
     |
     +--> Streamlit dashboard
-            +--> overview, data, valuation, map, deals, districts, monitoring
+            +--> обзор, данные, оценка, карта, сделки, районы, мониторинг
 ```
 
-## Price prediction model
+Основная идея архитектуры — разделить ответственность:
 
-The current model is trained on `ml_features_v2_non_leaky`. This feature version intentionally excludes direct price-observation leakage fields such as `latest_observation_price_rub` and `latest_observation_price_per_m2`.
+- **Data layer** отвечает за получение и нормализацию данных.
+- **Storage layer** хранит исходные и агрегированные факты.
+- **ML pipeline** строит воспроизводимые признаки и обучает модели без утечки целевой переменной.
+- **Backend** предоставляет стабильный API-контракт.
+- **Frontend** показывает данные и результаты модели на русском языке.
+- **Docker/VPS layer** обеспечивает переносимость между локальным запуском и сервером.
 
-Feature inputs include:
+## Данные и признаки
 
-- apartment parameters: area, rooms, floor, floors total, building year;
-- missing-value flags: floor/building/coordinates/OSM/transport flags;
-- coordinates: latitude and longitude;
-- OSM infrastructure: nearest transport distance, transport counts, schools, parks, shops, healthcare;
-- observation metadata: observation count and availability flag;
-- property type flag.
+В проекте используются реальные записи объявлений и repeated observations. Это позволяет не только показать текущую витрину рынка, но и строить осторожные аналитические выводы по динамике наблюдений.
 
-The model target is `price_per_m2`; the API and UI multiply the predicted per-square-meter value by the user-provided `total_area_m2`. Therefore `60 m²` is only an initial form value, not a fixed model assumption.
+Признаки для ML-модели включают:
 
-### Final model metrics
+- параметры квартиры: площадь, комнаты, этаж, этажность дома, год постройки;
+- координаты: широта и долгота;
+- инфраструктуру вокруг объекта: транспорт, школы, парки, магазины, медицинские объекты;
+- признаки отсутствующих значений: неизвестный этаж, год постройки, координаты, OSM-окружение, транспорт;
+- технические признаки наблюдений: количество наблюдений и флаг доступности наблюдений;
+- тип объекта: квартира.
 
-Final selected artifact:
+### Как понимать параметры окружения в форме оценки
+
+Поля на странице оценки — это не проценты и не веса модели. Это численные признаки, которые описывают окружение объекта.
+
+| Поле в UI | Что означает | Что значит изменение на 1 |
+| --- | --- | --- |
+| `Школы 1 км` | Количество найденных школ в радиусе 1 км от координат объекта | `+1` = в радиусе 1 км есть ещё одна школа |
+| `Парки 1 км` | Количество парков/зелёных зон в радиусе 1 км | `+1` = ещё один парк или зелёная зона рядом |
+| `Магазины 1 км` | Количество торговых объектов в радиусе 1 км | `+1` = ещё один магазин/торговая точка в окружении |
+| `Транспорт 500 м` | Количество остановок/станций общественного транспорта в радиусе 500 м | `+1` = ещё один транспортный объект в пешей доступности |
+| `Транспорт 1 км` | Количество транспортных объектов в радиусе 1 км | `+1` = ещё один транспортный объект в более широком радиусе |
+| `Ближайший транспорт, м` | Расстояние в метрах до ближайшего транспортного объекта | `+1` = ближайший транспорт на 1 метр дальше; меньше обычно лучше |
+
+Влияние этих признаков **не линейное**: модель HistGradientBoosting может учитывать пороги и взаимодействия. Например, прирост с 0 до 1 школы рядом может быть важнее, чем с 30 до 31, а эффект транспорта зависит от района, площади и координат.
+
+## Модель оценки стоимости
+
+Финальная модель обучена на версии признаков `ml_features_v2_non_leaky`. Эта версия специально исключает прямые поля цены наблюдения, например `latest_observation_price_rub` и `latest_observation_price_per_m2`, чтобы не было leakage.
+
+Модель прогнозирует **цену за квадратный метр** (`price_per_m2`). Затем API и UI умножают прогноз на площадь, введённую пользователем. Поэтому значение `60 м²` в форме — только стартовое значение интерфейса, а не фиксированное предположение модели.
+
+Финальный артефакт:
 
 ```text
 data/processed/models/phase5/selected_price_model_v1_non_leaky.joblib
 ```
 
-Grouped random holdout metrics from the artifact:
+### Метрики финальной модели
 
-| Metric | Value |
+| Метрика | Значение |
 | --- | ---: |
-| Rows | 17,287 |
-| Train rows | 13,829 |
-| Test rows | 3,458 |
-| Candidate count | 3 |
-| Selected candidate | `hist_gradient_boosting` |
-| Validation R² | 0.9314 |
-| Train R² | 0.9595 |
-| R² generalization gap | 0.0281 |
-| MAE | 4.81M RUB |
-| RMSE | 14.94M RUB |
-| MAPE | 11.04% |
+| Строки | 17 287 |
+| Train rows | 13 829 |
+| Test rows | 3 458 |
+| Количество кандидатов | 3 |
+| Выбранный кандидат | `hist_gradient_boosting` |
+| Validation R² | 0,9314 |
+| Train R² | 0,9595 |
+| R² generalization gap | 0,0281 |
+| MAE | 4,81 млн ₽ |
+| RMSE | 14,94 млн ₽ |
+| MAPE | 11,04% |
 
-Candidate comparison on the same grouped split:
+Сравнение кандидатов на одном grouped split:
 
-| Candidate | R² | MAE | MAPE | Train R² | Gap |
+| Модель | R² | MAE | MAPE | Train R² | Gap |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| HistGradientBoosting | 0.9314 | 4.81M | 11.04% | 0.9595 | 0.0281 |
-| RandomForest | 0.8936 | 6.76M | 16.00% | 0.9372 | 0.0437 |
-| Ridge | -0.9874 | 12.71M | 27.74% | 0.5157 | 1.5032 |
+| HistGradientBoosting | 0,9314 | 4,81 млн ₽ | 11,04% | 0,9595 | 0,0281 |
+| RandomForest | 0,8936 | 6,76 млн ₽ | 16,00% | 0,9372 | 0,0437 |
+| Ridge | -0,9874 | 12,71 млн ₽ | 27,74% | 0,5157 | 1,5032 |
 
-### Overfitting audit conclusion
+Ridge оставлен как честный baseline. Его отрицательный R² показывает, что линейная модель плохо описывает нелинейный рынок недвижимости и не используется как основная модель оценки.
 
-The old HGB result around R² `0.9295` was not evidence of target leakage, because the non-leaky feature set has no direct price fields. However, a random listing split is optimistic for real estate because nearby properties and same-period listings are correlated.
+### Аудит переобучения
 
-The final regularized HGB model was therefore audited with stricter holdouts:
+Высокий R² сам по себе не является доказательством качества. Для недвижимости random split может быть оптимистичным, потому что близкие объекты и объявления одного периода коррелируют между собой. Поэтому финальная модель проверялась дополнительными стресс-разбиениями.
 
-| Audit split | Test R² | MAE | MAPE | Interpretation |
+| Разбиение | Test R² | MAE | MAPE | Интерпретация |
 | --- | ---: | ---: | ---: | --- |
-| Random listing holdout | 0.9345 | 4.87M | 11.10% | Best headline validation, but optimistic |
-| Spatial grid holdout | 0.8882 | 6.94M | 17.94% | Stronger test of neighborhood generalization |
-| Latest-20% temporal holdout | 0.8503 | 7.04M | 12.83% | Stronger test of recency drift |
+| Random listing holdout | 0,9345 | 4,87 млн ₽ | 11,10% | сильная, но оптимистичная проверка |
+| Spatial grid holdout | 0,8882 | 6,94 млн ₽ | 17,94% | проверка переноса между районами |
+| Latest-20% temporal holdout | 0,8503 | 7,04 млн ₽ | 12,83% | проверка устойчивости к сдвигу по времени |
 
-Conclusion for defense: the model is acceptable as a validated educational appraisal snapshot, but the honest quality claim is not only “R² 0.93”. The professional claim is: non-leaky HGB reaches R² `0.9314` on grouped random validation, while stress validation remains positive at about `0.85–0.89`; production-grade deployment would add temporal/spatial promotion gates before automatic retraining.
+Вывод для защиты: модель не показывает признаков прямой утечки целевой переменной и не выглядит как сильное переобучение. Корректная формулировка: **это проверенный учебный оценочный snapshot**, а не промышленный автоматический оценщик без дополнительных temporal/spatial promotion gates.
 
-## Valuation UI behavior
+## API
 
-The valuation page sends the same canonical feature vector to `/predict` that the model was trained on. The UI exposes editable controls for:
+Основные endpoint’ы:
 
-- area from 10 to 1200 m²;
-- rooms from 0 to 20;
-- floor and total floors;
-- building year and known/missing flag;
-- coordinates and known/missing flag;
-- nearest transport distance;
-- schools, parks, shops, and transport counts at 500 m / 1000 m.
+| Endpoint | Назначение |
+| --- | --- |
+| `GET /health` | проверка доступности API |
+| `GET /data` | выдача объявлений с фильтрами и пагинацией |
+| `GET /model/metadata` | сведения о модели, признаках, метриках и кандидатах |
+| `POST /predict` | расчёт стоимости по полному feature vector |
+| `GET /monitoring/status` | состояние данных, сервисов, модели и ingestion |
+| `GET /stats/*` | аналитические срезы для UI |
 
-When coordinates or OSM surroundings are unknown, the UI sets explicit missing flags instead of pretending default infrastructure values are known.
+Контракт `/predict` требует полный набор признаков модели. Если часть признаков отсутствует или переданы лишние поля, API возвращает понятную ошибку `422`. Это защищает модель от скрытого рассинхрона между backend и UI.
 
-## Local development
+## Интерфейс
 
-Install dependencies:
+Streamlit UI локализован на русский язык и включает:
+
+- обзор ключевых метрик рынка;
+- таблицу объявлений с пагинацией и ссылками на источники;
+- карту объектов с масштабированием, drag-pan и popup-карточками;
+- страницу оценки квартиры с выбором модели и объяснением входных признаков;
+- сопоставимые объявления для результата оценки;
+- раздел районов и кластеров;
+- мониторинг данных, модели, ingestion и инфраструктуры;
+- честные предупреждения о границах интерпретации модели.
+
+Страница оценки отправляет в API тот же canonical feature vector, на котором обучалась модель. Координаты, инфраструктура, этажность, год постройки и missing flags передаются явно.
+
+## Локальный запуск
+
+Установка зависимостей:
 
 ```powershell
 python -m pip install -e ".[dev,data,api,streamlit,ml]"
 ```
 
-Run checks:
+Проверки:
 
 ```powershell
 python -m ruff check .
 python -m pytest -p no:cacheprovider --basetemp=output/pytest-tmp
 ```
 
-Train the selected model against a local PostgreSQL database:
+Обучение выбранной модели на локальной PostgreSQL-базе:
 
 ```powershell
 $env:PYTHONPATH = (Resolve-Path .\src).Path
@@ -157,7 +208,7 @@ python -m realtyscope.ml.train `
   --json
 ```
 
-Run API locally:
+Запуск API:
 
 ```powershell
 $env:PYTHONPATH = (Resolve-Path .\src).Path
@@ -165,7 +216,7 @@ $env:DATABASE_URL = "postgresql+psycopg://realtyscope:realtyscope@localhost:5432
 python -m uvicorn services.api.app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Run Streamlit locally:
+Запуск Streamlit:
 
 ```powershell
 $env:PYTHONPATH = (Resolve-Path .\src).Path
@@ -175,18 +226,20 @@ streamlit run services/streamlit/app.py --server.port 8501
 
 ## Docker Compose
 
-Docker is expected to run from WSL2/Linux:
+Docker рекомендуется запускать из WSL2/Linux:
 
 ```bash
 docker compose -p realtyscope up -d --build
 docker compose -p realtyscope ps
 ```
 
-Service URLs:
+Сервисы:
 
 - FastAPI: `http://localhost:8000`
 - Streamlit: `http://localhost:8501`
 - MLflow: `http://localhost:5000`
+- PostgreSQL: внутренний сервис `db`
+- Redis: внутренний сервис `redis`
 
 Smoke checks:
 
@@ -197,35 +250,54 @@ curl -fsS http://localhost:8000/model/metadata | python -m json.tool
 curl -fsS http://localhost:8000/monitoring/status | python -m json.tool
 ```
 
-## VPS deployment
+## Развёртывание на VPS
 
-Production deployment uses:
+Production deployment использует:
 
 - `docker-compose.prod.yml`;
 - Caddy reverse proxy;
-- `model_artifacts` Docker volume for trained artifacts;
-- PostgreSQL volume restored from the local runtime bundle;
-- tracked static assets such as `data/external/moscow_district_boundaries.geojson`.
+- Docker volume для артефактов модели;
+- PostgreSQL volume, восстановленный из runtime bundle;
+- tracked static assets, включая `data/external/moscow_district_boundaries.geojson`.
 
-Export local runtime artifacts:
+Экспорт локальных runtime-артефактов:
 
 ```bash
 bash scripts/deployment/export_local_runtime_bundle.sh ../realtyscope-vps-transfer
 ```
 
-Restore on VPS:
+Восстановление на VPS:
 
 ```bash
 cd /opt/realtyscope
 bash scripts/deployment/restore_vps_runtime_bundle.sh
 ```
 
-See [VPS deployment runbook](docs/deployment/vps-digitalocean-cloudflare.ru.md) for the full server procedure.
+Подробная инструкция: [docs/deployment/vps-digitalocean-cloudflare.ru.md](docs/deployment/vps-digitalocean-cloudflare.ru.md).
 
-## Important honesty boundaries
+Важно: база данных и joblib-артефакты модели не коммитятся в Git. Для полного запуска на VPS нужен не только `git pull`, но и восстановление runtime bundle.
 
-- No XGBoost result is claimed; XGBoost is not part of the locked runtime.
-- The price model is a validated snapshot, not an always-on automatic retraining system.
-- Temporal and spatial validation are reported because random listing validation is optimistic.
-- Exposure/lifecycle forecast remains inferred from observation gaps, not confirmed sale/removal events.
-- PostgreSQL, Redis, and MLflow must not be exposed directly to the public internet.
+## Проверенная связка backend ↔ UI
+
+Связка была проверена локально через Docker runtime и headless Chrome:
+
+- `api`, `db`, `redis`, `mlflow`, `streamlit` — healthy;
+- `/predict` возвращает реальный прогноз по 23 признакам;
+- UI-страница оценки меняет результат при изменении площади/комнат и показывает echo входных признаков;
+- карта поддерживает zoom, drag-pan и popup с реальными ссылками;
+- таблица данных переключает страницы;
+- мониторинг отображает реальные статусы источников, модели, ingestion и OSM-покрытия;
+- layout audit не обнаружил clipped/overlap элементов на ключевых страницах.
+
+## Границы честности
+
+- XGBoost не заявляется: он не установлен и не обучался в финальном runtime.
+- Ridge — baseline, а не финальная модель.
+- Модель является валидированным учебным snapshot, а не промышленным оценщиком с автоматическим переобучением.
+- Temporal/spatial validation указывается отдельно, потому что random validation для недвижимости может быть завышенным.
+- Exposure/lifecycle forecast основан на inferred observation gaps, а не на подтверждённых событиях продажи/снятия объявления.
+- PostgreSQL, Redis и MLflow не должны быть открыты напрямую в публичный интернет.
+
+## Короткая формулировка для защиты
+
+> RealtyScope — это end-to-end data-service по рынку квартир Москвы: от ingestion и PostgreSQL до ML-модели оценки цены и Streamlit-интерфейса. Финальная модель HistGradientBoosting обучена на non-leaky признаках, прогнозирует цену за квадратный метр и затем масштабируется площадью, введённой пользователем. Модель показывает R² 0,9314 на grouped validation и сохраняет положительное качество на spatial/temporal stress validation, поэтому её можно защищать как честный учебный оценочный snapshot с явно указанными ограничениями.
